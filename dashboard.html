@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Sugar</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .dashboard-header {
+            display: none;
+            /* Removed as requested */
+        }
+
+        .stat-badge {
+            background: rgba(239, 68, 68, 0.1);
+            color: #f87171;
+            padding: 0.3rem 0.8rem;
+            border-radius: 2rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .transaction-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .transaction-item {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 1rem;
+            border-radius: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .transaction-item:hover {
+            transform: translateX(5px);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .tx-info .tx-name {
+            font-weight: 600;
+            font-size: 1rem;
+            margin-bottom: 0.2rem;
+        }
+
+        .tx-info .tx-date {
+            font-size: 0.8rem;
+            opacity: 0.5;
+        }
+
+        .tx-amount {
+            font-weight: 600;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tx-amount.unpaid {
+            color: #f87171;
+        }
+
+        .tx-amount.paid {
+            color: #4ade80;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .unpaid .status-dot {
+            background: #f87171;
+            box-shadow: 0 0 10px #f87171;
+        }
+
+        .paid .status-dot {
+            background: #4ade80;
+            box-shadow: 0 0 10px #4ade80;
+        }
+
+        .dashboard-sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .empty-state {
+            opacity: 0.4;
+            padding: 3rem 1rem;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Navbar will be rendered by JS -->
+
+    <div class="container" id="main-content">
+        <!-- Dashboard content will be rendered here -->
+    </div>
+
+    <!-- Context Menu for Payment Date Adjustment -->
+    <div id="context-menu" class="context-menu">
+        <div class="context-menu-item" onclick="adjustDate('single')">이 건만 다른 날로 이동</div>
+        <div class="context-menu-item" onclick="adjustDate('shift_backward')">이후 전부 한 칸씩 뒤로</div>
+        <div class="context-menu-item" onclick="adjustDate('shift_forward')">이후 전부 한 칸씩 앞으로</div>
+    </div>
+
+    <script src="/js/common.js"></script>
+    <script>
+        const user = JSON.parse(localStorage.getItem('user'));
+        let currentView = 'landlord'; // 'landlord' or 'tenant'
+        let currentMonth = new Date();
+        let selectedBillId = null;
+        let calendarData = [];
+        let billingData = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!user) {
+                window.location.href = '/index.html';
+                return;
+            }
+            renderNavbar();
+            init();
+        });
+
+        async function init() {
+            if (user.role === 'landlord') {
+                await loadLandlordView();
+            } else {
+                await loadTenantView(user.id);
+            }
+        }
+
+        async function loadLandlordView() {
+            currentView = 'landlord';
+
+            const res = await fetch(`/api/landlord/${user.id}/tenants`);
+            const tenants = await res.json();
+
+            const calRes = await fetch(`/api/landlord/${user.id}/calendar-data`);
+            calendarData = await calRes.json();
+
+            const allBills = [];
+            for (const t of tenants) {
+                const billRes = await fetch(`/api/tenant/${t.id}/billing`);
+                const bills = await billRes.json();
+                bills.forEach(bill => {
+                    bill.tenant_nickname = t.nickname || t.login_id;
+                    bill.tenant_color = t.color;
+                    bill.tenant_id = t.id;
+                    allBills.push(bill);
+                });
+            }
+            billingData = allBills.sort((a, b) => new Date(b.bill_month) - new Date(a.bill_month));
+
+            renderDashboardUI();
+        }
+
+        async function loadTenantView(tenantId) {
+            currentView = 'tenant';
+
+            const billRes = await fetch(`/api/tenant/${tenantId}/billing`);
+            billingData = await billRes.json();
+
+            const calRes = await fetch(`/api/tenant/${tenantId}/calendar-data`);
+            calendarData = await calRes.json();
+
+            renderDashboardUI();
+        }
+
+        function renderDashboardUI() {
+            const container = document.getElementById('main-content');
+            container.innerHTML = `
+                <div class="dashboard-grid">
+                    <!-- Left: Calendar -->
+                    <div class="card calendar-card">
+                        <div class="card-header">
+                            <h2>납부 일정</h2>
+                            <div class="calendar-nav">
+                                <button onclick="changeMonth(-1)">‹</button>
+                                <span id="current-month-label"></span>
+                                <button onclick="changeMonth(1)">›</button>
+                            </div>
+                        </div>
+                        <div class="calendar-grid" id="calendar-grid"></div>
+                    </div>
+
+                    <!-- Right: Summary & Recent -->
+                    <div class="dashboard-sidebar">
+                        <div class="card list-card unpaid-card">
+                            <div class="card-header">
+                                <h2>미납 현황</h2>
+                                <div class="stat-badge" id="unpaid-count-badge">0건</div>
+                            </div>
+                            <div class="transaction-list" id="unpaid-list">
+                                <!-- List populated by JS -->
+                            </div>
+                        </div>
+                        
+                        <div class="card list-card">
+                            <div class="card-header">
+                                <h2>최근 거래 내역</h2>
+                            </div>
+                            <div class="transaction-list" id="recent-transactions">
+                                <!-- List populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            renderCalendar();
+            renderStats();
+            renderRecentTransactions();
+        }
+
+        function changeMonth(delta) {
+            currentMonth.setMonth(currentMonth.getMonth() + delta);
+            renderCalendar();
+        }
+
+        function renderCalendar() {
+            const year = currentMonth.getFullYear();
+            const month = currentMonth.getMonth();
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+
+            document.getElementById('current-month-label').textContent = `${year}년 ${month + 1}월`;
+
+            const grid = document.getElementById('calendar-grid');
+            if (!grid) return;
+            grid.innerHTML = '';
+
+            ['일', '월', '화', '수', '목', '금', '토'].forEach(day => {
+                const header = document.createElement('div');
+                header.className = 'calendar-day-header';
+                header.textContent = day;
+                grid.appendChild(header);
+            });
+
+            const startDate = new Date(firstDay);
+            startDate.setDate(startDate.getDate() - firstDay.getDay());
+            const currentDate = new Date(startDate);
+
+            for (let i = 0; i < 42; i++) {
+                const day = document.createElement('div');
+                day.className = 'calendar-day';
+                if (currentDate.getMonth() !== month) day.classList.add('other-month');
+                if (currentDate.toDateString() === new Date().toDateString()) day.classList.add('today');
+
+                const dateStr = currentDate.toISOString().split('T')[0];
+                day.innerHTML = `<div class="day-number">${currentDate.getDate()}</div><div class="day-events"></div>`;
+                const events = day.querySelector('.day-events');
+
+                calendarData.forEach(data => {
+                    if (data.contract_start_date === dateStr) {
+                        const event = document.createElement('div');
+                        event.className = 'day-event event-start';
+                        event.textContent = '시작';
+                        event.style.backgroundColor = data.tenant_color ? `${data.tenant_color}40` : '';
+                        events.appendChild(event);
+                    }
+                    const dueDate = getDueDate(data.bill_month, data.contract_start_date, data.payment_type);
+                    if (dueDate === dateStr && data.total_amount) {
+                        const event = document.createElement('div');
+                        event.className = 'day-event event-payment';
+                        event.textContent = `${(data.total_amount / 10000).toFixed(0)}만`;
+                        event.style.backgroundColor = data.tenant_color ? `${data.tenant_color}40` : '';
+                        if (user.role === 'landlord') {
+                            event.onclick = (e) => { e.stopPropagation(); showContextMenu(e, data.bill_id); };
+                        }
+                        events.appendChild(event);
+                    }
+                });
+
+                grid.appendChild(day);
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+        }
+
+        function renderStats() {
+            const unpaidBills = billingData.filter(b => {
+                const paid = b.payments.reduce((sum, p) => sum + p.matched_amount, 0);
+                return paid < b.total_amount;
+            });
+
+            const countBadge = document.getElementById('unpaid-count-badge');
+            const list = document.getElementById('unpaid-list');
+            if (!countBadge || !list) return;
+
+            countBadge.textContent = `${unpaidBills.length}건`;
+
+            if (unpaidBills.length === 0) {
+                list.innerHTML = `<div class="empty-state">미납 내역이 없습니다.</div>`;
+                return;
+            }
+
+            list.innerHTML = unpaidBills.map(b => {
+                const paid = b.payments.reduce((sum, p) => sum + p.matched_amount, 0);
+                const remaining = b.total_amount - paid;
+                return `
+                    <div class="transaction-item">
+                        <div class="tx-info">
+                            <div class="tx-name">${user.role === 'landlord' ? b.tenant_nickname : user.nickname}</div>
+                            <div class="tx-date">${b.bill_month}월분</div>
+                        </div>
+                        <div class="tx-amount unpaid">
+                            ${formatCurrency(remaining)}원
+                            <span class="status-dot"></span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderRecentTransactions() {
+            const list = document.getElementById('recent-transactions');
+            if (!list) return;
+
+            const recentBills = billingData.slice(0, 5);
+            if (recentBills.length === 0) {
+                list.innerHTML = `<div class="empty-state">내역이 없습니다.</div>`;
+                return;
+            }
+
+            list.innerHTML = recentBills.map(b => {
+                const paid = b.payments.reduce((sum, p) => sum + p.matched_amount, 0);
+                const status = paid >= b.total_amount ? 'paid' : 'unpaid';
+                return `
+                    <div class="transaction-item">
+                        <div class="tx-info">
+                            <div class="tx-name">${user.role === 'landlord' ? b.tenant_nickname : user.nickname}</div>
+                            <div class="tx-date">${b.bill_month}월분</div>
+                        </div>
+                        <div class="tx-amount ${status}">
+                            ${formatCurrency(b.total_amount)}원
+                            <span class="status-dot"></span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Context Menu Logic
+        function showContextMenu(e, billId) {
+            e.preventDefault();
+            selectedBillId = billId;
+            const menu = document.getElementById('context-menu');
+            menu.style.display = 'block';
+            menu.style.left = `${e.pageX}px`;
+            menu.style.top = `${e.pageY}px`;
+
+            document.addEventListener('click', () => {
+                menu.style.display = 'none';
+            }, { once: true });
+        }
+
+        async function adjustDate(type) {
+            if (!selectedBillId) return;
+            alert(`${type} 조정 기능은 백엔드 연결 후 제공됩니다.`);
+            await init();
+        }
+    </script>
+</body>
+
+</html>

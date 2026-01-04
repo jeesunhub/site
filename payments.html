@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Management - Sugar</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        .payment-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header-section {
+            margin-bottom: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .filters-section {
+            background: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            margin-bottom: 2rem;
+            display: flex;
+            gap: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .filter-group label {
+            font-size: 0.85rem;
+            opacity: 0.7;
+        }
+
+        .payment-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+        }
+
+        .payment-table th,
+        .payment-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .payment-table th {
+            font-weight: 600;
+            opacity: 0.6;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+        }
+
+        .status-paid {
+            color: #22c55e;
+            font-weight: 600;
+        }
+
+        .status-unpaid {
+            color: #ef4444;
+            font-weight: 600;
+        }
+
+        .status-partial {
+            color: #eab308;
+            font-weight: 600;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Navbar will be rendered by JS -->
+
+    <div class="container payment-container">
+        <div class="header-section">
+            <h1 style="margin:0;">💰 납부 관리</h1>
+            <div class="action-buttons">
+                <input type="file" id="excel-upload" accept=".xlsx, .xls" style="display:none"
+                    onchange="handleExcelUpload(event)">
+                <button class="btn btn-secondary" onclick="document.getElementById('excel-upload').click()">📁 파일 업로드
+                    (Excel)</button>
+                <button class="btn btn-secondary" onclick="alert('준비 중입니다.')">📝 표로 추가</button>
+                <button class="btn btn-secondary" onclick="alert('준비 중입니다.')">📋 문자 붙여넣기</button>
+            </div>
+        </div>
+
+        <div class="filters-section" id="filters-container" style="display: none;">
+            <div class="filter-group" id="filter-landlord-group" style="display: none;">
+                <label>임대인 선택</label>
+                <select id="filter-landlord" onchange="loadTableData()">
+                    <option value="all">ALL</option>
+                </select>
+            </div>
+            <div class="filter-group" id="filter-building-group" style="display: none;">
+                <label>건물 선택</label>
+                <select id="filter-building" onchange="loadTableData()">
+                    <option value="all">ALL</option>
+                </select>
+            </div>
+            <div class="filter-group" id="filter-tenant-group" style="display: none;">
+                <label>세입자 선택</label>
+                <select id="filter-tenant" onchange="loadTableData()">
+                    <option value="all">ALL</option>
+                </select>
+            </div>
+        </div>
+
+        <div
+            style="background: var(--card-bg); border-radius: 1.5rem; padding: 1rem; border: 1px solid rgba(255,255,255,0.05); overflow-x: auto;">
+            <table class="payment-table">
+                <thead>
+                    <tr id="table-headers">
+                        <!-- Headers injected by JS -->
+                    </tr>
+                </thead>
+                <tbody id="payment-list-body">
+                    <!-- Rows injected by JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="/js/common.js"></script>
+    <script>
+        const user = JSON.parse(localStorage.getItem('user'));
+        let ledgerData = [];
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (!user) {
+                window.location.href = '/index.html';
+                return;
+            }
+            // Basic permission check (though page logic handles role display)
+            if (user.role === 'tenant') {
+                // Tenants are allowed to view, but with limited data
+            }
+
+            renderNavbar();
+            setupUIByRole();
+            await loadDropdownOptions();
+            await loadTableData();
+        });
+
+        function setupUIByRole() {
+            const filtersDiv = document.getElementById('filters-container');
+            const landlordGroup = document.getElementById('filter-landlord-group');
+            const buildingGroup = document.getElementById('filter-building-group');
+            const tenantGroup = document.getElementById('filter-tenant-group');
+
+            if (user.role === 'admin') {
+                filtersDiv.style.display = 'flex';
+                landlordGroup.style.display = 'flex';
+                buildingGroup.style.display = 'flex';
+                tenantGroup.style.display = 'flex';
+            } else if (user.role === 'landlord') {
+                filtersDiv.style.display = 'flex';
+                buildingGroup.style.display = 'flex';
+                tenantGroup.style.display = 'flex';
+            } else {
+                // Tenant: no filters
+                filtersDiv.style.display = 'none';
+            }
+
+            // Table Headers
+            const headerRow = document.getElementById('table-headers');
+            let html = '';
+            if (user.role === 'admin') {
+                html += '<th>임대인</th>';
+            }
+            if (user.role === 'admin' || user.role === 'landlord') {
+                html += '<th>건물</th><th>세입자</th>';
+            }
+            html += '<th>납부 예정 날짜</th><th>실제 납부 날짜</th><th>납입 금액</th><th>상태</th>';
+            headerRow.innerHTML = html;
+        }
+
+        async function loadDropdownOptions() {
+            if (user.role === 'tenant') return;
+
+            try {
+                // For Admin/Landlord, we need lists.
+                // Re-using admin users list for Landlords if admin
+                if (user.role === 'admin') {
+                    const uRes = await fetch('/api/admin/users');
+                    const users = await uRes.json();
+
+                    const landlordSelect = document.getElementById('filter-landlord');
+                    users.filter(u => u.role === 'landlord').forEach(u => {
+                        const opt = document.createElement('option');
+                        opt.value = u.id;
+                        opt.textContent = `${u.nickname} (${u.login_id})`;
+                        landlordSelect.appendChild(opt);
+                    });
+
+                    // For admin, buildings/tenants might need to react to landlord selection
+                    // But for now, we'll try to load all or just trigger loadTableData which might filter
+                }
+
+                // For Buildings (Landlord context mainly, or Admin context)
+                let buildingsUrl = user.role === 'admin' ? '/api/admin/buildings' : `/api/landlord/${user.id}/buildings`;
+
+                // Hack: If admin, we don't have a generic "all buildings" API yet in server.js snippet provided.
+                // We'll rely on the table loading primarily.
+                // BUT for Landlord, we do have it.
+
+                if (user.role === 'landlord') {
+                    const bRes = await fetch(buildingsUrl);
+                    if (bRes.ok) {
+                        const buildings = await bRes.json();
+                        const bSelect = document.getElementById('filter-building');
+                        buildings.forEach(b => {
+                            const opt = document.createElement('option');
+                            opt.value = b.id;
+                            opt.textContent = b.name;
+                            bSelect.appendChild(opt);
+                        });
+                    }
+
+                    const tRes = await fetch(`/api/landlord/${user.id}/tenants`);
+                    if (tRes.ok) {
+                        const tenants = await tRes.json();
+                        const tSelect = document.getElementById('filter-tenant');
+                        tenants.forEach(t => {
+                            const opt = document.createElement('option');
+                            opt.value = t.id;
+                            opt.textContent = t.nickname;
+                            tSelect.appendChild(opt);
+                        });
+                    }
+                }
+
+                // If admin, implement change listener to reload table
+                if (user.role === 'admin') {
+                    document.getElementById('filter-landlord').addEventListener('change', loadTableData);
+                }
+
+
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function loadTableData() {
+            const landlordId = document.getElementById('filter-landlord').value;
+            const buildingId = document.getElementById('filter-building').value;
+            const tenantId = document.getElementById('filter-tenant').value;
+
+            const params = new URLSearchParams();
+            params.append('role', user.role);
+            params.append('user_id', user.id);
+            if (landlordId) params.append('landlord_id', landlordId);
+            if (buildingId) params.append('building_id', buildingId);
+            if (tenantId) params.append('tenant_id', tenantId);
+
+            try {
+                const res = await fetch(`/api/payments/ledger?${params.toString()}`);
+
+                // Check if API endpoint exists (Server might need restart)
+                if (res.status === 404) {
+                    console.warn('API endpoint not found. Server likely needs restart.');
+                    alert('새로운 기능을 적용하기 위해 서버 재시작이 필요합니다.\n(터미널에서 서버를 껐다 켜주세요)');
+                    return;
+                }
+
+                if (!res.ok) {
+                    throw new Error('Server returned ' + res.status);
+                }
+
+                const data = await res.json();
+                ledgerData = data;
+                renderTable(data);
+            } catch (err) {
+                console.error('Failed to load table data:', err);
+                const tbody = document.getElementById('payment-list-body');
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:2rem; color: #f87171;">데이터 로딩 실패<br><span style="font-size:0.8rem; opacity:0.7">${err.message}</span></td></tr>`;
+            }
+        }
+
+        function renderTable(data) {
+            const tbody = document.getElementById('payment-list-body');
+            tbody.innerHTML = '';
+
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:2rem; opacity:0.5;">데이터가 없습니다.</td></tr>';
+                return;
+            }
+
+            // Client-side sorting: Recent "Due Date" first
+            // Bill month is YYYY-MM. 
+            data.sort((a, b) => b.bill_month.localeCompare(a.bill_month));
+
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+
+                // Calculate Status
+                let statusHtml = '';
+                if (row.paid_amount >= row.due_amount) {
+                    statusHtml = '<span class="status-paid">완납</span>';
+                } else if (row.paid_amount > 0) {
+                    statusHtml = '<span class="status-partial">부분납부</span>';
+                } else {
+                    statusHtml = '<span class="status-unpaid">미납</span>';
+                }
+
+                // Calculate Expected Date 
+                const dueDate = getDueDate(row.bill_month, row.contract_start_date, row.payment_type);
+
+                let html = '';
+                if (user.role === 'admin') {
+                    html += `<td>${row.landlord_name}</td>`;
+                }
+                if (user.role === 'admin' || user.role === 'landlord') {
+                    html += `<td>${row.building_name || '-'}</td>`;
+                    html += `<td>${row.tenant_name}</td>`;
+                }
+
+                html += `
+                    <td>${dueDate || row.bill_month}</td>
+                    <td>${row.last_paid_date ? row.last_paid_date.split('T')[0] : '-'}</td>
+                    <td>${row.paid_amount > 0 ? formatCurrency(row.paid_amount) + '원' : '-'}</td>
+                    <td>${statusHtml}</td>
+                `;
+
+                tr.innerHTML = html;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function handleExcelUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+
+                console.log('Excel Data:', jsonData);
+                alert(`${jsonData.length}개의 데이터가 로드되었습니다. 형식 검증 및 서버 전송 기능은 구현 중입니다.`);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+    </script>
+</body>
+
+</html>

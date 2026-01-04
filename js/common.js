@@ -1,0 +1,121 @@
+function formatCurrency(val) {
+    if (val === undefined || val === null || val === '') return '';
+    const num = String(val).replace(/[^0-9]/g, '');
+    if (!num) return '';
+    return Number(num).toLocaleString('ko-KR');
+}
+
+function unformatCurrency(val) {
+    if (val === undefined || val === null) return 0;
+    return parseInt(String(val).replace(/[^0-9]/g, '')) || 0;
+}
+
+function formatPhone(val) {
+    if (!val) return '';
+    const num = String(val).replace(/[^0-9]/g, '');
+    if (num.length <= 4) return num;
+    if (num.length <= 8) {
+        return num.slice(0, num.length - 4) + '-' + num.slice(num.length - 4);
+    }
+    // Standard Korean mobile: 010-1234-5678 (11 digits)
+    // From back: 4 digits, then 4 digits, then rest.
+    const part3 = num.slice(-4);
+    const part2 = num.slice(-8, -4);
+    const part1 = num.slice(0, -8);
+    return `${part1}-${part2}-${part3}`;
+}
+
+function renderNavbar() {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user) {
+        window.location.href = '/index.html';
+        return;
+    }
+
+    const nav = document.createElement('nav');
+    nav.className = 'navbar';
+    nav.innerHTML = `
+        <div class="nav-container">
+            <div></div> <!-- Removed logo -->
+            
+            <div class="nav-right">
+                <div class="nav-user-info" onclick="toggleMenu(event)">
+                    <span class="nav-nickname">${user.nickname || 'User'}</span>
+                    <div class="hamburger-icon">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+                
+                <div class="nav-dropdown" id="nav-menu">
+                    <div class="dropdown-header">
+                        <div class="avatar-circle" style="background:${user.color || '#6366f1'}">
+                            ${user.nickname ? user.nickname[0] : 'U'}
+                        </div>
+                        <div class="header-text">
+                            <div class="name">${user.nickname || 'User'}</div>
+                            <div class="role">${user.role === 'landlord' ? '임대인' : '세입자'}</div>
+                        </div>
+                    </div>
+                    <div class="dropdown-items">
+                        <a href="/dashboard.html">🏠 대시보드</a>
+                        ${user.role === 'landlord' ? '<a href="/buildings.html">🏢 건물 관리</a>' : ''}
+                        ${user.role === 'landlord' ? '<a href="/tenants.html">👥 세입자 관리</a>' : ''}
+                        ${(user.role === 'landlord' || user.role === 'admin') ? '<a href="/payments.html">💰 납부 관리</a>' : ''}
+                        <hr>
+                        <a href="/settings.html">⚙️ 설정</a>
+                        <a href="#" onclick="logout()" class="logout-link">🚪 로그아웃</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.prepend(nav);
+
+    window.onclick = function (e) {
+        const menu = document.getElementById('nav-menu');
+        if (menu && menu.style.display === 'block' && !e.target.closest('.nav-user-info')) {
+            menu.style.display = 'none';
+        }
+    };
+}
+
+function toggleMenu(e) {
+    e.stopPropagation();
+    const menu = document.getElementById('nav-menu');
+    const isVisible = menu.style.display === 'block';
+    menu.style.display = isVisible ? 'none' : 'block';
+}
+
+function logout() {
+    localStorage.removeItem('user');
+    window.location.href = '/index.html';
+}
+
+const colorPalette = [
+    '#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#f97316',
+    '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6'
+];
+
+function getDueDate(billMonth, startDate, type) {
+    if (!billMonth || !startDate) return null;
+    try {
+        const startDay = parseInt(startDate.split('-')[2]);
+        const parts = billMonth.split('-');
+        if (parts.length < 2) return null;
+        const [bYear, bMonth] = parts.map(Number);
+        if (isNaN(startDay) || isNaN(bYear) || isNaN(bMonth)) return null;
+        let date = new Date(bYear, bMonth - 1, startDay);
+        if (type === 'postpaid') {
+            date.setMonth(date.getMonth() + 1);
+        }
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    } catch (e) {
+        return null;
+    }
+}
+

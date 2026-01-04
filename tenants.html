@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tenants - Sugar</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        .tenant-mgmt-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2.5rem;
+        }
+
+        .building-block {
+            background: var(--card-bg);
+            border-radius: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .building-name-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .tenant-list-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .tenant-list-table th,
+        .tenant-list-table td {
+            padding: 1.2rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .tenant-list-table th {
+            font-size: 0.85rem;
+            opacity: 0.5;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+
+        .room-cell {
+            font-weight: 600;
+            color: var(--accent);
+            width: 100px;
+        }
+
+        .name-cell {
+            font-weight: 500;
+            font-size: 1.05rem;
+        }
+
+        .action-cell {
+            text-align: right;
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+        }
+
+        .btn-small {
+            padding: 0.5rem 1rem;
+            font-size: 0.85rem;
+        }
+
+        .btn-terminate {
+            background: rgba(239, 68, 68, 0.1);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .btn-terminate:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        .full-modal {
+            width: 95%;
+            max-width: 1000px;
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+            padding: 2rem;
+        }
+
+        .simple-modal {
+            max-width: 400px;
+        }
+
+        /* Iframe styling no longer needed */
+    </style>
+</head>
+
+<body>
+    <!-- Navbar will be rendered by JS -->
+
+    <div class="container" id="main-content">
+        <div class="tenant-mgmt-header">
+            <h1 style="font-size: 1.8rem; font-weight: 600;">세입자 관리</h1>
+            <div style="display: flex; gap: 1rem; align-items: center;">
+                <input type="file" id="ai-file-input" accept=".pdf, .png, .jpg, .jpeg" style="display: none;"
+                    onchange="handleFileSelect(event)">
+                <button id="debug-view-btn" class="btn btn-secondary" style="display: none; background: #4b5563;"
+                    onclick="openDebugModal()">추출 텍스트 확인 (Debug)</button>
+                <button class="btn btn-secondary" onclick="startAIUpload()">파일업로드(pdf/img)로 추가</button>
+                <button class="btn" onclick="navigateToContractForm('new')">직접 추가</button>
+            </div>
+        </div>
+
+        <div id="tenant-blocks-container">
+            <!-- Content will be populated by JS -->
+        </div>
+    </div>
+
+    <!-- Debug Modal -->
+    <div id="debug-modal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2>추출된 텍스트 내용 (Debug)</h2>
+            </div>
+            <div id="ocr-debug-content"
+                style="background: rgba(0,0,0,0.2); padding: 1.5rem; border-radius: 1rem; max-height: 250px; overflow-y: auto; font-family: monospace; white-space: pre-wrap; font-size: 0.85rem; margin-bottom: 1rem; color: #e2e8f0; border: 1px solid rgba(255,255,255,0.1);">
+                추출된 내용이 여기에 표시됩니다...
+            </div>
+            <div id="parsed-result-view"
+                style="background: rgba(99, 102, 241, 0.1); padding: 1.5rem; border-radius: 1rem; border: 1px solid rgba(99, 102, 241, 0.2); margin-bottom: 1.5rem;">
+                <h3 style="font-size: 1rem; margin-bottom: 1rem; color: var(--accent);">📊 추출 데이터 요약</h3>
+                <div id="parsed-summary"
+                    style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; font-size: 0.9rem;">
+                    <!-- Parsed items will go here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('debug-modal')">닫기</button>
+                <button class="btn" id="proceed-create-btn" onclick="proceedWithParsedData()" style="display: none;">자동
+                    입력 & 계약 등록 시작</button>
+            </div>
+        </div>
+    </div>
+    <div id="terminate-modal" class="modal">
+        <div class="modal-content simple-modal">
+            <div class="modal-header">
+                <h2>계약 종료 설정</h2>
+            </div>
+            <div class="form-group">
+                <p id="terminate-target-name" style="margin-bottom: 1rem; opacity: 0.8;"></p>
+                <label>퇴실 일자 (계약 종료일)</label>
+                <input type="date" id="termination-date" class="form-input">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('terminate-modal')">취소</button>
+                <button class="btn" id="confirm-terminate-btn">완료</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Full Form Modal removed -->
+
+    <script src="/js/common.js"></script>
+    <script>
+        const user = JSON.parse(localStorage.getItem('user'));
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (!user) {
+                window.location.href = '/index.html';
+                return;
+            }
+            renderNavbar();
+            await loadAndRenderTenants();
+        });
+
+        async function loadAndRenderTenants() {
+            try {
+                const res = await fetch(`/api/landlord/${user.id}/contracts/active`);
+                if (!res.ok) throw new Error('Failed to fetch contracts');
+                const contracts = await res.json();
+
+                if (contracts.length === 0) {
+                    document.getElementById('tenant-blocks-container').innerHTML = `
+                        <div style="text-align:center; padding:5rem; background:var(--card-bg); border-radius:1.5rem; border:1px solid rgba(255,255,255,0.1)">
+                            <p style="opacity:0.5; margin-bottom:1.5rem">등록된 세입자가 없습니다.</p>
+                            <button class="btn" onclick="navigateToContractForm('new')">첫 세입자 추가하기</button>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const grouped = {};
+                contracts.forEach(c => {
+                    const bName = c.building || '미지정 건물';
+                    if (!grouped[bName]) grouped[bName] = [];
+                    grouped[bName].push(c);
+                });
+
+                const container = document.getElementById('tenant-blocks-container');
+                container.innerHTML = '';
+                const bNames = Object.keys(grouped).sort();
+
+                for (const bName of bNames) {
+                    const block = document.createElement('div');
+                    block.className = 'building-block';
+
+                    const tenantsList = grouped[bName].sort((a, b) => {
+                        const roomA = String(a.room_number || '');
+                        const roomB = String(b.room_number || '');
+                        return roomA.localeCompare(roomB, undefined, { numeric: true, sensitivity: 'base' });
+                    });
+
+                    block.innerHTML = `
+                        <div class="building-name-title">🏢 ${bName}</div>
+                        <table class="tenant-list-table">
+                            <thead>
+                                <tr>
+                                    <th>호수</th>
+                                    <th>이름</th>
+                                    <th style="text-align:right">관리</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tenantsList.map(t => `
+                                    <tr>
+                                        <td class="room-cell">${t.room_number || ''}호</td>
+                                        <td class="name-cell">
+                                            <span style="cursor:pointer; text-decoration: underline; text-underline-offset: 4px;" onclick="navigateToContractForm('view', ${t.id})">
+                                                ${t.nickname || '이름 없음'}
+                                            </span>
+                                        </td>
+                                        <td class="action-cell">
+                                            <button class="btn btn-secondary btn-small" onclick="navigateToContractForm('change', ${t.id})">계약 변경</button>
+                                            <button class="btn btn-secondary btn-small" onclick="navigateToContractForm('extend', ${t.id})">계약 연장</button>
+                                            <button class="btn btn-small btn-terminate" onclick="openTerminateModal(${t.id}, '${t.nickname || '이름 없음'}')">계약 종료</button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                    container.appendChild(block);
+                }
+
+            } catch (err) {
+                console.error(err);
+                document.getElementById('tenant-blocks-container').innerHTML = `<p style="color:#f87171; text-align:center;">오류가 발생했습니다: ${err.message}</p>`;
+            }
+        }
+
+        // Modal logic
+        function navigateToContractForm(action, contractId = null) {
+            let url = action === 'new' ? '/contract_new.html' : `/contract_new.html?action=${action}&contract_id=${contractId}`;
+            window.location.href = url;
+        }
+
+        let currentTerminateId = null;
+        function openTerminateModal(contractId, name) {
+            currentTerminateId = contractId;
+            document.getElementById('terminate-target-name').textContent = `${name} 세입자의 퇴실 일자를 선택해 주세요.`;
+            document.getElementById('termination-date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('terminate-modal').style.display = 'flex';
+        }
+
+        document.getElementById('confirm-terminate-btn').onclick = async () => {
+            const endDate = document.getElementById('termination-date').value;
+            if (!endDate) return alert('날짜를 선택해 주세요.');
+
+            try {
+                const res = await fetch(`/api/contracts/${currentTerminateId}/terminate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ end_date: endDate })
+                });
+                if (res.ok) {
+                    alert('계약 종료 설정이 완료되었습니다.');
+                    closeModal('terminate-modal');
+                    loadAndRenderTenants();
+                }
+            } catch (err) {
+                alert('오류가 발생했습니다.');
+            }
+        };
+
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        // Text Extraction & Parsing logic
+        let extractedText = "";
+        let parsedData = null;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        function startAIUpload() {
+            document.getElementById('ai-file-input').click();
+        }
+
+        async function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const originalBtn = document.querySelector('[onclick="startAIUpload()"]');
+            const originalText = originalBtn.textContent;
+            originalBtn.disabled = true;
+            originalBtn.textContent = "추출 중...";
+
+            try {
+                if (file.type === "application/pdf") {
+                    extractedText = await processPdf(file);
+                } else {
+                    extractedText = await processImage(file);
+                }
+
+                parsedData = parseContractText(extractedText);
+
+                // Search for building if address exists
+                if (parsedData.address) {
+                    const building = await searchBuilding(parsedData.address);
+                    if (building) {
+                        parsedData.buildingId = building.id;
+                        parsedData.buildingName = building.name;
+                    }
+                }
+
+                document.getElementById('debug-view-btn').style.display = 'inline-flex';
+
+                // Automatically proceed to create contract with parsed data
+                proceedWithParsedData();
+
+            } catch (err) {
+                console.error(err);
+                alert('텍스트 추출 중 오류가 발생했습니다: ' + err.message);
+            } finally {
+                originalBtn.disabled = false;
+                originalBtn.textContent = originalText;
+                event.target.value = ''; // Reset input
+            }
+        }
+
+        async function processImage(file) {
+            const result = await Tesseract.recognize(
+                file,
+                'kor+eng',
+                { logger: m => console.log(m) }
+            );
+            return result.data.text;
+        }
+
+        async function processPdf(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+            const pdf = await loadingTask.promise;
+
+            let fullText = "";
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join(' ');
+                fullText += `[Page ${i}]\n${pageText}\n\n`;
+            }
+            return fullText;
+        }
+
+        function parseKoreanNumber(str) {
+            if (!str) return 0;
+            const clean = str.replace(/[,\s]/g, '').replace(/整/g, ''); // Clean punctuation
+            const largeUnits = { '억': 100000000, '만': 10000 };
+            const smallUnits = { '천': 1000, '백': 100, '십': 10 };
+            const digits = { '일': 1, '이': 2, '삼': 3, '사': 4, '오': 5, '육': 6, '칠': 7, '팔': 8, '구': 9 };
+
+            function parseSmall(s) {
+                if (/^\d+$/.test(s)) return parseInt(s);
+                let res = 0;
+                let tempDigit = 0;
+                let currentNum = "";
+                for (let char of s) {
+                    if (digits[char]) {
+                        tempDigit = digits[char];
+                    } else if (smallUnits[char]) {
+                        res += (tempDigit || (currentNum ? parseInt(currentNum) : 1)) * smallUnits[char];
+                        tempDigit = 0;
+                        currentNum = "";
+                    } else if (/\d/.test(char)) {
+                        currentNum += char;
+                    }
+                }
+                if (currentNum) res += parseInt(currentNum);
+                else res += tempDigit;
+                return res;
+            }
+
+            let total = 0;
+            let remaining = clean;
+            for (const [unit, value] of Object.entries(largeUnits)) {
+                const parts = remaining.split(unit);
+                if (parts.length > 1) {
+                    total += parseSmall(parts[0]) * value;
+                    remaining = parts[1];
+                }
+            }
+            total += parseSmall(remaining);
+            return total;
+        }
+
+        function parseKoreanDate(str) {
+            if (!str) return "";
+            // Extract YYYY, MM, DD and normalize to YYYY-MM-DD
+            // Handle "2025 년 08 월 23 일" or "2025년 08월 23일"
+            const match = str.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
+            if (match) {
+                const y = match[1];
+                const m = match[2].padStart(2, '0');
+                const d = match[3].padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            }
+            return "";
+        }
+
+        function parseContractText(text) {
+            let processedText = text;
+
+            // Detect if almost every character has at least one space (OCR noise)
+            const totalChars = text.replace(/\s/g, '').length;
+            const singleSpaceGaps = (text.match(/([가-힣A-Z0-9])\s(?=[가-힣A-Z0-9])/gi) || []).length;
+
+            if (totalChars > 10 && (singleSpaceGaps / totalChars) > 0.5) {
+                // Rule: Remove exactly one space from every blank sequence
+                // "A B  C" (1, 2) -> "AB C" (0, 1)
+                processedText = text.replace(/\s+/g, (match) => {
+                    return match.substring(1);
+                });
+            }
+
+            // Collapse whitespace for subsequent standard parsing logic
+            const t = processedText.replace(/\s+/g, ' ');
+            const data = {
+                address: "",
+                buildingName: "",
+                roomNumber: "",
+                deposit: 0,
+                rent: 0,
+                rentType: "postpaid",
+                managementFee: 0,
+                cleaningFee: 0,
+                startDate: "",
+                endDate: "",
+                tenantName: "",
+                tenantPhone: "",
+                tenantDob: "",
+                deExplodedText: processedText !== text ? processedText : null,
+                raw: {
+                    address: "",
+                    room: "",
+                    deposit: "",
+                    rent: "",
+                    mgmtFee: "",
+                    cleanFee: "",
+                    startDate: "",
+                    endDate: "",
+                    tenantName: "",
+                    tenantPhone: "",
+                    tenantDob: ""
+                }
+            };
+
+            // 1. Address: between 소재지 and 토지/건물 (fuzzy)
+            const addrMatch = t.match(/소\s*재\s*지\s*(.*?)\s*(토\s*지|건\s*물)/);
+            if (addrMatch) {
+                data.address = addrMatch[1].trim();
+                data.raw.address = addrMatch[0];
+            }
+
+            // 2. Room: after 임대부분
+            const roomMatch = t.match(/임\s*대\s*부\s*분\s*(.*?)\s*(\d+)/);
+            if (roomMatch) {
+                data.roomNumber = roomMatch[2];
+                data.raw.room = roomMatch[0];
+            }
+
+            // 3. Deposit: 금 ... 원 after 보증금
+            const depositRegex = /보\s*증\s*금\s*.*?금\s*(.*?)\s*원/;
+            const depMatch = t.match(depositRegex);
+            if (depMatch) {
+                data.deposit = parseKoreanNumber(depMatch[1]);
+                data.raw.deposit = depMatch[0];
+            }
+
+            // 4. Rent: between the LAST 차임 before 제 2 조
+            // Uses a negative lookahead to find the '차임' closest to '제 2 조'
+            const rentBlockRegex = /차\s*임\s*(?:(?!차\s*임).)*?제\s*2\s*조/;
+            const rentMatch = t.match(rentBlockRegex);
+            if (rentMatch) {
+                const block = rentMatch[0];
+                data.raw.rent = block;
+                const valueMatch = block.match(/금\s*(.*?)\s*원/);
+                if (valueMatch) {
+                    data.rent = parseKoreanNumber(valueMatch[1]);
+                    if (block.includes("선불")) data.rentType = "prepaid";
+                    if (block.includes("후불")) data.rentType = "postpaid";
+                } else {
+                    data.rent = 0;
+                    data.rentType = "postpaid";
+                }
+            }
+
+            // 5. Cleaning Fee: after 청소비
+            const cleanRegex = /청\s*소\s*비\s*.*?(\d[\s\d가-힣]*?)\s*원/;
+            const cleanMatch = t.match(cleanRegex);
+            if (cleanMatch) {
+                const feeStr = cleanMatch[1].replace(/\s/g, ''); // Remove spaces
+                data.cleaningFee = parseKoreanNumber(feeStr);
+                data.raw.cleanFee = cleanMatch[0];
+            }
+
+            // 6. Management Fee: after 관리비는
+            const mgmtRegex = /관\s*리\s*비\s*는\s*.*?(\d[\s\d가-힣]*?)\s*원/;
+            const mgmtMatch = t.match(mgmtRegex);
+            if (mgmtMatch) {
+                const feeStr = mgmtMatch[1].replace(/\s/g, ''); // Remove spaces
+                data.managementFee = parseKoreanNumber(feeStr);
+                data.raw.mgmtFee = mgmtMatch[0];
+            }
+
+            // 7. Start Date: after 제 2 조
+            const startMatch = t.match(/제\s*2\s*조\s*.*?(\d{4}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일)/);
+            if (startMatch) {
+                data.startDate = parseKoreanDate(startMatch[1]);
+                data.raw.startDate = startMatch[1];
+            }
+
+            // 8. End Date: after 인도일로부터
+            const endMatch = t.match(/인\s*도\s*일\s*로\s*부\s*터\s*(\d{4}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일)/);
+            if (endMatch) {
+                data.endDate = parseKoreanDate(endMatch[1]);
+                data.raw.endDate = endMatch[1];
+            }
+
+            // 9. Tenant Information: search from the end
+            const tenantMatches = [...t.matchAll(/임\s*차\s*인/g)];
+            if (tenantMatches.length > 0) {
+                const lastMatch = tenantMatches[tenantMatches.length - 1];
+                const sub = t.substring(lastMatch.index);
+
+                // 주민등록번호 (Dob)
+                const juminRegex = /주\s*민\s*등\s*록\s*번\s*호\s*([0-9\s-]+)/;
+                const juminMatch = sub.match(juminRegex);
+                if (juminMatch) {
+                    const cleaned = juminMatch[1].replace(/[\s-]/g, '');
+                    if (cleaned.length >= 6) {
+                        const birthday = cleaned.slice(0, 6);
+                        const yy = parseInt(birthday.slice(0, 2));
+                        const year = yy > 30 ? '19' + birthday.slice(0, 2) : '20' + birthday.slice(0, 2);
+                        data.tenantDob = `${year}-${birthday.slice(2, 4)}-${birthday.slice(4, 6)}`;
+                        data.raw.tenantDob = juminMatch[0];
+                    }
+                }
+
+                // 전화
+                const phoneRegex = /전\s*화\s*([0-9\s-]+)/;
+                const phoneMatch = sub.match(phoneRegex);
+                if (phoneMatch) {
+                    data.tenantPhone = phoneMatch[1].replace(/\s/g, ''); // Remove spaces, keep hyphens
+                    data.raw.tenantPhone = phoneMatch[0];
+                }
+
+                // 성명
+                const nameRegex = /성\s*명\s*(.*?)\s*(인\s*\(+\s*인\s*\)+|인\s*$|인\s+(?=전\s*화|주\s*민)|인)/;
+                const nameMatch = sub.match(nameRegex);
+                if (nameMatch) {
+                    let name = nameMatch[1].trim();
+                    name = name.replace(/\s{2,}/g, ' ');
+                    data.tenantName = name;
+                    data.raw.tenantName = nameMatch[0];
+                }
+            }
+
+            return data;
+        }
+
+        async function searchBuilding(address) {
+            if (!address) return null;
+            try {
+                // Take relevant part of address (city + street)
+                const snippet = address.split(' ').slice(0, 4).join(' ');
+                const res = await fetch(`/api/buildings/search-by-address?address=${encodeURIComponent(snippet)}`);
+                if (!res.ok) return null;
+                return await res.json();
+            } catch (err) {
+                return null;
+            }
+        }
+
+        function openDebugModal() {
+            let displayText = extractedText || "추출된 내용이 없습니다.";
+            if (parsedData && parsedData.deExplodedText) {
+                displayText += "\n\n--- [공백 제거 및 복원된 텍스트] ---\n" + parsedData.deExplodedText;
+            }
+            document.getElementById('ocr-debug-content').textContent = displayText;
+
+            const summary = document.getElementById('parsed-summary');
+            if (parsedData) {
+                summary.innerHTML = `
+                    <div style="grid-column: span 2; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 0.5rem;">
+                        <strong>📍 추출 주소:</strong> ${parsedData.address || '-'} 
+                        <div style="font-size: 0.75rem; opacity: 0.5; margin-top: 2px;">(키워드: 소 재 지 | 원본: ${parsedData.raw.address})</div>
+                    </div>
+                    <div><strong>🏢 매칭 건물:</strong> ${parsedData.buildingName || '미매칭'}</div>
+                    <div>
+                        <strong>🚪 호수:</strong> ${parsedData.roomNumber || '-'}호
+                        <div style="font-size: 0.75rem; opacity: 0.5;">(키워드: 임대부분 | 원본: ${parsedData.raw.room})</div>
+                    </div>
+                    <div>
+                        <strong>💰 보증금:</strong> ${formatCurrency(parsedData.deposit)}원
+                        <div style="font-size: 0.75rem; opacity: 0.5;">(키워드: 보증금 | 원본: ${parsedData.raw.deposit})</div>
+                    </div>
+                    <div>
+                        <strong>💵 월세:</strong> ${formatCurrency(parsedData.rent)}원 (${parsedData.rentType === 'prepaid' ? '선불' : '후불'})
+                        <div style="font-size: 0.75rem; opacity: 0.5;">(키워드: 차임, 제2조 | 원본 섹션: ${parsedData.raw.rent ? '차임...제2조' : '-'})</div>
+                    </div>
+                    <div>
+                        <strong>🧹 청소비:</strong> ${formatCurrency(parsedData.cleaningFee)}원
+                        <div style="font-size: 0.75rem; opacity: 0.5;">(키워드: 청소비 | 원본: ${parsedData.raw.cleanFee || '-'})</div>
+                    </div>
+                    <div>
+                        <strong>⚙️ 관리비:</strong> ${formatCurrency(parsedData.managementFee)}원
+                        <div style="font-size: 0.75rem; opacity: 0.5;">(키워드: 관리비는 | 원본: ${parsedData.raw.mgmtFee || '-'})</div>
+                    </div>
+                    <div>
+                        <strong>📅 시작일:</strong> ${parsedData.startDate || '-'}
+                        <div style="font-size: 0.75rem; opacity: 0.5;">(키워드: 제 2 조 | 원본: ${parsedData.raw.startDate || '-'})</div>
+                    </div>
+                    <div>
+                        <strong>🏁 종료일:</strong> ${parsedData.endDate || '-'}
+                        <div style="font-size: 0.75rem; opacity: 0.5;">(키워드: 인도일로부터 | 원본: ${parsedData.raw.endDate || '-'})</div>
+                    </div>
+                    <div style="grid-column: span 2; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.05); margin-top: 0.5rem;">
+                        <h4 style="font-size: 0.85rem; color: var(--accent); margin-bottom: 0.5rem;">👤 임차인 정보 (키워드: 임 차 인)</h4>
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
+                            <div>
+                                <strong>이름:</strong> ${parsedData.tenantName || '-'}
+                                <div style="font-size: 0.75rem; opacity: 0.5;">(키워드: 성명 | 원본: ${parsedData.raw.tenantName || '-'})</div>
+                            </div>
+                            <div>
+                                <strong>연락처:</strong> ${formatPhone(parsedData.tenantPhone) || '-'}
+                                <div style="font-size: 0.75rem; opacity: 0.5;">(키워드: 전화 | 원본: ${parsedData.raw.tenantPhone || '-'})</div>
+                            </div>
+                            <div style="grid-column: span 2;">
+                                <strong>생년월일:</strong> ${parsedData.tenantDob || '-'}
+                                <div style="font-size: 0.75rem; opacity: 0.5;">(키워드: 주민등록번호 | 원본: ${parsedData.raw.tenantDob || '-'})</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('proceed-create-btn').style.display = 'inline-block';
+            } else {
+                summary.innerHTML = "분석된 데이터가 없습니다.";
+                document.getElementById('proceed-create-btn').style.display = 'none';
+            }
+
+            document.getElementById('debug-modal').style.display = 'flex';
+        }
+
+        function proceedWithParsedData() {
+            closeModal('debug-modal');
+            const params = new URLSearchParams();
+            params.set('action', 'new');
+            if (parsedData.buildingName) params.set('building_name', parsedData.buildingName);
+            if (parsedData.roomNumber) params.set('room_number', parsedData.roomNumber);
+            if (parsedData.deposit) params.set('deposit', parsedData.deposit);
+            if (parsedData.rent) params.set('rent', parsedData.rent);
+            if (parsedData.rentType) params.set('rent_type', parsedData.rentType);
+            if (parsedData.managementFee) params.set('mgmt_fee', parsedData.managementFee);
+            if (parsedData.cleaningFee) params.set('cleaning_fee', parsedData.cleaningFee);
+            if (parsedData.startDate) params.set('start_date', parsedData.startDate);
+            if (parsedData.endDate) params.set('end_date', parsedData.endDate);
+            if (parsedData.tenantName) params.set('tenant_name', parsedData.tenantName);
+            if (parsedData.tenantPhone) params.set('tenant_phone', parsedData.tenantPhone);
+            if (parsedData.tenantDob) params.set('tenant_dob', parsedData.tenantDob);
+
+            window.location.href = `/contract_new.html?${params.toString()}`;
+        }
+    </script>
+</body>
+
+</html>
