@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Settings - Sugar</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .system-info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .system-info-row:last-child {
+            border-bottom: none;
+        }
+
+        .label {
+            opacity: 0.6;
+            font-size: 0.9rem;
+        }
+
+        .value {
+            font-weight: 600;
+            color: var(--primary);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container" id="main-content">
+        <div class="settings-container">
+            <h1 style="margin-bottom:2rem">시스템 설정</h1>
+
+            <div class="card" style="padding: 2rem;">
+                <h2 style="margin-bottom: 1.5rem; color: var(--primary);">표시 정보</h2>
+
+                <div class="system-info-row">
+                    <span class="label">시스템 폰트</span>
+                    <span class="value" id="font-family-value">로딩 중...</span>
+                </div>
+
+                <div class="system-info-row">
+                    <span class="label">기본 폰트 사이즈</span>
+                    <span class="value" id="font-size-value">로딩 중...</span>
+                </div>
+
+                <div class="system-info-row" style="margin-top: 2rem;">
+                    <span class="label">애플리케이션 버전</span>
+                    <span class="value">v1.2.0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/common.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            renderNavbar();
+            displaySystemInfo();
+        });
+
+        function displaySystemInfo() {
+            const bodyStyle = window.getComputedStyle(document.body);
+
+            const fontFamily = bodyStyle.fontFamily;
+            const fontSize = bodyStyle.fontSize;
+
+            document.getElementById('font-family-value').textContent = fontFamily;
+            document.getElementById('font-size-value').textContent = fontSize;
+        }
+    </script>
+</body>
+
+</html>

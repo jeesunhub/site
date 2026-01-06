@@ -8,9 +8,132 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     <style>
-        .dashboard-header {
+        body {
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .navbar {
+            flex-shrink: 0;
+        }
+
+        .sticky-calendar-container {
+            flex-shrink: 0;
+            background: var(--bg);
+            width: 100%;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            height: 480px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            user-select: none;
+        }
+
+        .calendar-inner-full {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+        }
+
+        .calendar-card {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .calendar-grid {
+            flex-grow: 1;
+            background: rgba(255, 255, 255, 0.01);
+            border: none;
+            border-radius: 0;
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            grid-template-rows: auto repeat(6, 1fr);
+        }
+
+        .calendar-card .card-header {
+            padding: 0.5rem 1.5rem;
+            /* Reduced padding */
+            margin-bottom: 0;
+        }
+
+        .calendar-card .card-header h2 {
             display: none;
-            /* Removed as requested */
+            /* iPhone-style: usually just shows the month */
+        }
+
+        .calendar-day-header {
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 2px 0 !important;
+            font-size: 0.7rem !important;
+            margin: 0 !important;
+            opacity: 0.4;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .calendar-day {
+            min-height: auto !important;
+            height: 100%;
+            position: relative;
+            padding: 0 !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+        }
+
+        .day-number {
+            position: absolute;
+            top: 2px;
+            left: 4px;
+            font-size: 0.7rem !important;
+            margin: 0 !important;
+            opacity: 0.4;
+        }
+
+        .day-events {
+            padding: 16px 2px 2px 2px;
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .other-month {
+            background: rgba(0, 0, 0, 0.2) !important;
+            opacity: 0.15;
+        }
+
+        #main-content {
+            flex-grow: 1;
+            overflow-y: auto;
+            margin: 0 auto !important;
+            padding: 1.5rem;
+            width: 100%;
+            max-width: 1400px;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 420px;
+            gap: 2rem;
+            margin-top: 0;
+            /* Margin removed as requested */
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
         }
 
         .stat-badge {
@@ -105,15 +228,15 @@
 <body>
     <!-- Navbar will be rendered by JS -->
 
+    <!-- Separate Sticky Calendar Section -->
+    <div id="sticky-calendar-anchor"></div>
+
     <div class="container" id="main-content">
-        <!-- Dashboard content will be rendered here -->
+        <!-- Dashboard content (sidebar/stats) will be rendered here -->
     </div>
 
     <!-- Context Menu for Payment Date Adjustment -->
     <div id="context-menu" class="context-menu">
-        <div class="context-menu-item" onclick="adjustDate('single')">이 건만 다른 날로 이동</div>
-        <div class="context-menu-item" onclick="adjustDate('shift_backward')">이후 전부 한 칸씩 뒤로</div>
-        <div class="context-menu-item" onclick="adjustDate('shift_forward')">이후 전부 한 칸씩 앞으로</div>
     </div>
 
     <script src="/js/common.js"></script>
@@ -180,23 +303,48 @@
         }
 
         function renderDashboardUI() {
+            const anchor = document.getElementById('sticky-calendar-anchor');
             const container = document.getElementById('main-content');
+
+            // Render Sticky Calendar outside container
+            anchor.innerHTML = `
+                <div class="sticky-calendar-container" id="calendar-scroll-area">
+                    <div class="calendar-inner-full">
+                        <div class="calendar-card">
+                            <div class="card-header">
+                                <div class="calendar-nav">
+                                    <button onclick="changeMonth(-1)">‹</button>
+                                    <span id="current-month-label"></span>
+                                    <button onclick="changeMonth(1)">›</button>
+                                </div>
+                            </div>
+                            <div class="calendar-grid" id="calendar-grid"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Add Scroll Interface for Calendar (iPhone-style)
+            const scrollArea = document.getElementById('calendar-scroll-area');
+            let isTransitioning = false;
+            scrollArea.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                if (isTransitioning) return;
+
+                if (Math.abs(e.deltaY) > 20) {
+                    isTransitioning = true;
+                    const delta = e.deltaY > 0 ? 1 : -1;
+                    changeMonth(delta);
+                    setTimeout(() => { isTransitioning = false; }, 300); // 300ms debounce
+                }
+            }, { passive: false });
+
+            // Add Swipe/Touch support if needed by user in future
+
+            // Render Sidebar & Stats in container
             container.innerHTML = `
                 <div class="dashboard-grid">
-                    <!-- Left: Calendar -->
-                    <div class="card calendar-card">
-                        <div class="card-header">
-                            <h2>납부 일정</h2>
-                            <div class="calendar-nav">
-                                <button onclick="changeMonth(-1)">‹</button>
-                                <span id="current-month-label"></span>
-                                <button onclick="changeMonth(1)">›</button>
-                            </div>
-                        </div>
-                        <div class="calendar-grid" id="calendar-grid"></div>
-                    </div>
-
-                    <!-- Right: Summary & Recent -->
+                    <div></div> <!-- Spacer -->
                     <div class="dashboard-sidebar">
                         <div class="card list-card unpaid-card">
                             <div class="card-header">
@@ -277,9 +425,9 @@
                         event.className = 'day-event event-payment';
                         event.textContent = `${(data.total_amount / 10000).toFixed(0)}만`;
                         event.style.backgroundColor = data.tenant_color ? `${data.tenant_color}40` : '';
-                        if (user.role === 'landlord') {
+                        /* if (user.role === 'landlord') {
                             event.onclick = (e) => { e.stopPropagation(); showContextMenu(e, data.bill_id); };
-                        }
+                        } */
                         events.appendChild(event);
                     }
                 });

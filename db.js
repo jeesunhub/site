@@ -2,7 +2,17 @@ const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, 'sugar.db');
+const isRender = !!process.env.RENDER;
+
+const DB_PATH = isRender
+    ? "/data/sugar.db"
+    : path.join(__dirname, "sugar.db");
+
+// DB 디렉토리 없으면 생성
+const dir = path.dirname(DB_PATH);
+if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+}
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
 const db = new sqlite3.Database(DB_PATH, (err) => {

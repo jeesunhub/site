@@ -34,7 +34,8 @@
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem">
                     <h3>미리보기</h3>
                     <div style="display:flex; gap:10px">
-                        <button class="btn btn-secondary" onclick="window.location.href='/settings.html'">취소</button>
+                        <button class="btn btn-secondary"
+                            onclick="window.location.href='/settings_profile.html'">취소</button>
                         <button class="btn" onclick="commitImport()">완료</button>
                     </div>
                 </div>
@@ -75,7 +76,7 @@
 
         document.addEventListener('DOMContentLoaded', async () => {
             renderNavbar([
-                { name: 'Settings', url: '/settings.html' },
+                { name: 'Profile Settings', url: '/settings_profile.html' },
                 { name: 'Import Payments', url: '/payments_import.html' }
             ]);
 

@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
 
     birth_date TEXT,
     phone_number TEXT,
+    noti INTEGER DEFAULT 0,
 
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

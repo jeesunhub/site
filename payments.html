@@ -84,6 +84,94 @@
             color: #eab308;
             font-weight: 600;
         }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: #1e293b;
+            padding: 2rem;
+            border-radius: 1rem;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .modal-header {
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+
+        .modal-footer {
+            margin-top: 2rem;
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+        }
+
+        .text-input-area {
+            width: 100%;
+            height: 150px;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0.5rem;
+            color: #fff;
+            padding: 1rem;
+            resize: vertical;
+            font-family: inherit;
+        }
+
+        .user-select-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 1rem;
+        }
+
+        .user-select-item {
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 0.5rem;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .user-select-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .user-select-item.selected {
+            background: rgba(99, 102, 241, 0.2);
+            border-color: #6366f1;
+        }
+
+        .parsed-info {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
     </style>
 </head>
 
@@ -99,7 +187,7 @@
                 <button class="btn btn-secondary" onclick="document.getElementById('excel-upload').click()">📁 파일 업로드
                     (Excel)</button>
                 <button class="btn btn-secondary" onclick="alert('준비 중입니다.')">📝 표로 추가</button>
-                <button class="btn btn-secondary" onclick="alert('준비 중입니다.')">📋 문자 붙여넣기</button>
+                <button class="btn btn-secondary" onclick="openPasteModal()">📋 문자 붙여넣기</button>
             </div>
         </div>
 
@@ -139,17 +227,53 @@
         </div>
     </div>
 
+    <!-- Paste Modal -->
+    <div id="paste-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>문자 붙여넣기</h2>
+            </div>
+            <textarea id="paste-input" class="text-input-area" placeholder="입금 문자를 여기에 붙여넣으세요..."></textarea>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('paste-modal')">취소</button>
+                <button class="btn" onclick="processPaste()">완료</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Match Tenant Modal -->
+    <div id="match-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>세입자 매칭</h2>
+            </div>
+            <div id="parsed-result-info" class="parsed-info">
+                <!-- Parsed details go here -->
+            </div>
+            <p style="margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.8;">매칭된 세입자를 선택해주세요:</p>
+            <div id="tenant-list" class="user-select-list">
+                <!-- Tenant list goes here -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('match-modal')">취소</button>
+                <button class="btn" onclick="confirmMatch()">저장</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/js/common.js"></script>
     <script>
         const user = JSON.parse(localStorage.getItem('user'));
         let ledgerData = [];
+        let activeContracts = [];
+        let currentParsedData = null;
+        let selectedContractId = null;
 
         document.addEventListener('DOMContentLoaded', async () => {
             if (!user) {
                 window.location.href = '/index.html';
                 return;
             }
-            // Basic permission check (though page logic handles role display)
             if (user.role === 'tenant') {
                 // Tenants are allowed to view, but with limited data
             }
@@ -158,7 +282,25 @@
             setupUIByRole();
             await loadDropdownOptions();
             await loadTableData();
+            await loadActiveContracts();
         });
+
+        async function loadActiveContracts() {
+            if (user.role === 'landlord' || user.role === 'admin') {
+                try {
+                    if (user.role === 'landlord') {
+                        const res = await fetch(`/api/landlord/${user.id}/contracts/active`);
+                        if (res.ok) {
+                            activeContracts = await res.json();
+                        }
+                    } else if (user.role === 'admin') {
+                        // Admin logic placeholder
+                    }
+                } catch (e) {
+                    console.error("Failed to load contracts", e);
+                }
+            }
+        }
 
         function setupUIByRole() {
             const filtersDiv = document.getElementById('filters-container');
@@ -176,11 +318,9 @@
                 buildingGroup.style.display = 'flex';
                 tenantGroup.style.display = 'flex';
             } else {
-                // Tenant: no filters
                 filtersDiv.style.display = 'none';
             }
 
-            // Table Headers
             const headerRow = document.getElementById('table-headers');
             let html = '';
             if (user.role === 'admin') {
@@ -195,14 +335,10 @@
 
         async function loadDropdownOptions() {
             if (user.role === 'tenant') return;
-
             try {
-                // For Admin/Landlord, we need lists.
-                // Re-using admin users list for Landlords if admin
                 if (user.role === 'admin') {
                     const uRes = await fetch('/api/admin/users');
                     const users = await uRes.json();
-
                     const landlordSelect = document.getElementById('filter-landlord');
                     users.filter(u => u.role === 'landlord').forEach(u => {
                         const opt = document.createElement('option');
@@ -210,18 +346,8 @@
                         opt.textContent = `${u.nickname} (${u.login_id})`;
                         landlordSelect.appendChild(opt);
                     });
-
-                    // For admin, buildings/tenants might need to react to landlord selection
-                    // But for now, we'll try to load all or just trigger loadTableData which might filter
                 }
-
-                // For Buildings (Landlord context mainly, or Admin context)
                 let buildingsUrl = user.role === 'admin' ? '/api/admin/buildings' : `/api/landlord/${user.id}/buildings`;
-
-                // Hack: If admin, we don't have a generic "all buildings" API yet in server.js snippet provided.
-                // We'll rely on the table loading primarily.
-                // BUT for Landlord, we do have it.
-
                 if (user.role === 'landlord') {
                     const bRes = await fetch(buildingsUrl);
                     if (bRes.ok) {
@@ -234,7 +360,6 @@
                             bSelect.appendChild(opt);
                         });
                     }
-
                     const tRes = await fetch(`/api/landlord/${user.id}/tenants`);
                     if (tRes.ok) {
                         const tenants = await tRes.json();
@@ -247,13 +372,9 @@
                         });
                     }
                 }
-
-                // If admin, implement change listener to reload table
                 if (user.role === 'admin') {
                     document.getElementById('filter-landlord').addEventListener('change', loadTableData);
                 }
-
-
             } catch (e) {
                 console.error(e);
             }
@@ -273,18 +394,8 @@
 
             try {
                 const res = await fetch(`/api/payments/ledger?${params.toString()}`);
-
-                // Check if API endpoint exists (Server might need restart)
-                if (res.status === 404) {
-                    console.warn('API endpoint not found. Server likely needs restart.');
-                    alert('새로운 기능을 적용하기 위해 서버 재시작이 필요합니다.\n(터미널에서 서버를 껐다 켜주세요)');
-                    return;
-                }
-
-                if (!res.ok) {
-                    throw new Error('Server returned ' + res.status);
-                }
-
+                if (res.status === 404) return;
+                if (!res.ok) throw new Error('Server returned ' + res.status);
                 const data = await res.json();
                 ledgerData = data;
                 renderTable(data);
@@ -298,20 +409,13 @@
         function renderTable(data) {
             const tbody = document.getElementById('payment-list-body');
             tbody.innerHTML = '';
-
             if (!data || data.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:2rem; opacity:0.5;">데이터가 없습니다.</td></tr>';
                 return;
             }
-
-            // Client-side sorting: Recent "Due Date" first
-            // Bill month is YYYY-MM. 
             data.sort((a, b) => b.bill_month.localeCompare(a.bill_month));
-
             data.forEach(row => {
                 const tr = document.createElement('tr');
-
-                // Calculate Status
                 let statusHtml = '';
                 if (row.paid_amount >= row.due_amount) {
                     statusHtml = '<span class="status-paid">완납</span>';
@@ -320,10 +424,7 @@
                 } else {
                     statusHtml = '<span class="status-unpaid">미납</span>';
                 }
-
-                // Calculate Expected Date 
                 const dueDate = getDueDate(row.bill_month, row.contract_start_date, row.payment_type);
-
                 let html = '';
                 if (user.role === 'admin') {
                     html += `<td>${row.landlord_name}</td>`;
@@ -332,34 +433,186 @@
                     html += `<td>${row.building_name || '-'}</td>`;
                     html += `<td>${row.tenant_name}</td>`;
                 }
-
                 html += `
                     <td>${dueDate || row.bill_month}</td>
                     <td>${row.last_paid_date ? row.last_paid_date.split('T')[0] : '-'}</td>
                     <td>${row.paid_amount > 0 ? formatCurrency(row.paid_amount) + '원' : '-'}</td>
                     <td>${statusHtml}</td>
                 `;
-
                 tr.innerHTML = html;
                 tbody.appendChild(tr);
             });
         }
 
-        async function handleExcelUpload(event) {
+        function handleExcelUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
-
             const reader = new FileReader();
             reader.onload = async (e) => {
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, { type: 'array' });
                 const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                 const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-
                 console.log('Excel Data:', jsonData);
-                alert(`${jsonData.length}개의 데이터가 로드되었습니다. 형식 검증 및 서버 전송 기능은 구현 중입니다.`);
+                alert(`${jsonData.length}개의 데이터가 로드되었습니다. 구현 중입니다.`);
             };
             reader.readAsArrayBuffer(file);
+        }
+
+        // --- Text Paste & Parsing Logic ---
+
+        function openPasteModal() {
+            document.getElementById('paste-input').value = '';
+            document.getElementById('paste-modal').style.display = 'flex';
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        function processPaste() {
+            const text = document.getElementById('paste-input').value.trim();
+            if (!text) return alert('텍스트를 입력해주세요.');
+
+            const parsed = parsePaymentText(text);
+            if (!parsed) {
+                return alert('파싱 실패: "입금" 키워드를 찾을 수 없거나 형식이 올바르지 않습니다.');
+            }
+
+            currentParsedData = parsed;
+            closeModal('paste-modal');
+            showMatchModal(parsed);
+        }
+
+        function parsePaymentText(text) {
+            const depositIdx = text.indexOf('입금');
+            if (depositIdx === -1) return null;
+
+            // 1. Amount: number immediately after "입금"
+            const afterDeposit = text.substring(depositIdx + "입금".length).trim();
+            const amountMatch = afterDeposit.match(/^([\d,]+)/);
+            if (!amountMatch) return null;
+            const amount = parseInt(amountMatch[1].replace(/,/g, ''), 10);
+
+            // 2. Date: "MM/DD" format
+            const dateMatch = text.match(/(\d{1,2})\/(\d{1,2})/);
+            let paymentDate = new Date();
+            if (dateMatch) {
+                const month = parseInt(dateMatch[1], 10);
+                const day = parseInt(dateMatch[2], 10);
+
+                const today = new Date();
+                const currentYear = today.getFullYear();
+
+                const dates = [
+                    new Date(currentYear - 1, month - 1, day),
+                    new Date(currentYear, month - 1, day),
+                    new Date(currentYear + 1, month - 1, day)
+                ];
+
+                paymentDate = dates.reduce((prev, curr) => {
+                    return (Math.abs(curr - today) < Math.abs(prev - today) ? curr : prev);
+                });
+            }
+
+            // 3. Tenant Keyword: Last word BEFORE "입금"
+            const beforeDeposit = text.substring(0, depositIdx).trim();
+            const tokens = beforeDeposit.split(/\s+/);
+            const keyword = tokens.length > 0 ? tokens[tokens.length - 1] : '';
+
+            return {
+                keyword: keyword,
+                amount: amount,
+                date: paymentDate,
+                originalText: text
+            };
+        }
+
+        function showMatchModal(parsed) {
+            const matches = activeContracts.filter(c => {
+                if (!c.nickname) return false;
+                return c.nickname.includes(parsed.keyword) || (c.keyword && c.keyword.includes(parsed.keyword));
+            });
+
+            const dateStr = parsed.date.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+            document.getElementById('parsed-result-info').innerHTML = `
+                <div><strong>입금자/키워드:</strong> ${parsed.keyword}</div>
+                <div><strong>입금액:</strong> ${formatCurrency(parsed.amount)}원</div>
+                <div><strong>입금일:</strong> ${dateStr}</div>
+            `;
+
+            const listContainer = document.getElementById('tenant-list');
+            listContainer.innerHTML = '';
+
+            let candidates = [];
+            if (matches.length > 0) {
+                candidates = matches;
+            } else {
+                candidates = activeContracts;
+            }
+
+            if (matches.length === 0) {
+                const msg = document.createElement('div');
+                msg.style.padding = '0.5rem';
+                msg.style.color = '#f87171';
+                msg.textContent = '매칭되는 세입자가 없습니다. 전체 목록에서 선택해주세요.';
+                listContainer.appendChild(msg);
+            }
+
+            candidates.forEach(c => {
+                const div = document.createElement('div');
+                div.className = 'user-select-item';
+                div.innerHTML = `
+                    <div style="font-weight:600">${c.nickname}</div>
+                    <div style="font-size:0.85rem; opacity:0.7">${c.building || '건물미지정'} ${c.room_number || ''}호</div>
+                `;
+                div.onclick = () => {
+                    document.querySelectorAll('.user-select-item').forEach(el => el.classList.remove('selected'));
+                    div.classList.add('selected');
+                    selectedContractId = c.id;
+                };
+                listContainer.appendChild(div);
+            });
+
+            document.getElementById('match-modal').style.display = 'flex';
+        }
+
+        async function confirmMatch() {
+            if (!selectedContractId) return alert('세입자를 선택해주세요.');
+
+            const contract = activeContracts.find(c => c.id === selectedContractId);
+            if (!contract) return;
+
+            // Use Payment Date 12:00
+            const isoParams = new Date(currentParsedData.date);
+            isoParams.setHours(12, 0, 0, 0);
+
+            const paymentData = {
+                tenant_id: contract.tenant_id,
+                amount: currentParsedData.amount,
+                paid_at: isoParams.toISOString(),
+                memo: currentParsedData.originalText
+            };
+
+            try {
+                const res = await fetch('/api/payments/batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ payments: [paymentData] })
+                });
+
+                if (res.ok) {
+                    alert('입금이 등록되었습니다.');
+                    closeModal('match-modal');
+                    loadTableData();
+                } else {
+                    const txt = await res.text();
+                    alert('오류 발생: ' + txt);
+                }
+            } catch (err) {
+                console.error(err);
+                alert('요청 중 오류 발생');
+            }
         }
     </script>
 </body>

@@ -47,6 +47,13 @@ function renderNavbar() {
                         <span></span>
                     </div>
                 </div>
+                <div class="nav-noti-wrapper" onclick="window.location.href='/notices.html'">
+                    <svg class="bell-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                    </svg>
+                    ${user.noti > 0 ? `<span class="noti-badge">${user.noti > 99 ? '99+' : user.noti}</span>` : ''}
+                </div>
                 
                 <div class="nav-dropdown" id="nav-menu">
                     <div class="dropdown-header">
@@ -59,12 +66,16 @@ function renderNavbar() {
                         </div>
                     </div>
                     <div class="dropdown-items">
+                        <a href="/notices.html">📢 공지사항</a>
+                        <hr>
                         <a href="/dashboard.html">🏠 대시보드</a>
-                        ${user.role === 'landlord' ? '<a href="/buildings.html">🏢 건물 관리</a>' : ''}
-                        ${user.role === 'landlord' ? '<a href="/tenants.html">👥 세입자 관리</a>' : ''}
+                        ${user.role === 'admin' ? '<a href="/landlord_management.html">👑 임대인 관리</a>' : ''}
+                        ${(user.role === 'landlord' || user.role === 'admin') ? '<a href="/buildings.html">🏢 건물 관리</a>' : ''}
+                        ${(user.role === 'landlord' || user.role === 'admin') ? '<a href="/tenants.html">👥 세입자 관리</a>' : ''}
                         ${(user.role === 'landlord' || user.role === 'admin') ? '<a href="/payments.html">💰 납부 관리</a>' : ''}
                         <hr>
-                        <a href="/settings.html">⚙️ 설정</a>
+                        <a href="/settings_profile.html">⚙️ 프로필 설정</a>
+                        <a href="/settings_system.html">🛠️ 시스템 설정</a>
                         <a href="#" onclick="logout()" class="logout-link">🚪 로그아웃</a>
                     </div>
                 </div>

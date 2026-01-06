@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>가입 신청 - Sugar</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+            background: radial-gradient(circle at top left, #1e1b4b, #0f172a);
+            color: #f8fafc;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .signup-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 3rem;
+            border-radius: 2rem;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 2rem;
+            text-align: center;
+            background: linear-gradient(to right, #6366f1, #a855f7);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .form-group {
+            margin-bottom: 1.2rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-size: 0.85rem;
+            opacity: 0.7;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 0.8rem 1rem;
+            border-radius: 0.8rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.2);
+            color: white;
+            box-sizing: border-box;
+            outline: none;
+            transition: all 0.3s;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            height: 3rem;
+            display: block;
+        }
+
+        /* Ensure password dots match placeholder height */
+        input[type="password"] {
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .form-group input:focus {
+            border-color: #6366f1;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        /* Fix for autofill white background */
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover,
+        input:-webkit-autofill:focus,
+        input:-webkit-autofill:active {
+            -webkit-box-shadow: 0 0 0px 1000px #1e293b inset !important;
+            -webkit-text-fill-color: white !important;
+            transition: background-color 5000s ease-in-out 0s;
+        }
+
+        .password-hint {
+            font-size: 0.75rem;
+            opacity: 0.5;
+            margin-top: 0.3rem;
+        }
+
+        .consent-box {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 1rem;
+            border-radius: 0.8rem;
+            font-size: 0.8rem;
+            height: 100px;
+            overflow-y: auto;
+            margin-bottom: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            line-height: 1.5;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+        }
+
+        .checkbox-group input {
+            width: auto;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .submit-btn {
+            flex: 2;
+            padding: 1rem;
+            border-radius: 0.8rem;
+            border: none;
+            background: linear-gradient(to right, #6366f1, #a855f7);
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .cancel-btn {
+            flex: 1;
+            padding: 1rem;
+            border-radius: 0.8rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .submit-btn:hover,
+        .cancel-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .submit-btn:hover {
+            box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.4);
+        }
+
+        .cancel-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: #1e293b;
+            padding: 2.5rem;
+            border-radius: 1.5rem;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .modal-text {
+            font-size: 0.95rem;
+            opacity: 0.8;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+
+        .modal-btns {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+        }
+
+        .modal-btn {
+            padding: 0.7rem 1.5rem;
+            border-radius: 0.6rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-cancel {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .btn-confirm {
+            background: #6366f1;
+            color: white;
+        }
+
+        /* Wheel Picker Styles */
+        .wheel-picker-container {
+            display: flex;
+            gap: 0.5rem;
+            height: 120px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 1rem;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+        }
+
+        .wheel {
+            flex: 1;
+            height: 100%;
+            overflow-y: scroll;
+            scroll-snap-type: y mandatory;
+            scrollbar-width: none;
+            /* Firefox */
+            -ms-overflow-style: none;
+            /* IE and Edge */
+            padding: 40px 0;
+            text-align: center;
+        }
+
+        .wheel::-webkit-scrollbar {
+            display: none;
+            /* Chrome, Safari, Opera */
+        }
+
+        .wheel div {
+            height: 40px;
+            line-height: 40px;
+            scroll-snap-align: center;
+            font-size: 1rem;
+            opacity: 0.3;
+            transition: all 0.2s;
+        }
+
+        .wheel div.selected {
+            opacity: 1;
+            font-weight: 600;
+            color: #6366f1;
+            transform: scale(1.1);
+        }
+
+        .wheel-highlight {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 40px;
+            transform: translateY(-50%);
+            border-top: 1px solid rgba(99, 102, 241, 0.3);
+            border-bottom: 1px solid rgba(99, 102, 241, 0.3);
+            pointer-events: none;
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .error-msg {
+            color: #ef4444;
+            font-size: 0.85rem;
+            margin-top: 0.3rem;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="signup-card">
+        <h1 id="page-title">가입 신청</h1>
+
+        <div class="form-group">
+            <label>아이디</label>
+            <input type="text" id="login_id" placeholder="아이디를 입력하세요">
+        </div>
+
+        <div class="form-group">
+            <label>비밀번호</label>
+            <input type="password" id="password" placeholder="비밀번호를 입력하세요">
+            <div class="password-hint">숫자, 영문 대소문자 포함 8~12자리</div>
+        </div>
+
+        <div class="form-group">
+            <label>비밀번호 확인</label>
+            <input type="password" id="password_confirm" placeholder="비밀번호를 다시 입력하세요">
+        </div>
+
+        <div class="form-group">
+            <label>이름</label>
+            <input type="text" id="name" placeholder="이름을 입력하세요">
+        </div>
+
+        <div class="form-group">
+            <label>생년월일</label>
+            <div class="wheel-picker-container">
+                <div class="wheel-highlight"></div>
+                <div class="wheel" id="wheel-year"></div>
+                <div class="wheel" id="wheel-month"></div>
+                <div class="wheel" id="wheel-day"></div>
+            </div>
+            <input type="hidden" id="birth_date">
+        </div>
+
+        <div class="form-group">
+            <label>전화번호</label>
+            <input type="tel" id="phone_number" placeholder="'-' 없이 숫자만 입력">
+        </div>
+
+        <div class="consent-box">
+            [개인정보 수집 및 이용 동의]<br><br>
+            1. 수집항목: 아이디, 비밀번호, 이름, 생년월일, 전화번호<br>
+            2. 이용목적: 서비스 이용자 식별 및 계약 관리, 알람 발송<br>
+            3. 보유기간: 회원 탈퇴 시 즉시 파기 (단, 법령에 의거 보존 필요 시 해당 기간 동안 보관)<br>
+            4. 동의 거부 시 서비스 이용이 제한될 수 있습니다.
+        </div>
+
+        <div class="checkbox-group">
+            <input type="checkbox" id="consent">
+            <label for="consent">개인정보 수집 및 이용에 동의합니다.</label>
+        </div>
+
+        <div class="btn-group">
+            <button class="cancel-btn" onclick="location.href='/index.html'">취소</button>
+            <button class="submit-btn" onclick="handleSignUp()">가입 신청</button>
+        </div>
+    </div>
+
+    <!-- Alert Modal -->
+    <div id="alert-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-title" id="alert-title">알림</div>
+            <div class="modal-text" id="alert-text">메시지 내용이 표시됩니다.</div>
+            <div class="modal-btns">
+                <button class="modal-btn btn-confirm" onclick="closeModal()">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div id="confirm-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-title">가입 신청 확인</div>
+            <div class="modal-text">계약서 확인 및 임대인 승인 후 가입이 완료됩니다.<br>입력하신 정보로 가입 신청하시겠습니까?</div>
+            <div class="modal-btns">
+                <button class="modal-btn btn-cancel" onclick="closeConfirmModal()">다시 수정</button>
+                <button class="modal-btn btn-confirm" onclick="submitSignUp()">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const role = urlParams.get('role') || 'tenant';
+
+        document.getElementById('page-title').textContent = (role === 'landlord' ? '임대인' : '세입자') + ' 가입 신청';
+
+        function showModal(title, text) {
+            document.getElementById('alert-title').textContent = title;
+            document.getElementById('alert-text').textContent = text;
+            document.getElementById('alert-modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('alert-modal').style.display = 'none';
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirm-modal').style.display = 'none';
+        }
+
+        // Wheel Picker Logic
+        function initWheel(id, start, end, selected) {
+            const wheel = document.getElementById(id);
+            for (let i = start; i <= end; i++) {
+                const item = document.createElement('div');
+                item.textContent = i + (id.includes('year') ? '년' : id.includes('month') ? '월' : '일');
+                item.dataset.value = i;
+                wheel.appendChild(item);
+            }
+
+            // Padding items for scroll
+            wheel.prepend(document.createElement('div'));
+            // wheel.prepend(document.createElement('div'));
+            wheel.appendChild(document.createElement('div'));
+            // wheel.appendChild(document.createElement('div'));
+
+            wheel.addEventListener('scroll', () => {
+                const items = wheel.querySelectorAll('div[data-value]');
+                let closest = null;
+                let minDiff = Infinity;
+                const wheelCenter = wheel.getBoundingClientRect().top + wheel.offsetHeight / 2;
+
+                items.forEach(item => {
+                    const rect = item.getBoundingClientRect();
+                    const itemCenter = rect.top + rect.height / 2;
+                    const diff = Math.abs(wheelCenter - itemCenter);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closest = item;
+                    }
+                    item.classList.remove('selected');
+                });
+
+                if (closest) {
+                    closest.classList.add('selected');
+                    updateBirthDate();
+                }
+            });
+
+            // Set initial position
+            setTimeout(() => {
+                const target = wheel.querySelector(`div[data-value="${selected}"]`);
+                if (target) {
+                    wheel.scrollTop = target.offsetTop - wheel.offsetHeight / 2 + target.offsetHeight / 2;
+                }
+            }, 100);
+        }
+
+        function updateBirthDate() {
+            const y = document.querySelector('#wheel-year .selected')?.dataset.value;
+            const m = document.querySelector('#wheel-month .selected')?.dataset.value;
+            const d = document.querySelector('#wheel-day .selected')?.dataset.value;
+            if (y && m && d) {
+                const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                document.getElementById('birth_date').value = dateStr;
+            }
+        }
+
+        const currentYear = new Date().getFullYear();
+        initWheel('wheel-year', currentYear - 100, currentYear, 1990);
+        initWheel('wheel-month', 1, 12, 1);
+        initWheel('wheel-day', 1, 31, 1);
+
+        function handleSignUp() {
+            const login_id = document.getElementById('login_id').value.trim();
+            const password = document.getElementById('password').value;
+            const password_confirm = document.getElementById('password_confirm').value;
+            const name = document.getElementById('name').value.trim();
+            const birth_date = document.getElementById('birth_date').value;
+            const phone_number = document.getElementById('phone_number').value.replace(/[^0-9]/g, '');
+            const consent = document.getElementById('consent').checked;
+
+            if (!login_id || !name || !birth_date || !phone_number) {
+                showModal('입력 오류', '모든 필수 항목을 입력해주세요.');
+                return;
+            }
+
+            // Password complexity: 8-12 chars, numbers, upper, lower
+            const pwRegex = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,12}$/;
+            if (!pwRegex.test(password)) {
+                showModal('비밀번호 조건 미달', '비밀번호는 숫자, 영문 대소문자를 포함하여 8~12자리여야 합니다.');
+                return;
+            }
+
+            if (password !== password_confirm) {
+                showModal('비밀번호 불일치', '비밀번호 확인이 일치하지 않습니다.');
+                return;
+            }
+
+            // Age check (18+)
+            const bdate = new Date(birth_date);
+            const today = new Date();
+            let age = today.getFullYear() - bdate.getFullYear();
+            const m = today.getMonth() - bdate.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < bdate.getDate())) {
+                age--;
+            }
+            if (age < 18) {
+                showModal('미성년자 가입 제한', '만 18세 미만은 가입이 제한됩니다.');
+                return;
+            }
+
+            if (!consent) {
+                showModal('동의 필요', '개인정보 수집 및 이용에 동의해주세요.');
+                return;
+            }
+
+            // Show Confirm Modal instead of direct fetch
+            document.getElementById('confirm-modal').style.display = 'flex';
+        }
+
+        async function submitSignUp() {
+            const login_id = document.getElementById('login_id').value.trim();
+            const password = document.getElementById('password').value;
+            const name = document.getElementById('name').value.trim();
+            const birth_date = document.getElementById('birth_date').value;
+            const phone_number = document.getElementById('phone_number').value.replace(/[^0-9]/g, '');
+
+            try {
+                const res = await fetch('/api/signup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        login_id, password, nickname: name, birth_date, phone_number, role
+                    })
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    alert('가입 신청이 완료되었습니다.');
+                    window.location.href = '/index.html';
+                } else {
+                    closeConfirmModal();
+                    if (data.error === 'USER_EXISTS') {
+                        showModal('동일인 가입 불가', '연락처와 생년월일이 같은 사용자가 이미 존재합니다.');
+                    } else if (data.error === 'ID_EXISTS') {
+                        showModal('중복 아이디', '이미 사용 중인 아이디입니다.');
+                    } else {
+                        showModal('오류', data.error || '가입 신청 중 오류가 발생했습니다.');
+                    }
+                }
+            } catch (err) {
+                closeConfirmModal();
+                showModal('통신 오류', '서버와 통신할 수 없습니다.');
+            }
+        }
+    </script>
+</body>
+
+</html>
