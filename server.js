@@ -45,6 +45,51 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'API is working' });
 });
 
+app.get('/api/health/db', async (req, res) => {
+    try {
+        const dbType = process.env.DATABASE_URL ? 'PostgreSQL' : 'SQLite';
+        let result;
+
+        if (dbType === 'PostgreSQL') {
+            // We need to access the pool directly or run a simple query
+            // Since our db wrapper supports .all or .get, let's use that.
+            // But for PG specific 'SELECT NOW()', we might need to handle it.
+            // valid sqlite query: SELECT date('now')
+            // valid pg query: SELECT NOW()
+            // Our wrapper attempts to convert syntax. 
+            // Let's try a simple universal query: SELECT 1 as val
+            await new Promise((resolve, reject) => {
+                db.get('SELECT 1 as val', (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                });
+            });
+            result = 'Connected';
+        } else {
+            await new Promise((resolve, reject) => {
+                db.get('SELECT 1 as val', (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                });
+            });
+            result = 'Connected';
+        }
+
+        res.json({
+            status: 'ok',
+            dbType,
+            connection: result,
+            env_db_url_configured: !!process.env.DATABASE_URL
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            message: error.message,
+            dbType: process.env.DATABASE_URL ? 'PostgreSQL' : 'SQLite'
+        });
+    }
+});
+
 // 25. Search Building by Address Snippet (Moved up for priority)
 app.get('/api/buildings/search-by-address', (req, res) => {
     const { address } = req.query;
