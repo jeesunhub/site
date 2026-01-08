@@ -69,10 +69,22 @@ app.get('/api/buildings/search-by-address', (req, res) => {
 // 1. Login API
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
-    db.get(`SELECT * FROM users WHERE login_id = ? AND password = ?`, [username, password], (err, user) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
+    // First check if user exists by login_id
+    db.get('SELECT * FROM users WHERE login_id = ?', [username], (err, user) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        // If no user found with that ID
+        if (!user) {
+            return res.status(404).json({ error: '없는 사용자입니다.' });
+        }
+
+        // Check password
+        if (String(user.password) !== String(password)) {
+            return res.status(401).json({ error: '비밀번호가 일치하지 않습니다.' });
+        }
+
+        // Check approval status
         if (user.approved === 0) {
             return res.status(403).json({ error: '가입 승인 대기 중입니다. 승인 후 이용 가능합니다.' });
         }

@@ -167,8 +167,13 @@
                     localStorage.setItem('user', JSON.stringify(data.user));
                     window.location.href = '/dashboard.html';
                 } else {
-                    errorMsg.style.display = 'block';
-                    errorMsg.innerText = data.error || '로그인 실패';
+                    if (response.status === 404) {
+                        alert(data.error); // "없는 사용자입니다."
+                        errorMsg.style.display = 'none';
+                    } else {
+                        errorMsg.style.display = 'block';
+                        errorMsg.innerText = data.error || '로그인 실패';
+                    }
                 }
             } catch (err) {
                 console.error(err);
