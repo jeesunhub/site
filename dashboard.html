@@ -411,26 +411,28 @@
                 day.innerHTML = `<div class="day-number">${currentDate.getDate()}</div><div class="day-events"></div>`;
                 const events = day.querySelector('.day-events');
 
-                calendarData.forEach(data => {
-                    if (data.contract_start_date === dateStr) {
-                        const event = document.createElement('div');
-                        event.className = 'day-event event-start';
-                        event.textContent = '시작';
-                        event.style.backgroundColor = data.tenant_color ? `${data.tenant_color}40` : '';
-                        events.appendChild(event);
-                    }
-                    const dueDate = getDueDate(data.bill_month, data.contract_start_date, data.payment_type);
-                    if (dueDate === dateStr && data.total_amount) {
-                        const event = document.createElement('div');
-                        event.className = 'day-event event-payment';
-                        event.textContent = `${(data.total_amount / 10000).toFixed(0)}만`;
-                        event.style.backgroundColor = data.tenant_color ? `${data.tenant_color}40` : '';
-                        /* if (user.role === 'landlord') {
-                            event.onclick = (e) => { e.stopPropagation(); showContextMenu(e, data.bill_id); };
-                        } */
-                        events.appendChild(event);
-                    }
-                });
+                if (Array.isArray(calendarData)) {
+                    calendarData.forEach(data => {
+                        if (data.contract_start_date === dateStr) {
+                            const event = document.createElement('div');
+                            event.className = 'day-event event-start';
+                            event.textContent = '시작';
+                            event.style.backgroundColor = data.tenant_color ? `${data.tenant_color}40` : '';
+                            events.appendChild(event);
+                        }
+                        const dueDate = getDueDate(data.bill_month, data.contract_start_date, data.payment_type);
+                        if (dueDate === dateStr && data.total_amount) {
+                            const event = document.createElement('div');
+                            event.className = 'day-event event-payment';
+                            event.textContent = `${(data.total_amount / 10000).toFixed(0)}만`;
+                            event.style.backgroundColor = data.tenant_color ? `${data.tenant_color}40` : '';
+                            /* if (user.role === 'landlord') {
+                                event.onclick = (e) => { e.stopPropagation(); showContextMenu(e, data.bill_id); };
+                            } */
+                            events.appendChild(event);
+                        }
+                    });
+                }
 
                 grid.appendChild(day);
                 currentDate.setDate(currentDate.getDate() + 1);

@@ -15,10 +15,31 @@
         }
 
         .header-section {
-            margin-bottom: 2rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            padding: 0.5rem 1.5rem;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            height: 3.5rem;
+            margin-bottom: 2rem;
+            width: 100%;
+            box-sizing: border-box;
+            /* Important for padding */
+        }
+
+        .header-section h1 {
+            font-size: 1.25rem !important;
+            margin: 0;
+            background: linear-gradient(to right, #6366f1, #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            white-space: nowrap;
+            margin-right: 1rem;
         }
 
         .action-buttons {
@@ -178,18 +199,21 @@
 <body>
     <!-- Navbar will be rendered by JS -->
 
-    <div class="container payment-container">
-        <div class="header-section">
-            <h1 style="margin:0;">💰 납부 관리</h1>
-            <div class="action-buttons">
-                <input type="file" id="excel-upload" accept=".xlsx, .xls" style="display:none"
-                    onchange="handleExcelUpload(event)">
-                <button class="btn btn-secondary" onclick="document.getElementById('excel-upload').click()">📁 파일 업로드
-                    (Excel)</button>
-                <button class="btn btn-secondary" onclick="alert('준비 중입니다.')">📝 표로 추가</button>
-                <button class="btn btn-secondary" onclick="openPasteModal()">📋 문자 붙여넣기</button>
-            </div>
+    <div class="header-section">
+        <h1>납부 관리</h1>
+        <div class="action-buttons" style="gap: 0.5rem;">
+            <input type="file" id="excel-upload" accept=".xlsx, .xls" style="display:none"
+                onchange="handleExcelUpload(event)">
+            <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;"
+                onclick="document.getElementById('excel-upload').click()">엑셀 업로드</button>
+            <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;"
+                onclick="alert('준비 중입니다.')">표 추가</button>
+            <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;"
+                onclick="openPasteModal()">문자 추가</button>
         </div>
+    </div>
+
+    <div class="container payment-container">
 
         <div class="filters-section" id="filters-container" style="display: none;">
             <div class="filter-group" id="filter-landlord-group" style="display: none;">

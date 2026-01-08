@@ -1,4 +1,5 @@
 const sqlite3 = require('sqlite3').verbose();
+require('dotenv').config(); // Load environment variables from .env if present
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
@@ -94,7 +95,10 @@ if (databaseUrl) {
         const schema = fs.readFileSync(SCHEMA_PG_PATH, 'utf8');
         pool.query(schema, (err) => {
             if (err) console.error('Error initializing PG schema:', err.message);
-            else console.log('PG Database schema initialized.');
+            else {
+                console.log('PG Database schema initialized.');
+                seedAdmin();
+            }
         });
     }
 
@@ -121,10 +125,59 @@ if (databaseUrl) {
             const schema = fs.readFileSync(SCHEMA_PATH, 'utf8');
             db.exec(schema, (err) => {
                 if (err) console.error('Error initializing schema:', err.message);
-                else console.log('Database schema initialized.');
+                else {
+                    console.log('Database schema initialized.');
+                    seedAdmin();
+                }
             });
         }
     });
 }
 
+function ensureApprovedColumn() {
+    // Check if column exists
+    // PG and SQLite have different ways, simplified approach:
+    // Try to select the column. If error, add it.
+    const testSql = "SELECT approved FROM users LIMIT 1";
+    db.get(testSql, (err) => {
+        if (err) {
+            console.log("Column 'approved' missing or error. Attempting to add...");
+            const alterSql = "ALTER TABLE users ADD COLUMN approved INTEGER DEFAULT 0";
+            db.run(alterSql, (alterErr) => {
+                if (alterErr) console.error("Failed to add 'approved' column:", alterErr.message);
+                else {
+                    console.log("Added 'approved' column to users table.");
+                    // Update admin to be approved
+                    db.run("UPDATE users SET approved = 1 WHERE login_id = 'admin'");
+                }
+            });
+        }
+    });
+}
+
+function seedAdmin() {
+    // Check if admin exists
+    const checkSql = "SELECT id FROM users WHERE login_id = ?";
+    db.get(checkSql, ['admin'], (err, row) => {
+        if (err) {
+            console.error('Error checking admin user:', err.message);
+            return;
+        }
+        if (!row) {
+            console.log('Creating default admin user...');
+            const insertSql = "INSERT INTO users (login_id, password, nickname, role, approved) VALUES (?, ?, ?, ?, 1)";
+            db.run(insertSql, ['admin', 'admin', 'admin', 'admin'], (err) => {
+                if (err) console.error('Error creating admin user:', err.message);
+                else {
+                    console.log('Default admin user created.');
+                    ensureApprovedColumn();
+                }
+            });
+        } else {
+            ensureApprovedColumn();
+        }
+    });
+}
+
 module.exports = db;
+

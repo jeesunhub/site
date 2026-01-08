@@ -390,11 +390,15 @@ app.get('/api/contracts/:id', (req, res) => {
 // 9. Get Calendar Data for Tenant
 app.get('/api/tenant/:id/calendar-data', (req, res) => {
     const tenantId = req.params.id;
+    // Fix for PG: Group by all non-aggregated columns.
+    // Also include c.id to grouping.
     const query = `
         SELECT 
+            c.id as contract_id,
             c.contract_start_date,
             c.contract_end_date,
             c.payment_type,
+            mb.id as bill_id,
             mb.bill_month,
             mb.total_amount,
             COALESCE(SUM(bpm.matched_amount), 0) as paid_amount
@@ -402,19 +406,22 @@ app.get('/api/tenant/:id/calendar-data', (req, res) => {
         LEFT JOIN monthly_bills mb ON c.id = mb.contract_id
         LEFT JOIN bill_payment_match bpm ON mb.id = bpm.bill_id
         WHERE c.tenant_id = ?
-        GROUP BY mb.id
+        GROUP BY c.id, mb.id
         ORDER BY mb.bill_month ASC
     `;
 
     db.all(query, [tenantId], (err, data) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(data);
+        res.json(data || []);
     });
 });
 
 // 10. Get Calendar Data for Landlord (All Tenants)
 app.get('/api/landlord/:id/calendar-data', (req, res) => {
     const landlordId = req.params.id;
+    // Fix for PG: Group by all non-aggregated columns.
+    // We select c.*, u.*, mb.*. 
+    // Grouping by primary keys c.id, u.id, mb.id covers functional dependencies in PG.
     const query = `
         SELECT 
             c.id as contract_id,
@@ -433,13 +440,13 @@ app.get('/api/landlord/:id/calendar-data', (req, res) => {
         LEFT JOIN monthly_bills mb ON c.id = mb.contract_id
         LEFT JOIN bill_payment_match bpm ON mb.id = bpm.bill_id
         WHERE c.landlord_id = ?
-        GROUP BY mb.id
+        GROUP BY c.id, u.id, mb.id
         ORDER BY mb.bill_month ASC
     `;
 
     db.all(query, [landlordId], (err, data) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(data);
+        res.json(data || []);
     });
 });
 
@@ -500,7 +507,14 @@ app.get('/api/payments/ledger', (req, res) => {
         params.push(tenant_id);
     }
 
-    query += ` GROUP BY mb.id ORDER BY mb.bill_month DESC`;
+    query += ` 
+        GROUP BY 
+            l.nickname, l.id, 
+            t.nickname, t.id, 
+            b.name, b.id, 
+            c.id, c.contract_start_date, c.payment_type, 
+            mb.id, mb.bill_month, mb.total_amount
+        ORDER BY mb.bill_month DESC`;
 
     db.all(query, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
