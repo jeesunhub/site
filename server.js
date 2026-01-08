@@ -50,30 +50,24 @@ app.get('/api/health/db', async (req, res) => {
         const dbType = process.env.DATABASE_URL ? 'PostgreSQL' : 'SQLite';
         let result;
 
-        if (dbType === 'PostgreSQL') {
-            // We need to access the pool directly or run a simple query
-            // Since our db wrapper supports .all or .get, let's use that.
-            // But for PG specific 'SELECT NOW()', we might need to handle it.
-            // valid sqlite query: SELECT date('now')
-            // valid pg query: SELECT NOW()
-            // Our wrapper attempts to convert syntax. 
-            // Let's try a simple universal query: SELECT 1 as val
-            await new Promise((resolve, reject) => {
-                db.get('SELECT 1 as val', (err, row) => {
-                    if (err) reject(err);
-                    else resolve(row);
-                });
+        const dbCheckPromise = new Promise((resolve, reject) => {
+            // Use a simple query that works on both
+            // SQLite: SELECT 1 (returns 1)
+            // PG: SELECT 1 (returns 1)
+            // wrapper handles ? vs $1 but here no params.
+            const query = "SELECT 1 as val";
+            db.get(query, (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
             });
-            result = 'Connected';
-        } else {
-            await new Promise((resolve, reject) => {
-                db.get('SELECT 1 as val', (err, row) => {
-                    if (err) reject(err);
-                    else resolve(row);
-                });
-            });
-            result = 'Connected';
-        }
+        });
+
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('DB Connection Timeout (5s)')), 5000)
+        );
+
+        await Promise.race([dbCheckPromise, timeoutPromise]);
+        result = 'Connected';
 
         res.json({
             status: 'ok',
@@ -82,6 +76,7 @@ app.get('/api/health/db', async (req, res) => {
             env_db_url_configured: !!process.env.DATABASE_URL
         });
     } catch (error) {
+        console.error('DB Health Check Error:', error);
         res.status(500).json({
             status: 'error',
             message: error.message,

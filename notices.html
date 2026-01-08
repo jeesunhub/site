@@ -230,7 +230,13 @@
 
     <a href="/dashboard.html" class="back-btn">←</a>
 
+    <script src="/js/common.js"></script>
     <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            renderNavbar();
+            fetchNotices();
+        });
+
         const user = JSON.parse(localStorage.getItem('user'));
         if (!user) location.href = '/index.html';
 
