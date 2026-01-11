@@ -123,7 +123,7 @@
             z-index: 100;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             height: 3.5rem;
-            margin-bottom: 2rem;
+            margin-bottom: 0.2rem;
             width: 100%;
             box-sizing: border-box;
             /* Important for padding */
@@ -134,6 +134,7 @@
             margin: 0;
             background: linear-gradient(to right, #6366f1, #a855f7);
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
             white-space: nowrap;
             margin-right: 1rem;
@@ -144,6 +145,176 @@
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 2rem;
         }
+
+        /* List Layout Styles */
+        .mgmt-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+
+        .mgmt-item {
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.2s;
+        }
+
+        .mgmt-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .mgmt-item.expanded {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .mgmt-summary {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            gap: 0.8rem;
+            height: 4.5rem;
+            cursor: pointer;
+        }
+
+        .mgmt-left {
+            display: none;
+        }
+
+        .mgmt-center {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            justify-content: center;
+            min-width: 0;
+        }
+
+        .center-top {
+            flex: 7;
+            display: flex;
+            align-items: flex-end;
+            font-size: 1rem;
+            font-weight: 400;
+            padding-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .center-bottom {
+            flex: 3;
+            display: flex;
+            align-items: flex-start;
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.5);
+            gap: 0.5rem;
+            padding-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .mgmt-right {
+            display: flex;
+            gap: 0.5rem;
+            flex-shrink: 0;
+        }
+
+        .action-btn {
+            height: 2rem;
+            padding: 0 1rem;
+            border-radius: 0.4rem;
+            border: none;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            transition: opacity 0.2s;
+        }
+
+        .action-btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn-edit {
+            background: var(--primary);
+        }
+
+        .btn-delete {
+            background: var(--danger);
+        }
+
+        /* Room Sub-list */
+        .mgmt-sublist {
+            display: none;
+            background: rgba(0, 0, 0, 0.2);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .mgmt-item.expanded .mgmt-sublist {
+            display: block;
+        }
+
+        .room-item {
+            display: flex;
+            align-items: center;
+            padding: 0.6rem 1.5rem;
+            gap: 1rem;
+            height: 4rem;
+            /* Smaller height */
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .room-item:last-child {
+            border-bottom: none;
+        }
+
+        .room-left {
+            min-width: 3rem;
+            display: flex;
+            justify-content: center;
+        }
+
+        .room-badge {
+            background: rgba(99, 102, 241, 0.2);
+            color: #a5b4fc;
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.3rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .room-center {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            justify-content: center;
+            min-width: 0;
+        }
+
+        .room-top {
+            flex: 7;
+            display: flex;
+            align-items: flex-end;
+            font-size: 0.95rem;
+            padding-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .room-bottom {
+            flex: 3;
+            display: flex;
+            align-items: flex-start;
+            font-size: 0.75rem;
+            opacity: 0.5;
+            padding-top: 2px;
+        }
     </style>
 </head>
 
@@ -153,8 +324,8 @@
     <div class="building-mgmt-header" id="building-header">
         <h1>건물 관리</h1>
     </div>
-    <div class="container" id="main-content">
-        <div id="building-toolbar" style="margin-bottom: 2rem;">
+    <div class="container" id="main-content" style="margin-top: 0; padding: 0;">
+        <div id="building-toolbar" style="margin-bottom: 2rem; padding: 0 1.5rem;">
             <!-- Toolbar populated by JS -->
         </div>
         <div class="building-grid" id="building-grid">
@@ -213,7 +384,7 @@
         </div>
     </div>
     <div id="building-modal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content" style="padding: 2rem 0.5rem; max-height: 90vh; overflow-y: auto;">
             <div class="modal-header">
                 <h2>건물 추가</h2>
             </div>
@@ -222,23 +393,20 @@
                 <input type="text" id="new-building-name" class="form-input" placeholder="건물 이름을 입력하세요">
             </div>
             <div class="form-group">
-                <div class="field-label-group">
+                <div class="field-label-group" style="display:flex; justify-content:space-between; align-items:center;">
                     <label>주소</label>
-                    <button class="add-small-btn" onclick="addAddressField()">+</button>
+                    <button class="add-small-btn" id="btn-add-address" onclick="addAddressField()"
+                        style="display:none; width:38px; height:24px; padding:0; font-size:0.7rem; white-space:nowrap; display:flex; align-items:center; justify-content:center;">추가</button>
                 </div>
                 <div id="address-fields" class="dynamic-field-group">
-                    <div class="dynamic-field">
-                        <input type="text" class="form-input address-input" placeholder="주소를 입력하세요">
-                    </div>
+                    <!-- Address fields populated by JS -->
                 </div>
             </div>
             <div class="form-group">
-                <div class="field-label-group">
+                <div class="field-label-group" style="display:flex; justify-content:space-between; align-items:center;">
                     <label>방 구성 (동 / 층 / 호)</label>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <input type="number" id="room-count-input" class="form-input small-input" value="1" min="1">
-                        <button class="add-small-btn" onclick="addRoomFields()">+</button>
-                    </div>
+                    <div style="width:38px;"></div>
+                    <!-- Placeholder to match address header spacing if needed, or just nothing -->
                 </div>
                 <div id="room-fields" class="dynamic-field-group">
                     <!-- Room fields added by JS -->
@@ -266,6 +434,13 @@
             }
             renderNavbar();
             await initBuildings();
+
+            // Close modals when clicking outside
+            window.addEventListener('click', function (event) {
+                if (event.target.classList.contains('modal')) {
+                    event.target.style.display = "none";
+                }
+            });
         });
 
         async function initBuildings() {
@@ -303,13 +478,12 @@
             // Render Title & Dropdown & Add Button in Header
             if (header) {
                 header.innerHTML = `
-                <div style="display: flex; align-items: center; gap: 1rem;">
+                <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
                     <h1>건물 관리</h1>
                     <select id="building-filter" onchange="filterBuildingManagement()" style="padding:0.4rem 0.6rem; border-radius:0.5rem; background:var(--card-bg); color:white; border:1px solid rgba(255,255,255,0.1); font-size: 0.9rem;">
                         <option value="ALL">ALL (전체 건물)</option>
                         ${buildings.map(b => `<option value="${b.id}" ${b.id == filterId ? 'selected' : ''}>${b.name}</option>`).join('')}
                     </select>
-                    <button class="btn" onclick="addNewBuilding()" style="white-space: nowrap; padding: 0.4rem 0.8rem; font-size: 0.9rem;">건물 추가</button>
                 </div>
                 `;
             }
@@ -320,76 +494,69 @@
                 <div style="display:flex; align-items:center; width:100%;">
                     <div class="search-container" style="display: flex; gap: 0.5rem; flex:1; max-width:400px;">
                         <input type="text" id="event-search" class="search-input" placeholder="이벤트 내용 검색..." style="flex:1;" onkeyup="if(event.key === 'Enter') searchEvents()">
-                        <button class="btn btn-secondary" style="white-space: nowrap;" onclick="searchEvents()">검색</button>
+                        <button class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.9rem; white-space: nowrap;" onclick="searchEvents()">검색</button>
                     </div>
                 </div>
                 `;
             }
 
-            grid.innerHTML = filtered.map(b => `
-                <div class="card building-card">
-                    <div class="building-header-row">
-                        <div class="building-title-large">${b.name}</div>
-                        <div style="display:flex; gap:0.5rem;">
-                            <button class="btn btn-secondary" style="padding:0.5rem 1rem;" onclick="openEditBuildingModal(${b.id})">편집</button>
-                            <button class="delete-small-btn" style="padding:0.5rem 1rem;" onclick="deleteBuilding(${b.id})">삭제</button>
+            grid.className = 'mgmt-list';
+            const listHtml = filtered.map(b => {
+                const address = b.addresses && b.addresses.length > 0 ? b.addresses[0].address : '-';
+
+                let roomsHtml = '<div style="padding:1rem; opacity:0.5; text-align:center;">방이 없습니다.</div>';
+                if (b.rooms && b.rooms.length > 0) {
+                    roomsHtml = b.rooms.map(r => {
+                        const memo = r.latest_event || '이벤트 없음';
+                        const date = r.latest_event_date || '-';
+                        return `
+                            <div class="room-item">
+                                <div class="room-left"><span class="room-badge">${r.room_number}호</span></div>
+                                <div class="room-center">
+                                    <div class="room-top" title="${memo}">${memo}</div>
+                                    <div class="room-bottom">${date}</div>
+                                </div>
+                                <div class="room-right">
+                                    <button class="add-small-btn" onclick="event.stopPropagation(); openAddEventInputModal(${r.id})">+</button>
+                                    <button class="delete-small-btn" onclick="event.stopPropagation(); alert('방 삭제 기능은 준비중입니다.')">-</button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+
+                return `
+                <div class="mgmt-item">
+                    <div class="mgmt-summary" onclick="this.parentElement.classList.toggle('expanded')">
+                        <div class="mgmt-left"></div>
+                        <div class="mgmt-center">
+                            <div class="center-top">${b.name}</div>
+                            <div class="center-bottom" title="${address}">${address}</div>
+                        </div>
+                        <div class="mgmt-right">
+                            <button class="action-btn btn-edit" onclick="event.stopPropagation(); openEditBuildingModal(${b.id})">편집</button>
+                            <button class="action-btn btn-delete" onclick="event.stopPropagation(); deleteBuilding(${b.id})">삭제</button>
                         </div>
                     </div>
-
-                    <div class="building-info-group" style="display: block;">
-                        <div class="building-section" style="margin-bottom: 2rem;">
-                            <div class="section-label" style="display:flex; align-items:center; justify-content:space-between; color: var(--primary); font-weight:600; margin-bottom:0.5rem;">
-                                주소
-                                <button class="add-small-btn" onclick="addNewAddress(${b.id})">+</button>
-                            </div>
-                            <div class="address-list">
-                                ${b.addresses.length > 0 ? b.addresses.map(a => `
-                                    <div class="address-item" style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0.8rem; background:rgba(255,255,255,0.03); border-radius:0.5rem; margin-bottom:0.4rem;">
-                                        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 1rem;">${a.address}</span>
-                                        <button class="delete-small-btn" onclick="deleteAddress(${a.id})">삭제</button>
-                                    </div>
-                                `).join('') : '<p style="opacity:0.3; font-size:0.9rem">등록된 주소가 없습니다.</p>'}
-                            </div>
-                        </div>
-
-                        <div class="building-section">
-                            <div class="section-label" style="color: var(--primary); font-weight:600; margin-bottom:0.5rem;">방 및 이벤트</div>
-                            <table class="room-list-table">
-                                <thead>
-                                    <tr>
-                                        <th>방 번호</th>
-                                        <th style="width: 120px;">날짜</th>
-                                        <th>내용</th>
-                                        <th style="width: 140px; text-align: center;">관리</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${b.rooms.length > 0 ? b.rooms.map(r => `
-                                        <tr>
-                                            <td class="room-number-cell" style="white-space: nowrap;">${r.room_number}호</td>
-                                            <td style="font-size: 0.9rem; opacity: 0.8; white-space: nowrap;">
-                                                ${r.latest_event_date || '-'}
-                                            </td>
-                                            <td class="tenant-name-cell">
-                                                ${r.latest_event ?
-                    `<span class="event-memo" onclick="showRoomEvents(${r.id}, '${b.name} ${r.room_number}호')">${r.latest_event}</span>`
-                    : `<span class="tenant-na">n/a</span>`}
-                                            </td>
-                                            <td style="text-align: center;">
-                                                <div style="display:flex; gap:5px; justify-content:center; flex-wrap: nowrap;">
-                                                    ${r.latest_event ?
-                    `<button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.8rem; white-space:nowrap;" onclick="openEditEventInputModal(${r.id}, '${r.latest_event_date}', '${r.latest_event}')">편집</button>` : ''}
-                                                    <button class="btn" style="padding:0.3rem 0.6rem; font-size:0.8rem; white-space:nowrap;" onclick="openAddEventInputModal(${r.id})">추가</button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    `).join('') : '<tr><td colspan="3" style="text-align:center; opacity:0.3; padding:2rem;">등록된 방이 없습니다.</td></tr>'}
-                                </tbody>
-                            </table>
-                        </div>
+                    <div class="mgmt-sublist">
+                        ${roomsHtml}
                     </div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
+
+            const addText = filtered.length === 0 ? "새로 추가하시겠습니까" : "더 추가하시겠습니까";
+            const addRowHtml = `
+            <div class="mgmt-item">
+                <div class="mgmt-summary" style="justify-content: center; padding: 0.5rem;">
+                    <button class="btn" onclick="addNewBuilding()" style="background: rgba(255, 255, 255, 0.05); border: 1px dashed rgba(255, 255, 255, 0.2); width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.7);">
+                        ${addText}
+                    </button>
+                </div>
+            </div>
+            `;
+
+            grid.innerHTML = listHtml + addRowHtml;
         }
 
         async function filterBuildingManagement() {
@@ -482,14 +649,11 @@
             currentEditingBuildingId = null;
             document.querySelector('.modal-header h2').innerText = '건물 추가';
             document.getElementById('new-building-name').value = '';
-            document.getElementById('address-fields').innerHTML = `
-                <div class="dynamic-field">
-                    <input type="text" class="form-input address-input" placeholder="주소를 입력하세요">
-                </div>
-            `;
+            document.getElementById('address-fields').innerHTML = '';
+            renderAddressFields(['']); // Init with 1 empty
             document.getElementById('room-fields').innerHTML = '';
-            document.getElementById('room-count-input').value = '1';
-            addRoomRow(); // Add one default row
+            // If data is empty, use default values: dong=" ", floor="1", unit="01"
+            addRoomRow(null, '', '1', '01', '');
             document.getElementById('building-modal').style.display = 'flex';
         }
 
@@ -503,16 +667,9 @@
 
             const addrContainer = document.getElementById('address-fields');
             addrContainer.innerHTML = '';
-            if (building.addresses.length > 0) {
-                building.addresses.forEach(a => {
-                    const div = document.createElement('div');
-                    div.className = 'dynamic-field';
-                    div.innerHTML = `<input type="text" class="form-input address-input" value="${a.address}">`;
-                    addrContainer.appendChild(div);
-                });
-            } else {
-                addAddressField();
-            }
+            const existingAddresses = building.addresses.map(a => a.address);
+            if (existingAddresses.length === 0) existingAddresses.push('');
+            renderAddressFields(existingAddresses);
 
             const roomContainer = document.getElementById('room-fields');
             roomContainer.innerHTML = '';
@@ -521,7 +678,7 @@
                     addRoomRow(r.id, r.building || '', (r.floor !== null && r.floor !== undefined) ? r.floor : '', r.unit || '', r.room_number);
                 });
             } else {
-                addRoomRow(null, '', '', '', ''); // Default one row
+                addRoomRow(null, '', '1', '01', ''); // Default values if no rooms
             }
 
             document.getElementById('building-modal').style.display = 'flex';
@@ -531,12 +688,56 @@
             document.getElementById('building-modal').style.display = 'none';
         }
 
-        function addAddressField() {
+        function renderAddressFields(addresses = []) {
             const container = document.getElementById('address-fields');
-            const div = document.createElement('div');
-            div.className = 'dynamic-field';
-            div.innerHTML = `<input type="text" class="form-input address-input" placeholder="주소를 입력하세요">`;
-            container.appendChild(div);
+            container.innerHTML = '';
+            const btnAdd = document.getElementById('btn-add-address');
+
+            // Logic: Max 2 addresses
+            // If < 2, show Add button
+            if (addresses.length < 2) {
+                btnAdd.style.display = 'block';
+            } else {
+                btnAdd.style.display = 'none';
+            }
+
+            // Ensure at least one empty field if empty
+            if (addresses.length === 0) addresses.push('');
+
+            addresses.forEach((addr, index) => {
+                const div = document.createElement('div');
+                div.className = 'dynamic-field';
+                div.style.display = 'flex';
+                div.style.gap = '5px';
+
+                let xBtn = '';
+                // Logic: X button only if it's the 2nd one (index 1) AND we have 2 addresses
+                if (addresses.length === 2 && index === 1) {
+                    xBtn = `<button class="delete-small-btn" onclick="removeAddressField(${index})" style="width:38px; height:24px; padding:0; font-size:0.7rem; white-space:nowrap; display:flex; align-items:center; justify-content:center; margin-left:auto;">삭제</button>`;
+                }
+
+                div.innerHTML = `
+                    <input type="text" class="form-input address-input" value="${addr}" placeholder="주소를 입력하세요">
+                    <div style="display:flex; gap:8px; margin-left:auto;">
+                        ${xBtn}
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function addAddressField() {
+            // Get current values
+            const current = Array.from(document.querySelectorAll('.address-input')).map(i => i.value);
+            if (current.length >= 2) return;
+            current.push('');
+            renderAddressFields(current);
+        }
+
+        function removeAddressField(index) {
+            const current = Array.from(document.querySelectorAll('.address-input')).map(i => i.value);
+            current.splice(index, 1);
+            renderAddressFields(current);
         }
 
         function addRoomFields() {
@@ -546,7 +747,7 @@
             }
         }
 
-        function addRoomRow(id = null, dong = '', floor = '', unit = '', roomNum = '') {
+        function addRoomRow(id = null, dong = '', floor = '', unit = '', roomNum = '', afterElement = null) {
             const container = document.getElementById('room-fields');
             const div = document.createElement('div');
             div.className = 'dynamic-field room-row';
@@ -556,29 +757,63 @@
             div.style.alignItems = 'center';
             div.style.marginBottom = '5px';
 
-            // If we have existing roomNum but no dong/floor/unit (legacy data), 
-            // we should probably just show roomNum. But the prompt specifically asks for the split view.
-            // For now, if legacy, just fill unit or let user fix it. 
-            // If roomNum exists but components don't, we can try to guess or just put it all in unit?
-            // "unit" is strictly concatenated at the end. 
-            // Let's just put components if available.
-            // If not available (legacy), we might put roomNum in Unit so at least it shows up, 
-            // but logic "Dong+Floor+Unit" might duplicate it if not careful. 
-            // The prompt implies we are SETTING UP logic.
-
             div.innerHTML = `
-                <input type="text" class="form-input input-dong" placeholder="동" value="${dong}" oninput="updateRoomPreview(this)" style="width: 50px; padding: 0.4rem; text-align:center;">
-                <input type="text" class="form-input input-floor" placeholder="층" value="${floor}" oninput="updateRoomPreview(this)" style="width: 50px; padding: 0.4rem; text-align:center;">
-                <input type="text" class="form-input input-unit" placeholder="호수" value="${unit}" oninput="updateRoomPreview(this)" style="width: 60px; padding: 0.4rem; text-align:center;">
+                <input type="text" class="form-input input-dong" placeholder="동" value="${dong}" oninput="updateRoomPreview(this)" style="width: 40px; padding: 0.4rem; text-align:center;">
+                <input type="text" class="form-input input-floor" placeholder="층" value="${floor}" oninput="updateRoomPreview(this)" style="width: 40px; padding: 0.4rem; text-align:center;">
+                <input type="text" class="form-input input-unit" placeholder="호수" value="${unit}" oninput="updateRoomPreview(this)" style="width: 50px; padding: 0.4rem; text-align:center;">
                 <span style="color:var(--primary); font-weight:bold;">&rarr;</span>
-                <input type="text" class="form-input input-preview" placeholder="방 번호" value="${roomNum}" readonly style="width: 80px; padding: 0.4rem; background:rgba(255,255,255,0.05); color:var(--accent);">
-                <button class="delete-small-btn" onclick="this.closest('.room-row').remove()" style="padding:0.2rem 0.5rem; margin-left:auto;">x</button>
+                <input type="text" class="form-input input-preview" placeholder="방 번호" value="${roomNum}" readonly style="width: 70px; padding: 0.4rem; background:rgba(255,255,255,0.05); color:var(--accent); font-size: 0.8rem;">
+                <div style="display:flex; gap:8px; margin-left:auto;">
+                    <button class="add-small-btn" onclick="duplicateRoomRow(this)" style="width:38px; height:24px; padding:0; font-size:0.7rem; white-space:nowrap; display:flex; align-items:center; justify-content:center;">추가</button>
+                    <button class="delete-small-btn" onclick="deleteRoomRow(this)" style="width:38px; height:24px; padding:0; font-size:0.7rem; white-space:nowrap; display:flex; align-items:center; justify-content:center;">삭제</button>
+                </div>
             `;
-            container.appendChild(div);
+            if (afterElement) {
+                afterElement.insertAdjacentElement('afterend', div);
+            } else {
+                container.appendChild(div);
+            }
+
             // Update preview initially if empty (but if we passed values, it's set)
             if (!roomNum) {
                 updateRoomPreview(div.querySelector('.input-unit'));
             }
+            updateRoomDeleteButtons();
+        }
+
+        function deleteRoomRow(btn) {
+            btn.closest('.room-row').remove();
+            updateRoomDeleteButtons();
+        }
+
+        function updateRoomDeleteButtons() {
+            const rows = document.querySelectorAll('.room-row');
+            rows.forEach(row => {
+                const deleteBtn = row.querySelector('.delete-small-btn');
+                if (rows.length <= 1) {
+                    deleteBtn.style.display = 'none';
+                } else {
+                    deleteBtn.style.display = 'flex';
+                }
+            });
+        }
+
+        function duplicateRoomRow(btn) {
+            const row = btn.closest('.room-row');
+            const dong = row.querySelector('.input-dong').value;
+            const floor = row.querySelector('.input-floor').value;
+            const unitStr = row.querySelector('.input-unit').value;
+
+            let nextUnit = unitStr;
+            const match = unitStr.match(/(\d+)$/);
+            if (match) {
+                const numPart = match[1];
+                const incremented = (parseInt(numPart, 10) + 1).toString();
+                const padded = incremented.padStart(numPart.length, '0');
+                nextUnit = unitStr.substring(0, match.index) + padded;
+            }
+
+            addRoomRow(null, dong, floor, nextUnit, '', row);
         }
 
         function updateRoomPreview(el) {

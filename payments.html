@@ -37,6 +37,7 @@
             margin: 0;
             background: linear-gradient(to right, #6366f1, #a855f7);
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
             white-space: nowrap;
             margin-right: 1rem;
@@ -44,7 +45,7 @@
 
         .action-buttons {
             display: flex;
-            gap: 1rem;
+            gap: 0.2rem;
         }
 
         .filters-section {
@@ -71,39 +72,133 @@
             opacity: 0.7;
         }
 
-        .payment-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.95rem;
+        /* List Layout Styles */
+        .mgmt-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            margin-top: 1rem;
         }
 
-        .payment-table th,
-        .payment-table td {
-            padding: 1rem;
-            text-align: left;
+        .mgmt-item {
+            background: rgba(255, 255, 255, 0.02);
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.2s;
         }
 
-        .payment-table th {
-            font-weight: 600;
-            opacity: 0.6;
-            text-transform: uppercase;
+        .mgmt-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .mgmt-summary {
+            display: flex;
+            align-items: center;
+            padding: 0.8rem 1rem;
+            gap: 1.2rem;
+            min-height: 5rem;
+            cursor: pointer;
+        }
+
+        .mgmt-left {
+            width: 4.5rem;
+            padding: 0.4rem 0.2rem;
+            background: rgba(99, 102, 241, 0.15);
+            color: #a5b4fc;
+            border-radius: 0.4rem;
+            text-align: center;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1px;
+            min-height: 3.2rem;
+        }
+
+        .mgmt-left .b-name {
+            font-size: 0.65rem;
+            opacity: 0.7;
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-weight: 400;
+        }
+
+        .mgmt-left .r-num {
+            font-size: 0.9rem;
+            font-weight: 700;
+            width: 100%;
+        }
+
+        .mgmt-center {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 100%;
+            min-width: 0;
+        }
+
+        .center-top {
+            flex: 1;
+            display: flex;
+            align-items: flex-end;
+            font-size: 1rem;
+            font-weight: 400;
+            padding-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: #f8fafc;
+        }
+
+        .center-bottom {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            font-size: 0.65rem;
+            color: rgba(255, 255, 255, 0.5);
+            gap: 0px;
+            padding-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .mgmt-right {
+            display: flex;
+            gap: 0.5rem;
+            flex-shrink: 0;
+            align-self: center;
+        }
+
+        .action-btn {
+            height: 2rem;
+            padding: 0 1rem;
+            border-radius: 0.4rem;
+            border: none;
             font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            transition: opacity 0.2s;
         }
 
-        .status-paid {
-            color: #22c55e;
-            font-weight: 600;
+        .action-btn:hover {
+            opacity: 0.9;
         }
 
-        .status-unpaid {
-            color: #ef4444;
-            font-weight: 600;
+        .btn-edit {
+            background: var(--primary);
         }
 
-        .status-partial {
-            color: #eab308;
-            font-weight: 600;
+        .btn-delete {
+            background: #ef4444;
         }
 
         /* Modal Styles */
@@ -199,55 +294,31 @@
 <body>
     <!-- Navbar will be rendered by JS -->
 
-    <div class="header-section">
-        <h1>납부 관리</h1>
-        <div class="action-buttons" style="gap: 0.5rem;">
-            <input type="file" id="excel-upload" accept=".xlsx, .xls" style="display:none"
-                onchange="handleExcelUpload(event)">
-            <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;"
-                onclick="document.getElementById('excel-upload').click()">엑셀 업로드</button>
-            <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;"
-                onclick="alert('준비 중입니다.')">표 추가</button>
-            <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;"
-                onclick="openPasteModal()">문자 추가</button>
+    <div class="header-section"
+        style="height: auto; min-height: 3.5rem; flex-direction: column; align-items: flex-start; padding: 0.5rem 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; height: 2.5rem;">
+            <h1>납부 관리</h1>
+            <div class="action-buttons">
+                <input type="file" id="excel-upload" accept=".xlsx, .xls" style="display:none"
+                    onchange="handleExcelUpload(event)">
+                <button class="btn btn-secondary" style="padding: 0.4rem 0.4rem; font-size: 0.8rem;"
+                    onclick="document.getElementById('excel-upload').click()">엑셀 업로드</button>
+                <button class="btn btn-secondary" style="padding: 0.4rem 0.4rem; font-size: 0.8rem;"
+                    onclick="alert('준비 중입니다.')">표 추가</button>
+                <button class="btn btn-secondary" style="padding: 0.4rem 0.4rem; font-size: 0.8rem;"
+                    onclick="openPasteModal()">문자 추가</button>
+            </div>
+        </div>
+        <div id="header-filters"
+            style="display: flex; gap: 0.8rem; align-items: center; width: 100%; margin-top: 0.5rem; flex-wrap: wrap;">
+            <!-- Dropdowns injected by setupUIByRole() -->
         </div>
     </div>
 
-    <div class="container payment-container">
-
-        <div class="filters-section" id="filters-container" style="display: none;">
-            <div class="filter-group" id="filter-landlord-group" style="display: none;">
-                <label>임대인 선택</label>
-                <select id="filter-landlord" onchange="loadTableData()">
-                    <option value="all">ALL</option>
-                </select>
-            </div>
-            <div class="filter-group" id="filter-building-group" style="display: none;">
-                <label>건물 선택</label>
-                <select id="filter-building" onchange="loadTableData()">
-                    <option value="all">ALL</option>
-                </select>
-            </div>
-            <div class="filter-group" id="filter-tenant-group" style="display: none;">
-                <label>세입자 선택</label>
-                <select id="filter-tenant" onchange="loadTableData()">
-                    <option value="all">ALL</option>
-                </select>
-            </div>
-        </div>
-
-        <div
-            style="background: var(--card-bg); border-radius: 1.5rem; padding: 1rem; border: 1px solid rgba(255,255,255,0.05); overflow-x: auto;">
-            <table class="payment-table">
-                <thead>
-                    <tr id="table-headers">
-                        <!-- Headers injected by JS -->
-                    </tr>
-                </thead>
-                <tbody id="payment-list-body">
-                    <!-- Rows injected by JS -->
-                </tbody>
-            </table>
+    <div class="container payment-container" style="padding: 0;">
+        <div id="payment-list" class="mgmt-list">
+            <!-- Populated by JS -->
+            <div style="text-align: center; padding: 3rem; opacity: 0.5;">로딩 중...</div>
         </div>
     </div>
 
@@ -298,13 +369,7 @@
                 window.location.href = '/index.html';
                 return;
             }
-            if (user.role === 'tenant') {
-                // Tenants are allowed to view, but with limited data
-            }
-
             renderNavbar();
-            setupUIByRole();
-            await loadDropdownOptions();
             await loadTableData();
             await loadActiveContracts();
         });
@@ -326,145 +391,153 @@
             }
         }
 
-        function setupUIByRole() {
-            const filtersDiv = document.getElementById('filters-container');
-            const landlordGroup = document.getElementById('filter-landlord-group');
-            const buildingGroup = document.getElementById('filter-building-group');
-            const tenantGroup = document.getElementById('filter-tenant-group');
-
-            if (user.role === 'admin') {
-                filtersDiv.style.display = 'flex';
-                landlordGroup.style.display = 'flex';
-                buildingGroup.style.display = 'flex';
-                tenantGroup.style.display = 'flex';
-            } else if (user.role === 'landlord') {
-                filtersDiv.style.display = 'flex';
-                buildingGroup.style.display = 'flex';
-                tenantGroup.style.display = 'flex';
-            } else {
-                filtersDiv.style.display = 'none';
-            }
-
-            const headerRow = document.getElementById('table-headers');
-            let html = '';
-            if (user.role === 'admin') {
-                html += '<th>임대인</th>';
-            }
-            if (user.role === 'admin' || user.role === 'landlord') {
-                html += '<th>건물</th><th>세입자</th>';
-            }
-            html += '<th>납부 예정 날짜</th><th>실제 납부 날짜</th><th>납입 금액</th><th>상태</th>';
-            headerRow.innerHTML = html;
-        }
-
-        async function loadDropdownOptions() {
-            if (user.role === 'tenant') return;
-            try {
-                if (user.role === 'admin') {
-                    const uRes = await fetch('/api/admin/users');
-                    const users = await uRes.json();
-                    const landlordSelect = document.getElementById('filter-landlord');
-                    users.filter(u => u.role === 'landlord').forEach(u => {
-                        const opt = document.createElement('option');
-                        opt.value = u.id;
-                        opt.textContent = `${u.nickname} (${u.login_id})`;
-                        landlordSelect.appendChild(opt);
-                    });
-                }
-                let buildingsUrl = user.role === 'admin' ? '/api/admin/buildings' : `/api/landlord/${user.id}/buildings`;
-                if (user.role === 'landlord') {
-                    const bRes = await fetch(buildingsUrl);
-                    if (bRes.ok) {
-                        const buildings = await bRes.json();
-                        const bSelect = document.getElementById('filter-building');
-                        buildings.forEach(b => {
-                            const opt = document.createElement('option');
-                            opt.value = b.id;
-                            opt.textContent = b.name;
-                            bSelect.appendChild(opt);
-                        });
-                    }
-                    const tRes = await fetch(`/api/landlord/${user.id}/tenants`);
-                    if (tRes.ok) {
-                        const tenants = await tRes.json();
-                        const tSelect = document.getElementById('filter-tenant');
-                        tenants.forEach(t => {
-                            const opt = document.createElement('option');
-                            opt.value = t.id;
-                            opt.textContent = t.nickname;
-                            tSelect.appendChild(opt);
-                        });
-                    }
-                }
-                if (user.role === 'admin') {
-                    document.getElementById('filter-landlord').addEventListener('change', loadTableData);
-                }
-            } catch (e) {
-                console.error(e);
-            }
-        }
-
         async function loadTableData() {
-            const landlordId = document.getElementById('filter-landlord').value;
-            const buildingId = document.getElementById('filter-building').value;
-            const tenantId = document.getElementById('filter-tenant').value;
+            const landlordId = 'all';
+            const buildingId = 'all';
+            const tenantId = 'all';
 
             const params = new URLSearchParams();
             params.append('role', user.role);
             params.append('user_id', user.id);
-            if (landlordId) params.append('landlord_id', landlordId);
-            if (buildingId) params.append('building_id', buildingId);
-            if (tenantId) params.append('tenant_id', tenantId);
+            // Defaulting to all means we don't need to append specific filter params unless we want to being explicit.
+            // Server logic handles 'all' or missing params as "no filter".
 
             try {
                 const res = await fetch(`/api/payments/ledger?${params.toString()}`);
-                if (res.status === 404) return;
-                if (!res.ok) throw new Error('Server returned ' + res.status);
+                if (res.status === 404) {
+                    renderTable([]);
+                    return;
+                }
+                if (!res.ok) throw new Error('Server error: ' + res.status);
                 const data = await res.json();
                 ledgerData = data;
                 renderTable(data);
             } catch (err) {
                 console.error('Failed to load table data:', err);
-                const tbody = document.getElementById('payment-list-body');
-                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:2rem; color: #f87171;">데이터 로딩 실패<br><span style="font-size:0.8rem; opacity:0.7">${err.message}</span></td></tr>`;
+                const list = document.getElementById('payment-list');
+                list.innerHTML = `<div style="text-align:center; padding:2rem; color: #f87171;">데이터 로딩 실패<br><span style="font-size:0.8rem; opacity:0.7">${err.message}</span></div>`;
             }
         }
 
+        function formatYYMMDD(dateStr) {
+            if (!dateStr || dateStr === '-') return '-';
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return '-';
+            const yy = String(date.getFullYear()).slice(2);
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const dd = String(date.getDate()).padStart(2, '0');
+            return `${yy}-${mm}-${dd}`;
+        }
+
+        function getDueDate(billMonth, startDate) {
+            if (!billMonth || !startDate) return null;
+            // billMonth: YYYY-MM
+            // startDate: YYYY-MM-DD
+            const day = startDate.split('-')[2] || '01';
+            return `${billMonth}-${day}`;
+        }
+
+        let activeBuildingId = null;
+
+        function toggleBuildingFilter(buildingId) {
+            if (activeBuildingId === buildingId) {
+                activeBuildingId = null;
+            } else {
+                activeBuildingId = buildingId;
+            }
+            renderTable(ledgerData);
+        }
+
+        function formatUnit(amount) {
+            if (!amount) return '0';
+            return (amount / 10000).toLocaleString();
+        }
+
         function renderTable(data) {
-            const tbody = document.getElementById('payment-list-body');
-            tbody.innerHTML = '';
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:2rem; opacity:0.5;">데이터가 없습니다.</td></tr>';
+            const list = document.getElementById('payment-list');
+            list.innerHTML = '';
+
+            // Filter data if a building is selected
+            let displayData = data;
+            if (activeBuildingId) {
+                displayData = data.filter(row => String(row.building_id) === String(activeBuildingId));
+            }
+
+            if (!displayData || displayData.length === 0) {
+                list.innerHTML = '<div style="text-align:center; padding:3rem; opacity:0.5;">데이터가 없습니다.</div>';
                 return;
             }
-            data.sort((a, b) => b.bill_month.localeCompare(a.bill_month));
-            data.forEach(row => {
-                const tr = document.createElement('tr');
-                let statusHtml = '';
-                if (row.paid_amount >= row.due_amount) {
-                    statusHtml = '<span class="status-paid">완납</span>';
-                } else if (row.paid_amount > 0) {
-                    statusHtml = '<span class="status-partial">부분납부</span>';
+
+            // Sort: Recent months first
+            displayData.sort((a, b) => b.bill_month.localeCompare(a.bill_month));
+
+            displayData.forEach(row => {
+                const item = document.createElement('div');
+                item.className = 'mgmt-item';
+
+                const rawDueDate = getDueDate(row.bill_month, row.contract_start_date);
+                const schedDate = formatYYMMDD(rawDueDate);
+                // const actualDate = row.last_paid_date ? formatYYMMDD(row.last_paid_date.split('T')[0]) : '-';
+
+                const building = row.building_name || '미지정';
+                const room = row.room_number || '-';
+                const buildingId = row.building_id || '';
+
+                // Active filter style
+                const isFiltered = String(activeBuildingId) === String(buildingId);
+                const leftStyle = isFiltered ? 'background: var(--primary); color: white;' : 'cursor: pointer;';
+
+                // Line 1: Scheduled
+                // Check if it's a deposit (mock condition for now as ledger usually doesn't return type 2)
+                const isDeposit = row.type === 2;
+                let line1Text = '';
+                if (isDeposit) {
+                    // For deposit, we use contract_start_date
+                    const startDate = row.contract_start_date ? formatYYMMDD(row.contract_start_date) : '-';
+                    line1Text = `보증금 납부예정: ${startDate} / ${formatUnit(row.due_amount)}`;
                 } else {
-                    statusHtml = '<span class="status-unpaid">미납</span>';
+                    line1Text = `월세 예정: ${schedDate} / ${formatUnit(row.due_amount)}`;
                 }
-                const dueDate = getDueDate(row.bill_month, row.contract_start_date, row.payment_type);
-                let html = '';
-                if (user.role === 'admin') {
-                    html += `<td>${row.landlord_name}</td>`;
+
+                // Line 2: Actual
+                let line2Text = '';
+                if (row.paid_amount > 0) {
+                    // If partially/fully paid
+                    const paidDate = row.last_paid_date ? formatYYMMDD(row.last_paid_date.split('T')[0]) : '-';
+                    const paidAmt = formatUnit(row.paid_amount);
+                    if (isDeposit) {
+                        line2Text = `보증금 납부날짜: ${paidDate} / ${paidAmt}`;
+                    } else {
+                        // User example: "월세 납부날짜: 26-01-20 / 43" (43만원)
+                        // If date is invalid or missing but amount > 0, handle gracefully
+                        line2Text = `납부 날짜: ${paidDate} / ${paidAmt}`;
+                    }
+                } else {
+                    line2Text = '미납';
                 }
-                if (user.role === 'admin' || user.role === 'landlord') {
-                    html += `<td>${row.building_name || '-'}</td>`;
-                    html += `<td>${row.tenant_name}</td>`;
-                }
-                html += `
-                    <td>${dueDate || row.bill_month}</td>
-                    <td>${row.last_paid_date ? row.last_paid_date.split('T')[0] : '-'}</td>
-                    <td>${row.paid_amount > 0 ? formatCurrency(row.paid_amount) + '원' : '-'}</td>
-                    <td>${statusHtml}</td>
+
+                item.innerHTML = `
+                    <div class="mgmt-summary">
+                        <div class="mgmt-left" style="${leftStyle}" 
+                             title="${building} ${room}" 
+                             onclick="event.stopPropagation(); toggleBuildingFilter('${buildingId}')">
+                             <div class="b-name">${building}</div>
+                             <div class="r-num">${row.room_number || '-'}</div>
+                        </div>
+                        <div class="mgmt-center">
+                            <div class="center-top">${row.tenant_name}</div>
+                            <div class="center-bottom">
+                                <div>${line1Text}</div>
+                                <div>${line2Text}</div>
+                            </div>
+                        </div>
+                        <div class="mgmt-right">
+                            <button class="action-btn btn-edit" onclick="event.stopPropagation(); alert('수정 기능 준비 중')">수정</button>
+                            <button class="action-btn btn-delete" onclick="event.stopPropagation(); alert('삭제 기능 준비 중')">삭제</button>
+                        </div>
+                    </div>
                 `;
-                tr.innerHTML = html;
-                tbody.appendChild(tr);
+                list.appendChild(item);
             });
         }
 

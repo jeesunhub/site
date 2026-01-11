@@ -134,24 +134,33 @@ if (databaseUrl) {
     });
 }
 
-function ensureApprovedColumn() {
-    // Check if column exists
-    // PG and SQLite have different ways, simplified approach:
-    // Try to select the column. If error, add it.
-    const testSql = "SELECT approved FROM users LIMIT 1";
-    db.get(testSql, (err) => {
-        if (err) {
-            console.log("Column 'approved' missing or error. Attempting to add...");
-            const alterSql = "ALTER TABLE users ADD COLUMN approved INTEGER DEFAULT 0";
-            db.run(alterSql, (alterErr) => {
-                if (alterErr) console.error("Failed to add 'approved' column:", alterErr.message);
-                else {
-                    console.log("Added 'approved' column to users table.");
-                    // Update admin to be approved
-                    db.run("UPDATE users SET approved = 1 WHERE login_id = 'admin'");
-                }
-            });
-        }
+function ensureColumns() {
+    // Columns to ensure in tables
+    const columns = [
+        { table: 'users', name: 'approved', type: 'INTEGER DEFAULT 0' },
+        { table: 'users', name: 'noti', type: 'INTEGER DEFAULT 0' },
+        { table: 'payments', name: 'type', type: 'INTEGER DEFAULT 1' }
+    ];
+
+    columns.forEach(col => {
+        const testSql = `SELECT ${col.name} FROM ${col.table} LIMIT 1`;
+        db.get(testSql, (err) => {
+            if (err) {
+                console.log(`Column '${col.name}' missing in '${col.table}'. Attempting to add...`);
+                const alterSql = `ALTER TABLE ${col.table} ADD COLUMN ${col.name} ${col.type}`;
+                db.run(alterSql, (alterErr) => {
+                    if (alterErr) {
+                        console.error(`Failed to add '${col.name}' column to '${col.table}':`, alterErr.message);
+                    } else {
+                        console.log(`Added '${col.name}' column to ${col.table} table.`);
+                        if (col.name === 'approved' && col.table === 'users') {
+                            // Update admin to be approved by default
+                            db.run("UPDATE users SET approved = 1 WHERE login_id = 'admin'");
+                        }
+                    }
+                });
+            }
+        });
     });
 }
 
@@ -170,11 +179,11 @@ function seedAdmin() {
                 if (err) console.error('Error creating admin user:', err.message);
                 else {
                     console.log('Default admin user created.');
-                    ensureApprovedColumn();
+                    ensureColumns();
                 }
             });
         } else {
-            ensureApprovedColumn();
+            ensureColumns();
         }
     });
 }

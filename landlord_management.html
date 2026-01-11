@@ -20,10 +20,8 @@
             z-index: 100;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             height: 3.5rem;
-            margin-bottom: 2rem;
             width: 100%;
             box-sizing: border-box;
-            /* Keep margin for content spacing */
         }
 
         .page-header h1 {
@@ -31,21 +29,38 @@
             margin: 0;
             background: linear-gradient(to right, #6366f1, #a855f7);
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
-        .user-card {
-            background: var(--card-bg);
-            border-radius: 1rem;
-            padding: 1.5rem;
-            margin-bottom: 1rem;
+        /* List Layout Styles */
+        .mgmt-list {
             display: flex;
-            align-items: center;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            gap: 1.5rem;
+            flex-direction: column;
+            gap: 1px;
+            margin-top: 1rem;
         }
 
-        .user-avatar {
+        .mgmt-item {
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.2s;
+        }
+
+        .mgmt-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .mgmt-summary {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            gap: 0.8rem;
+            height: 4.5rem;
+            cursor: pointer;
+        }
+
+        .mgmt-left {
             width: 3rem;
             height: 3rem;
             border-radius: 50%;
@@ -58,37 +73,73 @@
             flex-shrink: 0;
         }
 
-        .user-info {
+        .mgmt-center {
             flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 100%;
+            min-width: 0;
         }
 
-        .user-name {
-            font-size: 1.1rem;
+        .center-top {
+            flex: 7;
+            display: flex;
+            align-items: flex-end;
+            font-size: 1rem;
+            font-weight: 400;
+            padding-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: #f8fafc;
+        }
+
+        .center-bottom {
+            flex: 3;
+            display: flex;
+            align-items: flex-start;
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.5);
+            gap: 0.5rem;
+            padding-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .mgmt-right {
+            display: flex;
+            gap: 0.5rem;
+            flex-shrink: 0;
+            align-self: center;
+        }
+
+        .action-btn {
+            height: 2rem;
+            padding: 0 1rem;
+            border-radius: 0.4rem;
+            border: none;
+            font-size: 0.8rem;
             font-weight: 600;
-            margin-bottom: 0.2rem;
+            cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            justify-content: center;
+            color: white;
+            transition: opacity 0.2s;
         }
 
-        .user-meta {
-            font-size: 0.9rem;
-            opacity: 0.6;
-            display: flex;
-            gap: 1rem;
+        .action-btn:hover {
+            opacity: 0.9;
         }
 
-        .user-actions {
-            display: flex;
-            gap: 0.5rem;
+        .btn-manage {
+            background: var(--primary);
         }
 
-        .tag-role {
-            font-size: 0.75rem;
-            padding: 0.2rem 0.5rem;
-            border-radius: 0.3rem;
-            background: rgba(255, 255, 255, 0.1);
-            color: rgba(255, 255, 255, 0.8);
+        .btn-delete {
+            background: #ef4444;
         }
     </style>
 </head>
@@ -98,11 +149,10 @@
 
     <div class="page-header">
         <h1>임대인 관리</h1>
-        <!-- Add User Button if needed in future -->
     </div>
 
-    <div class="container">
-        <div id="landlord-list">
+    <div class="container" style="padding: 0;">
+        <div id="landlord-list" class="mgmt-list">
             <!-- Populated by JS -->
             <div style="text-align: center; padding: 3rem; opacity: 0.5;">로딩 중...</div>
         </div>
@@ -123,7 +173,6 @@
 
         async function loadLandlords() {
             try {
-                // Determine API endpoint - reusing /api/admin/users
                 const res = await fetch('/api/admin/users');
                 if (!res.ok) throw new Error('Failed to load users');
                 const users = await res.json();
@@ -132,7 +181,7 @@
                 renderList(landlords);
             } catch (err) {
                 console.error(err);
-                document.getElementById('landlord-list').innerHTML = `<div style="text-align:center; color:#f87171;">오류가 발생했습니다.<br>${err.message}</div>`;
+                document.getElementById('landlord-list').innerHTML = `<div style="text-align:center; color:#f87171; padding: 2rem;">오류가 발생했습니다.<br>${err.message}</div>`;
             }
         }
 
@@ -147,26 +196,46 @@
 
             list.forEach(u => {
                 const el = document.createElement('div');
-                el.className = 'user-card';
+                el.className = 'mgmt-item';
                 el.innerHTML = `
-                    <div class="user-avatar" style="background: ${u.color || '#6366f1'}">
-                        ${u.nickname ? u.nickname[0] : 'U'}
-                    </div>
-                    <div class="user-info">
-                        <div class="user-name">
-                            ${u.nickname || 'Unknown'} 
-                            <span class="tag-role">임대인</span>
+                    <div class="mgmt-summary">
+                        <div class="mgmt-left" style="background: ${u.color || '#6366f1'}">
+                            ${u.nickname ? u.nickname[0] : 'U'}
                         </div>
-                        <div class="user-meta">
-                            <span>ID: ${u.login_id}</span>
-                            <!-- Phone number requires API update, currently hidden -->
+                        <div class="mgmt-center">
+                            <div class="center-top">${u.nickname || 'Unknown'}</div>
+                            <div class="center-bottom">ID: ${u.login_id}</div>
+                        </div>
+                        <div class="mgmt-right">
+                            <button class="action-btn btn-manage" onclick="manageLandlord(${u.id})">관리</button>
+                            <button class="action-btn btn-delete" onclick="deleteLandlord(${u.id}, '${u.nickname}')">탈퇴</button>
                         </div>
                     </div>
-                    <!-- Actions could go here (e.g. Delete, Reset Password) -->
-                    <!-- For now, just listing -->
                 `;
                 container.appendChild(el);
             });
+        }
+
+        function manageLandlord(userId) {
+            // For now, redirecting to settings where admin can manage profiles
+            // In future, could point to a specific detailed view
+            location.href = `/settings.html`;
+        }
+
+        async function deleteLandlord(userId, nickname) {
+            if (!confirm(`'${nickname}' 임대인을 탈퇴 처리하시겠습니까?`)) return;
+
+            try {
+                const res = await fetch(`/api/users/${userId}`, {
+                    method: 'DELETE'
+                });
+                if (!res.ok) throw new Error('탈퇴 처리 실패');
+
+                alert('탈퇴 처리되었습니다.');
+                loadLandlords();
+            } catch (err) {
+                alert('오류: ' + err.message);
+            }
         }
     </script>
 </body>

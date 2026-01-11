@@ -45,6 +45,29 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'API is working' });
 });
 
+// Admin Helper Endpoints
+app.get('/api/admin/buildings', (req, res) => {
+    console.log('[API] GET /api/admin/buildings');
+    db.all('SELECT * FROM buildings ORDER BY name', [], (err, rows) => {
+        if (err) {
+            console.error('[API] Error fetching buildings:', err);
+            return res.status(500).json({ error: err.message });
+        }
+        res.json(rows);
+    });
+});
+
+app.get('/api/admin/tenants', (req, res) => {
+    console.log('[API] GET /api/admin/tenants');
+    db.all('SELECT id, nickname FROM users WHERE role = ? AND approved != ? ORDER BY nickname', ['tenant', 2], (err, rows) => {
+        if (err) {
+            console.error('[API] Error fetching tenants:', err);
+            return res.status(500).json({ error: err.message });
+        }
+        res.json(rows);
+    });
+});
+
 app.get('/api/health/db', async (req, res) => {
     try {
         const dbType = process.env.DATABASE_URL ? 'PostgreSQL' : 'SQLite';
@@ -132,6 +155,11 @@ app.post('/api/login', (req, res) => {
             return res.status(403).json({ error: '가입이 거절되었습니다.' });
         }
 
+        // Check active status
+        if (user.status === 0) {
+            return res.status(403).json({ error: '탈퇴한 사용자입니다.' });
+        }
+
         res.json({ message: 'Login successful', user });
     });
 });
@@ -217,11 +245,12 @@ app.get('/api/admin/users', (req, res) => {
     // Exclude rejected users (approved=2) if we consider them "deleted" but keep record, OR include them?
     // User requested "db entry deleted" but for safety we used status 2.
     // Let's filter out approved=2 users from normal lists to simulate deletion.
-    db.all('SELECT id, login_id, nickname, role, color, photo_path, noti FROM users WHERE approved != 2 ORDER BY role, nickname', [], (err, rows) => {
+    db.all('SELECT id, login_id, nickname, role, color, photo_path, status FROM users WHERE approved != 2 AND status != 0 ORDER BY role, nickname', [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
     });
 });
+
 
 // 2b. Change Password (Self)
 app.post('/api/auth/change-password', (req, res) => {
@@ -320,12 +349,14 @@ app.get('/api/tenant/:id/billing', (req, res) => {
 });
 
 // 5. Add Payment
+// 5. Add Payment
 app.post('/api/payments', (req, res) => {
-    const { tenant_id, amount, memo } = req.body;
+    const { tenant_id, amount, memo, type } = req.body; // type optional, default 1
     const paid_at = new Date().toISOString();
+    const paymentType = type || 1;
 
-    db.run(`INSERT INTO payments (tenant_id, amount, paid_at, memo) VALUES (?, ?, ?, ?)`,
-        [tenant_id, amount, paid_at, memo],
+    db.run(`INSERT INTO payments (tenant_id, amount, paid_at, memo, type) VALUES (?, ?, ?, ?, ?)`,
+        [tenant_id, amount, paid_at, memo, paymentType],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ message: 'Payment recorded', paymentId: this.lastID });
@@ -460,11 +491,12 @@ app.get('/api/payments/ledger', (req, res) => {
             l.id as landlord_id,
             t.nickname as tenant_name,
             t.id as tenant_id,
-            b.name as building_name,
+            COALESCE(b.name, c.building) as building_name,
             b.id as building_id,
             c.id as contract_id,
             c.contract_start_date,
             c.payment_type,
+            c.room_number,
             mb.bill_month,
             mb.total_amount as due_amount,
             COALESCE(SUM(bpm.matched_amount), 0) as paid_amount,
@@ -473,10 +505,10 @@ app.get('/api/payments/ledger', (req, res) => {
         JOIN contracts c ON mb.contract_id = c.id
         JOIN users t ON c.tenant_id = t.id
         JOIN users l ON c.landlord_id = l.id
-        LEFT JOIN buildings b ON c.building = b.name -- approximate join by name as contract stores name
+        LEFT JOIN buildings b ON c.building = b.name
         LEFT JOIN bill_payment_match bpm ON mb.id = bpm.bill_id
         LEFT JOIN payments p ON bpm.payment_id = p.id
-        WHERE 1=1 AND t.approved != 2 -- Exclude deleted tenants
+        WHERE 1=1 AND t.approved != 2 
     `;
 
     const params = [];
@@ -489,16 +521,11 @@ app.get('/api/payments/ledger', (req, res) => {
         params.push(user_id);
     }
 
-    // specific filters (overriding role if needed, or refining)
     if (landlord_id && landlord_id !== 'all') {
         query += ` AND c.landlord_id = ?`;
         params.push(landlord_id);
     }
     if (building_id && building_id !== 'all') {
-        // Contracts store building NAME, but let's try to match if we have ID. 
-        // Ideally contracts should store building_id, but schema uses name. 
-        // We can join buildings to filter by ID or just filter by name if passed.
-        // Let's assume we pass building NAME or ID. If ID passed:
         query += ` AND b.id = ?`;
         params.push(building_id);
     }
@@ -511,8 +538,8 @@ app.get('/api/payments/ledger', (req, res) => {
         GROUP BY 
             l.nickname, l.id, 
             t.nickname, t.id, 
-            b.name, b.id, 
-            c.id, c.contract_start_date, c.payment_type, 
+            COALESCE(b.name, c.building), b.id, 
+            c.id, c.contract_start_date, c.payment_type, c.room_number,
             mb.id, mb.bill_month, mb.total_amount
         ORDER BY mb.bill_month DESC`;
 
@@ -570,6 +597,34 @@ app.get('/api/landlord/:id/contracts/active', (req, res) => {
     });
 });
 
+// 12a. Get Unified Tenant List based on role
+app.get('/api/tenants/active-list', (req, res) => {
+    const { role, user_id } = req.query;
+
+    let query = `
+        SELECT u.id as user_id, u.nickname, u.color, u.phone_number,
+               c.id as contract_id, c.building, c.room_number, 
+               c.contract_start_date, c.contract_end_date,
+               c.deposit, c.monthly_rent as rent, c.management_fee, c.landlord_id
+        FROM users u
+        LEFT JOIN contracts c ON u.id = c.tenant_id
+        WHERE u.role = 'tenant' AND u.approved != 2
+    `;
+    const params = [];
+
+    if (role === 'landlord') {
+        // Only show tenants that belong to this landlord (either via active contract or landlord_tenant mapping)
+        query += ` AND (c.landlord_id = ? OR EXISTS (SELECT 1 FROM landlord_tenant lt WHERE lt.landlord_id = ? AND lt.tenant_id = u.id))`;
+        params.push(user_id, user_id);
+    }
+    // Admin sees all tenants
+
+    db.all(query, params, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
 // 13. Update Contract Keyword
 app.post('/api/contracts/:id/keyword', (req, res) => {
     const contractId = req.params.id;
@@ -601,13 +656,13 @@ app.post('/api/payments/batch', (req, res) => {
         return res.status(400).json({ error: 'No payments provided' });
     }
 
-    const placeholder = payments.map(() => '(?, ?, ?, ?)').join(',');
+    const placeholder = payments.map(() => '(?, ?, ?, ?, ?)').join(',');
     const flatParams = [];
     payments.forEach(p => {
-        flatParams.push(p.tenant_id, p.amount, p.paid_at, p.memo);
+        flatParams.push(p.tenant_id, p.amount, p.paid_at, p.memo, p.type || 1);
     });
 
-    const query = `INSERT INTO payments (tenant_id, amount, paid_at, memo) VALUES ${placeholder}`;
+    const query = `INSERT INTO payments (tenant_id, amount, paid_at, memo, type) VALUES ${placeholder}`;
 
     db.run(query, flatParams, function (err) {
         if (err) return res.status(500).json({ error: err.message });
@@ -1066,6 +1121,191 @@ app.post('/api/users/:id/reject', (req, res) => {
     });
 });
 
+app.delete('/api/users/:id', (req, res) => {
+    const userId = req.params.id;
+    // Set status to 0 (Withdrawal) instead of approved=2 (Rejection)
+    db.run(`UPDATE users SET status = 0 WHERE id = ?`, [userId], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'User withdrawn' });
+    });
+});
+
+
+// 34. Get Advertised Rooms (from room_advs)
+app.get('/api/rooms/adv', (req, res) => {
+    const { role, user_id } = req.query;
+
+    let query = `
+        SELECT ra.*, r.room_number, b.name as building 
+        FROM room_advs ra 
+        JOIN rooms r ON ra.room_id = r.id 
+        JOIN buildings b ON r.building_id = b.id
+    `;
+    let params = [];
+
+    if (role === 'landlord') {
+        query += ` 
+            WHERE ra.created_by = ? 
+        `;
+        params.push(user_id);
+    } else if (role === 'tenant') {
+        // Tenants might see all? Or maybe this page is for management?
+        // "방 내놓기" usually implies management/landlord side.
+        // If tenants can advertise (sublet), they see their own. 
+        // For now restricting to creator like landlord.
+        // But wait, the previous code had logic for landlord.
+        // I will stick to "Landlord sees their own (or their buildings' ads)" and "Admin sees all".
+        // If created_by is used, it simplifies things.
+
+        // However, if the user means "See all available rooms" for tenants, that's different.
+        // But the request says "Room Adv Page Modification... Add popup... Save to room_advs". 
+        // This suggests a management view.
+    }
+
+    query += ` ORDER BY ra.created_at DESC`;
+
+    db.all(query, params, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// 34a. Add Room Advertisement
+// 34a. Add Room Advertisement (with photos)
+app.post('/api/room_advs', upload.array('photos', 5), (req, res) => {
+    const { room_id, title, description, deposit, rent, management_fee, cleaning_fee, available_date, created_by } = req.body;
+
+    db.serialize(() => {
+        db.run('BEGIN TRANSACTION');
+
+        const insertAdv = `
+            INSERT INTO room_advs (
+                room_id, title, description, deposit, rent, management_fee, cleaning_fee, available_date, status, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+        `;
+
+        db.run(insertAdv, [room_id, title, description, deposit, rent, management_fee, cleaning_fee, available_date, created_by], function (err) {
+            if (err) {
+                db.run('ROLLBACK');
+                return res.status(500).json({ error: err.message });
+            }
+
+            const advId = this.lastID;
+
+            // If there are files, insert them into images table
+            if (req.files && req.files.length > 0) {
+                const imgQuery = `INSERT INTO images (related_id, image_url, is_main) VALUES (?, ?, ?)`;
+                // Use Promise.all to handle multiple inserts? Or just valid loop since sqlite is serial in node driver (mostly)
+                // But we are inside db.serialize, so we can run them.
+
+                let completed = 0;
+                let hasError = false;
+
+                req.files.forEach((file, index) => {
+                    const isMain = index === 0 ? 1 : 0;
+                    const imageUrl = `/uploads/${file.filename}`;
+
+                    // We must be careful with async inside forEach, but db.run is async.
+                    // Better to chain or use simple counter.
+                    db.run(imgQuery, [advId, imageUrl, isMain], function (err) {
+                        if (hasError) return;
+                        if (err) {
+                            hasError = true;
+                            db.run('ROLLBACK');
+                            return res.status(500).json({ error: err.message });
+                        }
+
+                        completed++;
+                        if (completed === req.files.length) {
+                            db.run('COMMIT');
+                            res.json({ message: 'Room advertisement created with photos', id: advId });
+                        }
+                    });
+                });
+            } else {
+                db.run('COMMIT');
+                res.json({ message: 'Room advertisement created', id: advId });
+            }
+        });
+    });
+});
+
+// 34b. Get Single Room Advertisement
+app.get('/api/room_advs/:id', (req, res) => {
+    const advId = req.params.id;
+    db.get('SELECT ra.*, r.building_id, r.room_number FROM room_advs ra JOIN rooms r ON ra.room_id = r.id WHERE ra.id = ?', [advId], (err, adv) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!adv) return res.status(404).json({ error: 'Advertisement not found' });
+
+        // Get images
+        db.all('SELECT * FROM images WHERE related_id = ? ORDER BY is_main DESC', [advId], (err, images) => {
+            if (err) return res.status(500).json({ error: err.message });
+            adv.images = images;
+            res.json(adv);
+        });
+    });
+});
+
+// 34c. Update Room Advertisement
+app.put('/api/room_advs/:id', upload.array('photos', 5), (req, res) => {
+    const advId = req.params.id;
+    const { title, description, deposit, rent, management_fee, cleaning_fee, available_date } = req.body;
+
+    db.run(`
+        UPDATE room_advs 
+        SET title = ?, description = ?, deposit = ?, rent = ?, management_fee = ?, cleaning_fee = ?, available_date = ? 
+        WHERE id = ?`,
+        [title, description, deposit, rent, management_fee, cleaning_fee, available_date, advId],
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+
+            // Handle new photos if any
+            if (req.files && req.files.length > 0) {
+                db.get('SELECT COUNT(*) as count FROM images WHERE related_id = ?', [advId], (err, row) => {
+                    if (err) return res.status(500).json({ error: err.message });
+
+                    // Simply append
+                    const imgQuery = `INSERT INTO images (related_id, image_url, is_main) VALUES (?, ?, 0)`;
+                    req.files.forEach(file => {
+                        const imageUrl = `/uploads/${file.filename}`;
+                        db.run(imgQuery, [advId, imageUrl]);
+                    });
+
+                    res.json({ message: 'Advertisement updated with new photos' });
+                });
+            } else {
+                res.json({ message: 'Advertisement updated' });
+            }
+        }
+    );
+});
+
+// 34d. Delete Image
+app.delete('/api/images/:id', (req, res) => {
+    const imageId = req.params.id;
+    db.run('DELETE FROM images WHERE id = ?', [imageId], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Image deleted' });
+    });
+});
+
+// 35. Get Advertised Items (renamed table)
+app.get('/api/items/adv', (req, res) => {
+    db.all(`SELECT i.*, u.nickname as owner_name FROM item_advs i LEFT JOIN users u ON i.owner_id = u.id`, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// 36. Update Room Status (for Advertising 완료)
+app.post('/api/rooms/:id/status', (req, res) => {
+    const { status } = req.body;
+    const roomId = req.params.id;
+    db.run(`UPDATE rooms SET status = ? WHERE id = ?`, [status, roomId], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Room status updated' });
+    });
+});
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

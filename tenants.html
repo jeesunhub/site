@@ -34,78 +34,172 @@
             margin: 0;
             background: linear-gradient(to right, #6366f1, #a855f7);
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
             white-space: nowrap;
             margin-right: 1rem;
         }
 
-        .building-block {
-            background: var(--card-bg);
-            border-radius: 1.5rem;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            padding: 2rem;
-            margin-bottom: 2rem;
+        .container {
+            max-width: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
         }
 
-        .building-name-title {
-            font-size: 1.4rem;
+        .building-block {
+            margin-bottom: 2rem;
+            width: 100%;
+        }
+
+        .building-name-header {
+            padding: 1.2rem 1.5rem 0.6rem 1.5rem;
+            font-size: 0.9rem;
             font-weight: 600;
-            margin-bottom: 1.5rem;
             color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 0.05rem;
+            opacity: 0.8;
+            background: rgba(255, 255, 255, 0.01);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
             display: flex;
             align-items: center;
-            gap: 0.75rem;
+            gap: 0.6rem;
         }
 
-        .tenant-list-table {
-            width: 100%;
-            border-collapse: collapse;
+        .tenant-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
         }
 
-        .tenant-list-table th,
-        .tenant-list-table td {
-            padding: 1.2rem;
-            text-align: left;
+        .tenant-item {
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.02);
+            transition: background 0.2s;
         }
 
-        .tenant-list-table th {
-            font-size: 0.85rem;
-            opacity: 0.5;
-            font-weight: 500;
-            text-transform: uppercase;
+        .tenant-item:hover {
+            background: rgba(255, 255, 255, 0.05);
         }
 
-        .room-cell {
-            font-weight: 600;
-            color: var(--accent);
-            width: 100px;
-        }
-
-        .name-cell {
-            font-weight: 500;
-            font-size: 1.05rem;
-        }
-
-        .action-cell {
-            text-align: right;
+        .tenant-summary {
             display: flex;
-            justify-content: flex-end;
-            gap: 0.75rem;
+            align-items: center;
+            padding: 0.8rem 1rem;
+            gap: 1.2rem;
+            min-height: 5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.02);
+            transition: background 0.2s;
         }
 
-        .btn-small {
-            padding: 0.5rem 1rem;
-            font-size: 0.85rem;
+        .tenant-summary:hover {
+            background: rgba(255, 255, 255, 0.05);
         }
 
-        .btn-terminate {
+        .room-badge {
+            width: 4.5rem;
+            padding: 0.4rem 0.2rem;
+            background: rgba(99, 102, 241, 0.15);
+            color: #a5b4fc;
+            border-radius: 0.4rem;
+            text-align: center;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1px;
+            min-height: 3.2rem;
+        }
+
+        .room-badge .b-name {
+            font-size: 0.65rem;
+            opacity: 0.7;
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-weight: 400;
+        }
+
+        .room-badge .r-num {
+            font-size: 0.9rem;
+            font-weight: 700;
+            width: 100%;
+        }
+
+        .tenant-center {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 100%;
+            min-width: 0;
+        }
+
+        .center-top {
+            flex: 1;
+            display: flex;
+            align-items: flex-end;
+            font-size: 1rem;
+            font-weight: 400;
+            padding-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: #f8fafc;
+        }
+
+        .center-bottom {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            font-size: 0.65rem;
+            color: rgba(255, 255, 255, 0.5);
+            gap: 0px;
+            padding-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tenant-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-shrink: 0;
+            align-self: center;
+        }
+
+        .action-btn-sm {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border-radius: 0.5rem;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-edit {
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--accent);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+        }
+
+        .btn-edit:hover {
+            background: rgba(99, 102, 241, 0.2);
+        }
+
+        .btn-del {
             background: rgba(239, 68, 68, 0.1);
             color: #f87171;
             border: 1px solid rgba(239, 68, 68, 0.2);
         }
 
-        .btn-terminate:hover {
+        .btn-del:hover {
             background: rgba(239, 68, 68, 0.2);
         }
 
@@ -210,11 +304,11 @@
 
         async function loadAndRenderTenants() {
             try {
-                const res = await fetch(`/api/landlord/${user.id}/contracts/active`);
-                if (!res.ok) throw new Error('Failed to fetch contracts');
-                const contracts = await res.json();
+                const res = await fetch(`/api/tenants/active-list?role=${user.role}&user_id=${user.id}`);
+                if (!res.ok) throw new Error('Failed to fetch tenants');
+                const tenants = await res.json();
 
-                if (contracts.length === 0) {
+                if (tenants.length === 0) {
                     document.getElementById('tenant-blocks-container').innerHTML = `
                         <div style="text-align:center; padding:5rem; background:var(--card-bg); border-radius:1.5rem; border:1px solid rgba(255,255,255,0.1)">
                             <p style="opacity:0.5; margin-bottom:1.5rem">등록된 세입자가 없습니다.</p>
@@ -224,68 +318,69 @@
                     return;
                 }
 
-                const grouped = {};
-                contracts.forEach(c => {
-                    const bName = c.building || '미지정 건물';
-                    if (!grouped[bName]) grouped[bName] = [];
-                    grouped[bName].push(c);
-                });
-
                 const container = document.getElementById('tenant-blocks-container');
                 container.innerHTML = '';
-                const bNames = Object.keys(grouped).sort();
 
-                for (const bName of bNames) {
-                    const block = document.createElement('div');
-                    block.className = 'building-block';
+                // Sort by building name then room number
+                const sortedTenants = tenants.sort((a, b) => {
+                    const bCompare = (a.building || '').localeCompare(b.building || '');
+                    if (bCompare !== 0) return bCompare;
+                    return String(a.room_number || '').localeCompare(String(b.room_number || ''), undefined, { numeric: true });
+                });
 
-                    const tenantsList = grouped[bName].sort((a, b) => {
-                        const roomA = String(a.room_number || '');
-                        const roomB = String(b.room_number || '');
-                        return roomA.localeCompare(roomB, undefined, { numeric: true, sensitivity: 'base' });
-                    });
+                container.innerHTML = `
+                    <div class="tenant-list">
+                        ${sortedTenants.map(t => {
+                    const start = t.contract_start_date || '-';
+                    const end = t.contract_end_date || '-';
+                    const building = t.building || '미지정';
+                    const room = t.room_number || '-';
 
-                    block.innerHTML = `
-                        <div class="building-name-title">🏢 ${bName}</div>
-                        <table class="tenant-list-table">
-                            <thead>
-                                <tr>
-                                    <th>호수</th>
-                                    <th>이름</th>
-                                    <th style="text-align:right">관리</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${tenantsList.map(t => `
-                                    <tr>
-                                        <td class="room-cell">${t.room_number || ''}호</td>
-                                        <td class="name-cell">
-                                            <span style="cursor:pointer; text-decoration: underline; text-underline-offset: 4px;" onclick="navigateToContractForm('view', ${t.id})">
+                    // Format amounts to 'unit of 10,000 KRW'
+                    const deposit = t.deposit ? Math.floor(t.deposit / 10000) : 0;
+                    const rent = t.rent ? Math.floor(t.rent / 10000) : 0;
+                    const mgmtFee = t.management_fee ? Math.floor(t.management_fee / 10000) : 0;
+
+                    return `
+                                <div class="tenant-summary">
+                                    <div class="room-badge" title="${building} ${room}">
+                                        <div class="b-name">${building}</div>
+                                        <div class="r-num">${room}</div>
+                                    </div>
+                                    <div class="tenant-center">
+                                        <div class="center-top">
+                                            <span style="cursor:pointer;" onclick="${t.contract_id ? `navigateToContractForm('view', ${t.contract_id})` : `alert('현재 활성된 계약이 없습니다.')`}">
                                                 ${t.nickname || '이름 없음'}
                                             </span>
-                                        </td>
-                                        <td class="action-cell">
-                                            <button class="btn btn-secondary btn-small" onclick="navigateToContractForm('change', ${t.id})">계약 변경</button>
-                                            <button class="btn btn-secondary btn-small" onclick="navigateToContractForm('extend', ${t.id})">계약 연장</button>
-                                            <button class="btn btn-small btn-terminate" onclick="openTerminateModal(${t.id}, '${t.nickname || '이름 없음'}')">계약 종료</button>
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    `;
-                    container.appendChild(block);
-                }
+                                        </div>
+                                        <div class="center-bottom">
+                                            <div>${start} ~ ${end}</div>
+                                            <div>${deposit.toLocaleString()} / ${rent.toLocaleString()} / ${mgmtFee.toLocaleString()}</div>
+                                        </div>
+                                    </div>
+                                    <div class="tenant-actions">
+                                        <button class="action-btn-sm btn-edit" onclick="navigateToContractForm('${t.contract_id ? 'change' : 'new'}', ${t.contract_id || t.user_id})">
+                                            ${t.contract_id ? '수정' : '계약 추가'}
+                                        </button>
+                                        ${t.contract_id ? `
+                                            <button class="action-btn-sm btn-del" onclick="openTerminateModal(${t.contract_id}, '${t.nickname || '이름 없음'}')">삭제</button>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            `;
+                }).join('')}
+                    </div>
+                `;
 
             } catch (err) {
                 console.error(err);
-                document.getElementById('tenant-blocks-container').innerHTML = `<p style="color:#f87171; text-align:center;">오류가 발생했습니다: ${err.message}</p>`;
+                document.getElementById('tenant-blocks-container').innerHTML = `< p style = "color:#f87171; text-align:center;" > 오류가 발생했습니다: ${err.message}</p > `;
             }
         }
 
         // Modal logic
         function navigateToContractForm(action, contractId = null) {
-            let url = action === 'new' ? '/contract_new.html' : `/contract_new.html?action=${action}&contract_id=${contractId}`;
+            let url = action === 'new' ? '/contract_new.html' : `/ contract_new.html ? action = ${action}& contract_id=${contractId} `;
             window.location.href = url;
         }
 
@@ -302,7 +397,7 @@
             if (!endDate) return alert('날짜를 선택해 주세요.');
 
             try {
-                const res = await fetch(`/api/contracts/${currentTerminateId}/terminate`, {
+                const res = await fetch(`/ api / contracts / ${currentTerminateId}/terminate`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ end_date: endDate })

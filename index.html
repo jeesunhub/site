@@ -126,12 +126,64 @@
             transform: none;
             box-shadow: none;
         }
+
+        .quick-actions {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            justify-content: center;
+        }
+
+        .action-chip {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 0.6rem 1rem;
+            border-radius: 2rem;
+            font-size: 0.85rem;
+            color: var(--fg);
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: auto;
+            white-space: nowrap;
+        }
+
+        .action-chip:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: var(--primary);
+            transform: translateY(-2px);
+        }
+
+        .badge-count {
+            background: var(--primary);
+            color: white;
+            padding: 0.1rem 0.5rem;
+            border-radius: 1rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            min-width: 1.2rem;
+            text-align: center;
+        }
     </style>
 </head>
 
 <body>
     <div class="login-card">
         <h1>Sugar</h1>
+
+        <div class="quick-actions">
+            <div class="action-chip" onclick="location.href='/rooms_public.html'">
+                <span>방 있어요</span>
+                <span class="badge-count" id="room-count">0</span>
+            </div>
+            <div class="action-chip" onclick="location.href='/items_public.html'">
+                <span>물건 공유해요</span>
+                <span class="badge-count" id="item-count">0</span>
+            </div>
+        </div>
+
         <div class="input-group">
             <label>아이디</label>
             <input type="text" id="username" placeholder="아이디를 입력하세요">

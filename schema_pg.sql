@@ -15,7 +15,6 @@ CREATE TABLE IF NOT EXISTS users (
     phone_number TEXT,
     noti INTEGER DEFAULT 0,
     approved INTEGER DEFAULT 0,
-    approved INTEGER DEFAULT 0,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -63,6 +62,11 @@ CREATE TABLE IF NOT EXISTS rooms (
     building TEXT,
     floor INTEGER,
     unit TEXT,
+    status INTEGER DEFAULT 0,
+    deposit INTEGER,
+    rent INTEGER,
+    management_fee INTEGER,
+    available_date TEXT,
     FOREIGN KEY (building_id) REFERENCES buildings(id)
 );
 
@@ -129,6 +133,8 @@ CREATE TABLE IF NOT EXISTS payments (
     amount INTEGER NOT NULL,
     paid_at TIMESTAMP NOT NULL,
 
+    type INTEGER DEFAULT 1, -- 1: Monthly Rent, 2: Deposit, 4: Other
+
     memo TEXT,
 
     FOREIGN KEY (tenant_id) REFERENCES users(id)
@@ -154,4 +160,23 @@ CREATE TABLE IF NOT EXISTS room_events (
     memo TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (room_id) REFERENCES rooms(id)
+);
+
+CREATE TABLE IF NOT EXISTS items (
+    id SERIAL PRIMARY KEY,
+    owner_id INTEGER,
+    name TEXT,
+    price INTEGER,
+    status TEXT,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (owner_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS images (
+    id SERIAL PRIMARY KEY,
+    related_id INTEGER,
+    image_url TEXT,
+    is_main INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
