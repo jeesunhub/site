@@ -162,13 +162,32 @@ CREATE TABLE IF NOT EXISTS room_events (
     FOREIGN KEY (room_id) REFERENCES rooms(id)
 );
 
-CREATE TABLE IF NOT EXISTS items (
+CREATE TABLE IF NOT EXISTS room_advs (
+    id SERIAL PRIMARY KEY,
+    room_id INTEGER NOT NULL,
+    title TEXT,
+    description TEXT,
+    deposit INTEGER,
+    rent INTEGER,
+    management_fee INTEGER,
+    cleaning_fee INTEGER,
+    available_date TEXT,
+    status INTEGER DEFAULT 0,
+    created_by INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (room_id) REFERENCES rooms(id),
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS item_advs (
     id SERIAL PRIMARY KEY,
     owner_id INTEGER,
+    building_id INTEGER,
     name TEXT,
     price INTEGER,
     status TEXT,
     description TEXT,
+    is_anonymous INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (owner_id) REFERENCES users(id)
 );

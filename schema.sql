@@ -152,13 +152,15 @@ CREATE TABLE IF NOT EXISTS room_events (
     FOREIGN KEY (room_id) REFERENCES rooms(id)
 );
 
-CREATE TABLE IF NOT EXISTS items (
+CREATE TABLE IF NOT EXISTS item_advs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     owner_id INTEGER,
+    building_id INTEGER,
     name TEXT,
     price INTEGER,
     status TEXT,
     description TEXT,
+    is_anonymous INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (owner_id) REFERENCES users(id)
 );

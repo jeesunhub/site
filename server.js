@@ -129,6 +129,19 @@ app.get('/api/buildings/search-by-address', (req, res) => {
     });
 });
 
+// 0a. Public Stats (For Landing Page)
+app.get('/api/public/stats', (req, res) => {
+    const query = `
+        SELECT 
+            (SELECT COUNT(*) FROM room_advs WHERE status = 0) as roomCount,
+            (SELECT COUNT(*) FROM item_advs WHERE status = 0) as itemCount
+    `;
+    db.get(query, [], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(row || { roomCount: 0, itemCount: 0 });
+    });
+});
+
 // 1. Login API
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
@@ -685,7 +698,21 @@ app.get('/api/landlord/:id/buildings', (req, res) => {
     });
 });
 
-// 16. Create Building
+// 15a. Get Tenant's Buildings (from contracts)
+app.get('/api/tenant/:id/buildings', (req, res) => {
+    const tenantId = req.params.id;
+    // Get unique buildings where tenant has active or recent contract
+    const query = `
+        SELECT DISTINCT b.*
+        FROM buildings b
+        JOIN contracts c ON b.name = c.building
+        WHERE c.tenant_id = ? AND c.contract_end_date >= date('now')
+    `;
+    db.all(query, [tenantId], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
 app.post('/api/buildings', (req, res) => {
     const { landlord_id, name, address1, address2, memo } = req.body;
 
@@ -1194,7 +1221,7 @@ app.post('/api/room_advs', upload.array('photos', 5), (req, res) => {
 
             // If there are files, insert them into images table
             if (req.files && req.files.length > 0) {
-                const imgQuery = `INSERT INTO images (related_id, image_url, is_main) VALUES (?, ?, ?)`;
+                const imgQuery = `INSERT INTO images (related_id, image_url, is_main, type) VALUES (?, ?, ?, 'room')`;
                 // Use Promise.all to handle multiple inserts? Or just valid loop since sqlite is serial in node driver (mostly)
                 // But we are inside db.serialize, so we can run them.
 
@@ -1233,12 +1260,13 @@ app.post('/api/room_advs', upload.array('photos', 5), (req, res) => {
 // 34b. Get Single Room Advertisement
 app.get('/api/room_advs/:id', (req, res) => {
     const advId = req.params.id;
-    db.get('SELECT ra.*, r.building_id, r.room_number FROM room_advs ra JOIN rooms r ON ra.room_id = r.id WHERE ra.id = ?', [advId], (err, adv) => {
+    db.get('SELECT ra.*, r.building_id, r.room_number, b.name as building_name FROM room_advs ra JOIN rooms r ON ra.room_id = r.id JOIN buildings b ON r.building_id = b.id WHERE ra.id = ?', [advId], (err, adv) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!adv) return res.status(404).json({ error: 'Advertisement not found' });
 
         // Get images
-        db.all('SELECT * FROM images WHERE related_id = ? ORDER BY is_main DESC', [advId], (err, images) => {
+        // Get images
+        db.all("SELECT * FROM images WHERE related_id = ? AND type = 'room' ORDER BY is_main DESC", [advId], (err, images) => {
             if (err) return res.status(500).json({ error: err.message });
             adv.images = images;
             res.json(adv);
@@ -1249,13 +1277,13 @@ app.get('/api/room_advs/:id', (req, res) => {
 // 34c. Update Room Advertisement
 app.put('/api/room_advs/:id', upload.array('photos', 5), (req, res) => {
     const advId = req.params.id;
-    const { title, description, deposit, rent, management_fee, cleaning_fee, available_date } = req.body;
+    const { room_id, title, description, deposit, rent, management_fee, cleaning_fee, available_date } = req.body;
 
     db.run(`
         UPDATE room_advs 
-        SET title = ?, description = ?, deposit = ?, rent = ?, management_fee = ?, cleaning_fee = ?, available_date = ? 
+        SET room_id = ?, title = ?, description = ?, deposit = ?, rent = ?, management_fee = ?, cleaning_fee = ?, available_date = ? 
         WHERE id = ?`,
-        [title, description, deposit, rent, management_fee, cleaning_fee, available_date, advId],
+        [room_id, title, description, deposit, rent, management_fee, cleaning_fee, available_date, advId],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
 
@@ -1265,7 +1293,7 @@ app.put('/api/room_advs/:id', upload.array('photos', 5), (req, res) => {
                     if (err) return res.status(500).json({ error: err.message });
 
                     // Simply append
-                    const imgQuery = `INSERT INTO images (related_id, image_url, is_main) VALUES (?, ?, 0)`;
+                    const imgQuery = `INSERT INTO images (related_id, image_url, is_main, type) VALUES (?, ?, 0, 'room')`;
                     req.files.forEach(file => {
                         const imageUrl = `/uploads/${file.filename}`;
                         db.run(imgQuery, [advId, imageUrl]);
@@ -1291,10 +1319,118 @@ app.delete('/api/images/:id', (req, res) => {
 
 // 35. Get Advertised Items (renamed table)
 app.get('/api/items/adv', (req, res) => {
-    db.all(`SELECT i.*, u.nickname as owner_name FROM item_advs i LEFT JOIN users u ON i.owner_id = u.id`, [], (err, rows) => {
+    db.all(`SELECT i.*, u.nickname as owner_name, b.name as building_name 
+            FROM item_advs i 
+            LEFT JOIN users u ON i.owner_id = u.id
+            LEFT JOIN buildings b ON i.building_id = b.id`, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
     });
+});
+
+// 35a. Add Item Advertisement
+app.post('/api/item_advs', upload.array('photos', 5), (req, res) => {
+    const { owner_id, building_id, name, price, description, is_anonymous } = req.body;
+
+    // Handle boolean string from FormData
+    const isAnon = (is_anonymous === 'true' || is_anonymous === true || is_anonymous === 1 || is_anonymous === '1') ? 1 : 0;
+
+    db.serialize(() => {
+        db.run('BEGIN TRANSACTION');
+        const insertItem = `INSERT INTO item_advs (owner_id, building_id, name, price, description, status, is_anonymous) VALUES (?, ?, ?, ?, ?, 0, ?)`;
+        db.run(insertItem, [owner_id, building_id, name, price, description, isAnon], function (err) {
+            if (err) {
+                db.run('ROLLBACK');
+                return res.status(500).json({ error: err.message });
+            }
+            const itemId = this.lastID;
+
+            if (req.files && req.files.length > 0) {
+                const imgQuery = `INSERT INTO images (related_id, image_url, is_main, type) VALUES (?, ?, ?, 'item')`;
+                let completed = 0;
+                let hasError = false;
+                req.files.forEach((file, index) => {
+                    if (hasError) return;
+                    const isMain = index === 0 ? 1 : 0;
+                    const imageUrl = `/uploads/${file.filename}`;
+                    db.run(imgQuery, [itemId, imageUrl, isMain], function (err) {
+                        if (hasError) return;
+                        if (err) {
+                            hasError = true;
+                            db.run('ROLLBACK');
+                            return res.status(500).json({ error: err.message });
+                        }
+                        completed++;
+                        if (completed === req.files.length) {
+                            db.run('COMMIT');
+                            res.json({ message: 'Item listing created', id: itemId });
+                        }
+                    });
+                });
+            } else {
+                db.run('COMMIT');
+                res.json({ message: 'Item listing created', id: itemId });
+            }
+        });
+    });
+});
+
+// 35b. Get Single Item Advertisement
+app.get('/api/item_advs/:id', (req, res) => {
+    const itemId = req.params.id;
+    const query = `
+        SELECT i.*, u.nickname as owner_name, b.name as building_name 
+        FROM item_advs i 
+        LEFT JOIN users u ON i.owner_id = u.id
+        LEFT JOIN buildings b ON i.building_id = b.id
+        WHERE i.id = ?
+    `;
+    db.get(query, [itemId], (err, item) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!item) return res.status(404).json({ error: 'Item not found' });
+
+        db.all("SELECT * FROM images WHERE related_id = ? AND type = 'item' ORDER BY is_main DESC", [itemId], (err, images) => {
+            if (err) return res.status(500).json({ error: err.message });
+            item.images = images;
+            res.json(item);
+        });
+    });
+});
+
+// 35c. Update Item Advertisement
+app.put('/api/item_advs/:id', upload.array('photos', 5), (req, res) => {
+    const itemId = req.params.id;
+    const { building_id, name, price, description, is_anonymous } = req.body;
+
+    const isAnon = (is_anonymous === 'true' || is_anonymous === true || is_anonymous === 1 || is_anonymous === '1') ? 1 : 0;
+
+    db.run(`
+        UPDATE item_advs 
+        SET building_id = ?, name = ?, price = ?, description = ?, is_anonymous = ?
+        WHERE id = ?`,
+        [building_id, name, price, description, isAnon, itemId],
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+
+            // Handle new photos
+            if (req.files && req.files.length > 0) {
+                const imgQuery = `INSERT INTO images (related_id, image_url, is_main, type) VALUES (?, ?, 0, 'item')`;
+
+                // If there are no existing images, the first new one matches is_main=0 logic? 
+                // Usually we might want one main. But let's keep it simple: append new ones as non-main (0) unless logic dictates otherwise.
+                // The prompt for POST sets the first one as main. Here we just add more.
+
+                req.files.forEach(file => {
+                    const imageUrl = `/uploads/${file.filename}`;
+                    db.run(imgQuery, [itemId, imageUrl]);
+                });
+
+                res.json({ message: 'Item listing updated with new photos' });
+            } else {
+                res.json({ message: 'Item listing updated' });
+            }
+        }
+    );
 });
 
 // 36. Update Room Status (for Advertising 완료)

@@ -16,8 +16,8 @@ function convertSqlToPg(sql) {
     let newSql = sql.replace(/\?/g, () => `$${pIdx++}`);
 
     // Replace SQLite specific functions
-    newSql = newSql.replace(/date\('now'\)/gi, 'CURRENT_DATE');
     newSql = newSql.replace(/datetime\('now'\)/gi, 'CURRENT_TIMESTAMP');
+    newSql = newSql.replace(/date\('now'\)/gi, 'CURRENT_DATE');
 
     // Handle shift logic from server.js: date(bill_month || '-01', '${direction} month')
     if (newSql.includes("date(bill_month || '-01'")) {
@@ -139,7 +139,9 @@ function ensureColumns() {
     const columns = [
         { table: 'users', name: 'approved', type: 'INTEGER DEFAULT 0' },
         { table: 'users', name: 'noti', type: 'INTEGER DEFAULT 0' },
-        { table: 'payments', name: 'type', type: 'INTEGER DEFAULT 1' }
+        { table: 'payments', name: 'type', type: 'INTEGER DEFAULT 1' },
+        { table: 'item_advs', name: 'building_id', type: 'INTEGER' },
+        { table: 'images', name: 'type', type: "TEXT DEFAULT 'room'" }
     ];
 
     columns.forEach(col => {

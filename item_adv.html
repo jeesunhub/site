@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>물건 내놓기 관리 - Sugar</title>
+    <title>물건 내놓기 - Sugar</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     <style>
@@ -28,6 +28,7 @@
             background: linear-gradient(to right, #6366f1, #a855f7);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
 
         .container {
@@ -121,6 +122,142 @@
             color: white;
             background: rgba(255, 255, 255, 0.1);
         }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 3.5rem;
+            /* Below header */
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: flex-start;
+            /* Start from top */
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+            padding-top: 1rem;
+        }
+
+        .modal-content {
+            background: #1e293b;
+            padding: 1.5rem;
+            border-radius: 1rem;
+            width: 90%;
+            max-width: 500px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-height: calc(100vh - 5rem);
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .modal-content h3 {
+            margin: 0 0 1rem 0;
+            color: #f8fafc;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.8rem;
+            color: #94a3b8;
+            margin-bottom: 0.3rem;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.7rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0.5rem;
+            color: white;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.8rem;
+            margin-top: 1.5rem;
+        }
+
+        .photo-preview-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .photo-preview-item {
+            width: 60px;
+            height: 60px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 0.3rem;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+        }
+
+        .photo-preview-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .warning-box {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+            padding: 0.8rem;
+            border-radius: 0.5rem;
+            font-size: 0.85rem;
+            margin-bottom: 1.5rem;
+            /* Changed margin */
+            display: flex;
+            flex-direction: column;
+            /* Vertical layout */
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+
+        .warning-badge {
+            background: #ef4444;
+            color: white;
+            padding: 0.1rem 0.4rem;
+            border-radius: 0.3rem;
+            font-size: 0.7rem;
+            font-weight: bold;
+            display: inline-block;
+        }
+
+        .building-badge {
+            width: 5rem;
+            height: 3.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(168, 85, 247, 0.1);
+            color: #d8b4fe;
+            border-radius: 0.5rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-align: center;
+            line-height: 1.2;
+            flex-shrink: 0;
+            padding: 0.2rem;
+            word-break: keep-all;
+        }
     </style>
 </head>
 
@@ -128,7 +265,7 @@
     <!-- Navbar -->
     <div class="header">
         <h1>물건 내놓기</h1>
-        <a href="#" class="btn-add" onclick="alert('물건 추가 기능 준비 중')">물건 추가</a>
+        <a href="#" class="btn-add" onclick="openAddModal()">물건 추가</a>
     </div>
 
     <div class="container">
@@ -137,9 +274,66 @@
         </ul>
     </div>
 
+    <!-- Add Item Modal -->
+    <div id="add-modal" class="modal-overlay" style="display: none;" onclick="if(event.target === this) closeModal()">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                <h3 id="modal-title-text" style="margin:0;">물건 내놓기</h3>
+                <div style="display:flex; align-items:center; gap:0.3rem;">
+                    <input type="checkbox" id="modal-anon" style="width:auto; cursor:pointer;">
+                    <label for="modal-anon" style="margin:0; cursor:pointer; font-size:0.85rem; color:#ccc;">익명으로
+                        내놓기</label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>건물 선택</label>
+                <select id="modal-building" class="form-input">
+                    <option value="">건물을 선택하세요</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>제목</label>
+                <input type="text" id="modal-title" class="form-input" placeholder="물건 제목 입력">
+            </div>
+
+            <div class="form-group">
+                <label>가격 (원)</label>
+                <input type="number" id="modal-price" class="form-input" placeholder="0 (무료나눔은 0)">
+            </div>
+
+            <div class="form-group">
+                <label>사진 (최대 5장)</label>
+                <div class="photo-upload-container">
+                    <button class="action-btn" style="background:var(--primary); margin-bottom:0.5rem;"
+                        onclick="document.getElementById('photo-input').click()">사진 추가</button>
+                    <input type="file" id="photo-input" multiple accept="image/*" style="display:none"
+                        onchange="handleFileSelect(this)">
+                    <div id="photo-preview" class="photo-preview-list"></div>
+                </div>
+            </div>
+
+
+
+            <div class="form-group">
+                <label>설명</label>
+                <textarea id="modal-desc" class="form-input" rows="3" placeholder="상품 설명"></textarea>
+            </div>
+
+            <div class="modal-actions">
+                <button class="action-btn" style="background:var(--surface); color:var(--text-secondary)"
+                    onclick="closeModal()">취소</button>
+                <button class="action-btn btn-add" onclick="submitItemAdv()">저장</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/js/common.js"></script>
     <script>
         const user = JSON.parse(localStorage.getItem('user'));
+        let selectedFiles = [];
+        let currentEditItemId = null;
 
         document.addEventListener('DOMContentLoaded', () => {
             renderNavbar();
@@ -169,24 +363,242 @@
                 const li = document.createElement('li');
                 li.className = 'notice-item';
 
-                const price = item.price ? (item.price / 10000).toLocaleString() + '만원' : '무료나눔';
-                const owner = item.owner_name || '알 수 없음';
+                const price = item.price ? (item.price / 1).toLocaleString() + '원' : '무료나눔';
+                let owner = item.owner_name || '알 수 없음';
+                if (item.is_anonymous) {
+                    owner = '익명';
+                }
+                const building = item.building_name || '건물미정';
+                const dateStr = item.created_at ? item.created_at.split(' ')[0] : '';
 
                 li.innerHTML = `
                     <div class="notice-summary">
-                        <div class="item-icon">📦</div>
+                        <div class="building-badge">${building}</div>
                         <div class="notice-text-group">
-                            <div class="notice-title">${item.name}</div>
-                            <div class="notice-meta">${price} | 판매자: ${owner}</div>
+                            <div class="notice-title" style="display:flex; align-items:center; gap:0.5rem;">
+                                ${item.name} 
+                                <span style="font-size:0.8rem; color:#94a3b8; font-weight:400;">${price}</span>
+                            </div>
+                            <div class="notice-meta">${dateStr} ${owner}</div>
                         </div>
                         <div class="notice-right">
-                             <button class="action-btn" onclick="alert('수정 기능 준비 중')">수정</button>
+                             <button class="action-btn" onclick="openEditModal(${item.id})">수정</button>
                              <button class="action-btn" style="background:#22c55e" onclick="alert('판매 완료 처리 준비 중')">완료</button>
                         </div>
                     </div>
                 `;
                 list.appendChild(li);
             });
+        }
+
+        // --- Modal Logic ---
+
+        async function openAddModal() {
+            currentEditItemId = null;
+            const titleElem = document.getElementById('modal-title-text');
+            if (titleElem) titleElem.textContent = '물건 내놓기';
+
+            document.getElementById('add-modal').style.display = 'flex';
+
+            // Reset
+            document.getElementById('modal-building').value = '';
+            document.getElementById('modal-title').value = '';
+            document.getElementById('modal-price').value = '';
+            document.getElementById('modal-desc').value = '';
+            document.getElementById('modal-anon').checked = false;
+            selectedFiles = [];
+
+            const container = document.getElementById('photo-preview');
+            container.innerHTML = '';
+
+            const fileInput = document.getElementById('photo-input');
+            if (fileInput) fileInput.value = '';
+
+            await fetchBuildings();
+        }
+
+        async function openEditModal(id) {
+            currentEditItemId = id;
+            const titleElem = document.getElementById('modal-title-text');
+            if (titleElem) titleElem.textContent = '물건 수정하기';
+
+            document.getElementById('add-modal').style.display = 'flex';
+
+            // Reset files selection
+            selectedFiles = [];
+            const container = document.getElementById('photo-preview');
+            container.innerHTML = '';
+
+            const fileInput = document.getElementById('photo-input');
+            if (fileInput) fileInput.value = '';
+
+            await fetchBuildings();
+
+            try {
+                const res = await fetch(`/api/item_advs/${id}`);
+                if (!res.ok) throw new Error('Failed to load item');
+                const item = await res.json();
+
+                document.getElementById('modal-building').value = item.building_id;
+                document.getElementById('modal-title').value = item.name;
+                document.getElementById('modal-price').value = item.price;
+                document.getElementById('modal-desc').value = item.description;
+                document.getElementById('modal-anon').checked = (item.is_anonymous === 1);
+
+                // Render existing photos
+                if (item.images && item.images.length > 0) {
+                    item.images.forEach(img => {
+                        const div = document.createElement('div');
+                        div.className = 'photo-preview-item';
+                        div.innerHTML = `<img src="${img.image_url}" title="Existing Image">
+                                          <div style="position:absolute; top:0; right:0; background:rgba(239, 68, 68, 0.8); color:white; width:20px; height:20px; text-align:center; line-height:20px; font-size:12px; cursor:pointer;" onclick="deleteExistingImage(${img.id}, this)">×</div>`;
+                        container.appendChild(div);
+                    });
+                }
+            } catch (err) {
+                console.error(err);
+                alert('물건 정보를 불러오는데 실패했습니다.');
+                closeModal();
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('add-modal').style.display = 'none';
+        }
+
+        async function fetchBuildings() {
+            const select = document.getElementById('modal-building');
+            if (select.options.length > 1) return;
+
+            select.innerHTML = '<option value="">로딩 중...</option>';
+
+            let url = '';
+            if (user.role === 'admin') url = '/api/admin/buildings';
+            else if (user.role === 'landlord') url = `/api/landlord/${user.id}/buildings`;
+            else if (user.role === 'tenant') url = `/api/tenant/${user.id}/buildings`;
+            else {
+                url = '/api/admin/buildings';
+            }
+
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('Fetch failed');
+                const buildings = await res.json();
+
+                select.innerHTML = '<option value="">건물을 선택하세요</option>';
+                if (buildings.length === 0) {
+                    select.innerHTML = '<option value="">선택 가능한 건물이 없습니다</option>';
+                    return;
+                }
+                buildings.forEach(b => {
+                    const opt = document.createElement('option');
+                    opt.value = b.id;
+                    opt.textContent = b.name;
+                    select.appendChild(opt);
+                });
+            } catch (err) {
+                console.error(err);
+                select.innerHTML = '<option value="">건물 로드 실패</option>';
+            }
+        }
+
+        function handleFileSelect(input) {
+            const files = Array.from(input.files);
+            const currentPreviewCount = document.querySelectorAll('.photo-preview-item').length;
+            if (currentPreviewCount + files.length > 5) {
+                alert('사진은 최대 5장까지만 업로드 가능합니다.');
+                return;
+            }
+            selectedFiles = selectedFiles.concat(files);
+            renderPhotoPreviews();
+        }
+
+        function renderPhotoPreviews() {
+            const container = document.getElementById('photo-preview');
+            // Remove checks for new-photo
+            const newItems = container.querySelectorAll('.new-photo');
+            newItems.forEach(el => el.remove());
+
+            selectedFiles.forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const div = document.createElement('div');
+                    div.className = 'photo-preview-item new-photo';
+                    div.innerHTML = `<img src="${e.target.result}" title="${file.name}">
+                                     <div style="position:absolute; top:0; right:0; background:rgba(0,0,0,0.5); color:white; width:20px; height:20px; text-align:center; line-height:20px; font-size:12px; cursor:pointer;" onclick="removeNewPhoto(${index})">×</div>`;
+                    container.appendChild(div);
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function removeNewPhoto(index) {
+            selectedFiles.splice(index, 1);
+            renderPhotoPreviews();
+        }
+
+        async function deleteExistingImage(imgId, btnElement) {
+            if (!confirm('사진을 삭제하시겠습니까?')) return;
+            try {
+                const res = await fetch(`/api/images/${imgId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    btnElement.closest('.photo-preview-item').remove();
+                } else {
+                    alert('사진 삭제 실패');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('오류 발생');
+            }
+        }
+
+        async function submitItemAdv() {
+            const buildingId = document.getElementById('modal-building').value;
+            const title = document.getElementById('modal-title').value;
+            const price = document.getElementById('modal-price').value;
+            const desc = document.getElementById('modal-desc').value;
+            const isAnon = document.getElementById('modal-anon').checked;
+
+            if (!buildingId) return alert('건물을 선택해주세요.');
+            if (!title) return alert('제목을 입력해주세요.');
+
+            const formData = new FormData();
+            formData.append('owner_id', user.id);
+            formData.append('building_id', buildingId);
+            formData.append('name', title);
+            formData.append('price', price || 0);
+            formData.append('description', desc);
+            formData.append('is_anonymous', isAnon);
+
+            selectedFiles.forEach(file => {
+                formData.append('photos', file);
+            });
+
+            let url = '/api/item_advs';
+            let method = 'POST';
+            if (currentEditItemId) {
+                url = `/api/item_advs/${currentEditItemId}`;
+                method = 'PUT';
+            }
+
+            try {
+                const res = await fetch(url, {
+                    method: method,
+                    body: formData
+                });
+                if (res.ok) {
+                    if (currentEditItemId) alert('수정되었습니다.');
+                    else alert('물건이 등록되었습니다.');
+                    closeModal();
+                    fetchItems();
+                } else {
+                    const err = await res.json();
+                    alert('오류: ' + err.error);
+                }
+            } catch (err) {
+                console.error(err);
+                alert('서버 통신 오류');
+            }
         }
     </script>
 </body>
