@@ -323,7 +323,7 @@
     </div>
 
     <!-- Paste Modal -->
-    <div id="paste-modal" class="modal">
+    <div id="paste-modal" class="modal" onclick="if(event.target === this) closeModal('paste-modal')">
         <div class="modal-content">
             <div class="modal-header">
                 <h2>문자 붙여넣기</h2>
@@ -337,7 +337,7 @@
     </div>
 
     <!-- Match Tenant Modal -->
-    <div id="match-modal" class="modal">
+    <div id="match-modal" class="modal" onclick="if(event.target === this) closeModal('match-modal')">
         <div class="modal-content">
             <div class="modal-header">
                 <h2>세입자 매칭</h2>

@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     phone_number TEXT,
     noti INTEGER DEFAULT 0,
     approved INTEGER DEFAULT 0,
+    status INTEGER DEFAULT 1,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

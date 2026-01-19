@@ -228,9 +228,6 @@
         <div style="display: flex; gap: 0.5rem; align-items: center;">
             <input type="file" id="ai-file-input" accept=".pdf, .png, .jpg, .jpeg" style="display: none;"
                 onchange="handleFileSelect(event)">
-            <button id="debug-view-btn" class="btn btn-secondary"
-                style="display: none; background: #4b5563; padding: 0.4rem 0.8rem; font-size: 0.8rem;"
-                onclick="openDebugModal()">Debug</button>
             <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;"
                 onclick="startAIUpload()">파일 업로드</button>
             <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;"
@@ -246,7 +243,7 @@
     </div>
 
     <!-- Debug Modal -->
-    <div id="debug-modal" class="modal">
+    <div id="debug-modal" class="modal" onclick="if(event.target === this) closeModal('debug-modal')">
         <div class="modal-content" style="max-width: 800px;">
             <div class="modal-header">
                 <h2>추출된 텍스트 내용 (Debug)</h2>
@@ -270,7 +267,7 @@
             </div>
         </div>
     </div>
-    <div id="terminate-modal" class="modal">
+    <div id="terminate-modal" class="modal" onclick="if(event.target === this) closeModal('terminate-modal')">
         <div class="modal-content simple-modal">
             <div class="modal-header">
                 <h2>계약 종료 설정</h2>
@@ -310,10 +307,7 @@
 
                 if (tenants.length === 0) {
                     document.getElementById('tenant-blocks-container').innerHTML = `
-                        <div style="text-align:center; padding:5rem; background:var(--card-bg); border-radius:1.5rem; border:1px solid rgba(255,255,255,0.1)">
-                            <p style="opacity:0.5; margin-bottom:1.5rem">등록된 세입자가 없습니다.</p>
-                            <button class="btn" onclick="navigateToContractForm('new')">첫 세입자 추가하기</button>
-                        </div>
+                         <div style="text-align:center; padding:3rem; opacity:0.5;">데이터가 없습니다.</div>
                     `;
                     return;
                 }
@@ -452,8 +446,6 @@
                     }
                 }
 
-                document.getElementById('debug-view-btn').style.display = 'inline-flex';
-
                 // Automatically proceed to create contract with parsed data
                 proceedWithParsedData();
 
@@ -590,7 +582,8 @@
                     tenantName: "",
                     tenantPhone: "",
                     tenantDob: ""
-                }
+                },
+                nameKeywords: []
             };
 
             // 1. Address: between 소재지 and 토지/건물 (fuzzy)
@@ -665,44 +658,112 @@
                 data.raw.endDate = endMatch[1];
             }
 
-            // 9. Tenant Information: search from the end
-            const tenantMatches = [...t.matchAll(/임\s*차\s*인/g)];
-            if (tenantMatches.length > 0) {
-                const lastMatch = tenantMatches[tenantMatches.length - 1];
-                const sub = t.substring(lastMatch.index);
+            // 9. Tenant Information: Improved robust extraction
+            const tenantKeywords = ['임\s*차\s*인', '임\s*차\s*인\s*\(?\s*을\s*\)?'];
+            let sub = "";
+            let foundTenantHeader = false;
 
-                // 주민등록번호 (Dob)
-                const juminRegex = /주\s*민\s*등\s*록\s*번\s*호\s*([0-9\s-]+)/;
-                const juminMatch = sub.match(juminRegex);
-                if (juminMatch) {
-                    const cleaned = juminMatch[1].replace(/[\s-]/g, '');
+            for (const kw of tenantKeywords) {
+                const regex = new RegExp(kw, 'g');
+                const matches = [...t.matchAll(regex)];
+                if (matches.length > 0) {
+                    const lastMatch = matches[matches.length - 1];
+                    sub = t.substring(lastMatch.index);
+                    foundTenantHeader = true;
+                    break;
+                }
+            }
+
+            // If no "Tenant" header found, use the last 40% of the text as fallback
+            if (!foundTenantHeader) {
+                sub = t.substring(Math.floor(t.length * 0.6));
+            }
+
+
+
+            // 성명 (Name) - select the LAST "성명" and extract until the first whitespace
+            let tenantNameIdx = -1;
+            const allNameMatches = [...t.matchAll(/성\s*명/g)];
+            if (allNameMatches.length > 0) {
+                const lastMatch = allNameMatches[allNameMatches.length - 1];
+                const startPos = lastMatch.index + lastMatch[0].length;
+                const postKeyword = t.substring(startPos, startPos + 50);
+
+                const nameCapture = postKeyword.match(/^[ \t:：|ㅣ\s]*([^ \t\n\r\s]{2,10})/);
+                if (nameCapture) {
+                    data.tenantName = nameCapture[1].trim();
+                    data.raw.tenantName = "(마지막 키워드 근거) " + lastMatch[0] + " " + nameCapture[0];
+                    tenantNameIdx = lastMatch.index;
+                }
+            }
+
+            // 주민등록번호 (Dob) - Find "주민등록번호" keyword appearing BEFORE the tenant name
+            if (tenantNameIdx !== -1) {
+                const allJuminMatches = [...t.matchAll(/(?:주\s*민\s*등\s*록\s*번\s*호|생\s*년\s*월\s*일)/g)];
+                const matchesBeforeName = allJuminMatches.filter(m => m.index < tenantNameIdx);
+                if (matchesBeforeName.length > 0) {
+                    const closestMatch = matchesBeforeName[matchesBeforeName.length - 1];
+                    const startPos = closestMatch.index + closestMatch[0].length;
+                    const postJuminSub = t.substring(startPos, startPos + 50);
+                    const juminCapture = postJuminSub.match(/^[ \t:：|ㅣ\s]*([0-9\s-]{6,})/);
+                    if (juminCapture) {
+                        const cleaned = juminCapture[1].replace(/[\s-]/g, '');
+                        if (cleaned.length >= 6) {
+                            const birthday = cleaned.slice(0, 6);
+                            const yy = parseInt(birthday.slice(0, 2));
+                            const year = yy > 30 ? '19' + birthday.slice(0, 2) : '20' + birthday.slice(0, 2);
+                            data.tenantDob = `${year}-${birthday.slice(2, 4)}-${birthday.slice(4, 6)}`;
+                            data.raw.tenantDob = "(성명 전 키워드 검색) " + closestMatch[0] + " " + juminCapture[0];
+                        }
+                    }
+                }
+            }
+
+            // FALLBACK for DOB: If not found, check after the name
+            if (!data.tenantDob && tenantNameIdx !== -1) {
+                const afterName = t.substring(tenantNameIdx).substring(0, 150);
+                const fallbackJuminMatch = afterName.match(/(?:주\s*민\s*등\s*록\s*번\s*호|생\s*년\s*월\s*일)?\s*[:：]?\s*([0-9\s-]{6,})/);
+                if (fallbackJuminMatch) {
+                    const cleaned = fallbackJuminMatch[1].replace(/[\s-]/g, '');
                     if (cleaned.length >= 6) {
                         const birthday = cleaned.slice(0, 6);
                         const yy = parseInt(birthday.slice(0, 2));
                         const year = yy > 30 ? '19' + birthday.slice(0, 2) : '20' + birthday.slice(0, 2);
                         data.tenantDob = `${year}-${birthday.slice(2, 4)}-${birthday.slice(4, 6)}`;
-                        data.raw.tenantDob = juminMatch[0];
+                        data.raw.tenantDob = "(성명 후속 검색) " + fallbackJuminMatch[0];
                     }
                 }
+            }
 
-                // 전화
-                const phoneRegex = /전\s*화\s*([0-9\s-]+)/;
-                const phoneMatch = sub.match(phoneRegex);
-                if (phoneMatch) {
-                    data.tenantPhone = phoneMatch[1].replace(/\s/g, ''); // Remove spaces, keep hyphens
-                    data.raw.tenantPhone = phoneMatch[0];
-                }
-
-                // 성명
-                const nameRegex = /성\s*명\s*(.*?)\s*(인\s*\(+\s*인\s*\)+|인\s*$|인\s+(?=전\s*화|주\s*민)|인)/;
-                const nameMatch = sub.match(nameRegex);
-                if (nameMatch) {
-                    let name = nameMatch[1].trim();
-                    name = name.replace(/\s{2,}/g, ' ');
-                    data.tenantName = name;
-                    data.raw.tenantName = nameMatch[0];
+            // 전화 (Phone) - Search for "전화" keyword appearing BEFORE the tenant name
+            if (tenantNameIdx !== -1) {
+                const allPhoneMatches = [...t.matchAll(/(?:전\s*화|연\s*락\s*처)/g)];
+                const matchesBeforeName = allPhoneMatches.filter(m => m.index < tenantNameIdx);
+                if (matchesBeforeName.length > 0) {
+                    const closestMatch = matchesBeforeName[matchesBeforeName.length - 1];
+                    const startPos = closestMatch.index + closestMatch[0].length;
+                    const postPhoneSub = t.substring(startPos, startPos + 50);
+                    const phoneCapture = postPhoneSub.match(/^[ \t:：|ㅣ\s]*([0-9\s-]{9,})/);
+                    if (phoneCapture) {
+                        data.tenantPhone = phoneCapture[1].replace(/\s/g, '');
+                        data.raw.tenantPhone = "(성명 전 키워드 검색) " + closestMatch[0] + " " + phoneCapture[0];
+                    }
                 }
             }
+
+            // FALLBACK: If phone is still not found, check after the name (standard block)
+            if (!data.tenantPhone && tenantNameIdx !== -1) {
+                const afterName = t.substring(tenantNameIdx).substring(0, 150);
+                const fallbackPhoneMatch = afterName.match(/(?:전\s*화|연\s*락\s*처)?\s*[:：]?\s*([0-9\s-]{9,})/);
+                if (fallbackPhoneMatch) {
+                    data.tenantPhone = fallbackPhoneMatch[1].replace(/\s/g, '');
+                    data.raw.tenantPhone = "(성명 후속 검색) " + fallbackPhoneMatch[0];
+                }
+            }
+
+            // Collect all "name" keywords for debugging
+            const allNameKeywords = [...t.matchAll(/성\s*명/g)];
+            data.nameKeywords = allNameKeywords.map(m => t.substring(m.index, m.index + 20));
 
             return data;
         }
@@ -792,6 +853,11 @@
 
         function proceedWithParsedData() {
             closeModal('debug-modal');
+
+            // Store separately to be robust
+            sessionStorage.setItem('lastExtractedText', extractedText);
+            sessionStorage.setItem('lastFullParsedData', JSON.stringify(parsedData));
+
             const params = new URLSearchParams();
             params.set('action', 'new');
             if (parsedData.buildingName) params.set('building_name', parsedData.buildingName);

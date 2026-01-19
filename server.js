@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
@@ -133,26 +134,42 @@ app.get('/api/buildings/search-by-address', (req, res) => {
 app.get('/api/public/stats', (req, res) => {
     const query = `
         SELECT 
-            (SELECT COUNT(*) FROM room_advs WHERE status = 0) as roomCount,
-            (SELECT COUNT(*) FROM item_advs WHERE status = 0) as itemCount
+            (SELECT COUNT(*) FROM room_advs WHERE status = 0) as "roomCount",
+            (SELECT COUNT(*) FROM item_advs WHERE status = '0') as "itemCount"
     `;
     db.get(query, [], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(row || { roomCount: 0, itemCount: 0 });
+        if (err) {
+            console.error('Stats Error:', err);
+            return res.status(500).json({ error: err.message });
+        }
+        // PG might return counts as strings or lowercase depending on driver/quoting
+        const data = row || { roomCount: 0, itemCount: 0 };
+        res.json({
+            roomCount: parseInt(data.roomCount || data.roomcount || 0, 10),
+            itemCount: parseInt(data.itemCount || data.itemcount || 0, 10)
+        });
     });
+});
+
+app.get('/api/config/kakao', (req, res) => {
+    res.json({ kakaoKey: process.env.KAKAO_JS_KEY });
 });
 
 // 1. Login API
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
+    console.log(`[Login Attempt] ID: ${username}`);
 
-    // First check if user exists by login_id
-    db.get('SELECT * FROM users WHERE login_id = ?', [username], (err, user) => {
-        if (err) return res.status(500).json({ error: err.message });
+    // First check if user exists by login_id (Case-insensitive check for better UX)
+    db.get('SELECT * FROM users WHERE LOWER(login_id) = LOWER(?)', [username], (err, user) => {
+        if (err) {
+            console.error('Login Error:', err);
+            return res.status(500).json({ error: err.message });
+        }
 
         // If no user found with that ID
         if (!user) {
-            return res.status(404).json({ error: '없는 사용자입니다.' });
+            return res.status(404).json({ error: '존재하지 않는 사용자 아이디입니다.' });
         }
 
         // Check password
@@ -212,6 +229,67 @@ app.post('/api/signup', (req, res) => {
                 }
             );
         });
+    });
+});
+
+// 1b. Room Application API (Applicant)
+app.post('/api/apply', (req, res) => {
+    const { name, phone, memo, landlordId } = req.body;
+
+    if (!name || !phone) {
+        return res.status(400).json({ error: 'Name and phone are required' });
+    }
+
+    const login_id = name;
+
+    db.get('SELECT id FROM users WHERE login_id = ? OR phone_number = ?', [login_id, phone], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        const password = Math.floor(1000000000 + Math.random() * 9000000000).toString(); // 10 digit random
+        const colors = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6'];
+        const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+        const proceedWithInsert = (finalId) => {
+            db.run(`INSERT INTO users (login_id, password, nickname, role, phone_number, color, approved, status) VALUES (?, ?, ?, ?, ?, ?, 0, 2)`,
+                [finalId, password, name, 'tenant', phone, randomColor],
+                function (err) {
+                    if (err) {
+                        if (err.message.includes('UNIQUE')) {
+                            const newId = name + Math.floor(Math.random() * 1000);
+                            return proceedWithInsert(newId);
+                        }
+                        return res.status(500).json({ error: err.message });
+                    }
+                    const newUserId = this.lastID;
+
+                    // Save relationship
+                    if (landlordId) {
+                        db.run(`INSERT INTO landlord_tenant (landlord_id, tenant_id, start_date) VALUES (?, ?, date('now'))`,
+                            [landlordId, newUserId],
+                            (err) => {
+                                if (err) console.error('Error saving relationship:', err.message);
+                            }
+                        );
+                    }
+
+                    // Create Notification
+                    const content = `방 구하는 사람 정보\n이름: ${name}\n연락처: ${phone}\n메모: ${memo}`;
+                    db.run(`INSERT INTO noti (author_id, title, content, type) VALUES (?, ?, ?, ?)`,
+                        [newUserId, '방구해요 신청', content, '방구해요'],
+                        function (err) {
+                            if (err) console.error('Error creating apply notification:', err.message);
+                            res.json({ message: 'Application submitted', userId: newUserId });
+                        }
+                    );
+                }
+            );
+        };
+
+        if (row) {
+            proceedWithInsert(login_id + Math.floor(Math.random() * 1000));
+        } else {
+            proceedWithInsert(login_id);
+        }
     });
 });
 
@@ -1057,16 +1135,18 @@ app.get('/api/notices', (req, res) => {
         `;
     } else if (role === 'landlord') {
         // Landlord:
-        // 1. Own posts (n.author_id = ?)
-        // 2. Tenants' posts (n.author_id IN (SELECT tenant_id FROM landlord_tenant WHERE landlord_id = ?))
-        // 3. Admin's posts where type='공지사항' (u.role='admin' AND n.type='공지사항')
+        // 1. Own posts
+        // 2. Posts from their related tenants (via landlord_tenant relationship)
+        // 3. Admin's posts with type '공지사항'
+        // Filter: Hide '가입신청' (Admin only)
         query = `
             SELECT ${baseFields}
             FROM noti n
             LEFT JOIN users u ON n.author_id = u.id
-            WHERE n.author_id = ?
+            WHERE (n.author_id = ?
                OR n.author_id IN (SELECT tenant_id FROM landlord_tenant WHERE landlord_id = ?)
-               OR (u.role = 'admin' AND n.type = '공지사항')
+               OR (u.role = 'admin' AND n.type = '공지사항'))
+               AND (n.type IS NULL OR n.type != '가입신청')
             ORDER BY n.created_at DESC
         `;
         params = [user_id, user_id];
@@ -1075,13 +1155,15 @@ app.get('/api/notices', (req, res) => {
         // 1. Own posts (n.author_id = ?)
         // 2. Admin's posts where type='공지사항' (u.role='admin' AND n.type='공지사항')
         // 3. Their Landlord's posts where type='공지사항' (n.author_id IN (SELECT landlord_id FROM landlord_tenant WHERE tenant_id = ?) AND n.type = '공지사항')
+        // Filter: Hide '가입신청' (Visible only to admin)
         query = `
             SELECT ${baseFields}
             FROM noti n
             LEFT JOIN users u ON n.author_id = u.id
-            WHERE n.author_id = ?
+            WHERE (n.author_id = ?
                OR (u.role = 'admin' AND n.type = '공지사항')
-               OR (n.author_id IN (SELECT landlord_id FROM landlord_tenant WHERE tenant_id = ?) AND n.type = '공지사항')
+               OR (n.author_id IN (SELECT landlord_id FROM landlord_tenant WHERE tenant_id = ?) AND n.type = '공지사항'))
+               AND (n.type IS NULL OR n.type != '가입신청')
             ORDER BY n.created_at DESC
         `;
         params = [user_id, user_id];

@@ -22,14 +22,9 @@
         }
 
         .signup-card {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 3rem;
-            border-radius: 2rem;
             width: 100%;
             max-width: 500px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            /* background, border, shadow removed */
         }
 
         h1 {
@@ -180,7 +175,7 @@
 
         .modal-content {
             background: #1e293b;
-            padding: 2.5rem;
+            padding: 2.5rem 1rem;
             border-radius: 1.5rem;
             max-width: 400px;
             width: 90%;
@@ -354,7 +349,7 @@
     </div>
 
     <!-- Alert Modal -->
-    <div id="alert-modal" class="modal-overlay">
+    <div id="alert-modal" class="modal-overlay" onclick="if(event.target === this) closeModal()">
         <div class="modal-content">
             <div class="modal-title" id="alert-title">알림</div>
             <div class="modal-text" id="alert-text">메시지 내용이 표시됩니다.</div>
@@ -365,7 +360,7 @@
     </div>
 
     <!-- Confirm Modal -->
-    <div id="confirm-modal" class="modal-overlay">
+    <div id="confirm-modal" class="modal-overlay" onclick="if(event.target === this) closeConfirmModal()">
         <div class="modal-content">
             <div class="modal-title">가입 신청 확인</div>
             <div class="modal-text">계약서 확인 및 임대인 승인 후 가입이 완료됩니다.<br>입력하신 정보로 가입 신청하시겠습니까?</div>

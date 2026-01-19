@@ -7,6 +7,7 @@
     <title>방 있어요 - Sugar</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <style>
         body {
             margin: 0;
@@ -129,31 +130,59 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            background: #0f172a;
+            display: none;
+            flex-direction: column;
             z-index: 1000;
-            backdrop-filter: blur(5px);
         }
 
-        .modal-content {
-            background: #1e293b;
-            padding: 1.5rem;
-            border-radius: 1rem;
-            width: 95%;
-            max-width: 600px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            max-height: 90vh;
+        .modal-content-full {
+            background: transparent;
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            border-radius: 0;
+            border: none;
             overflow-y: auto;
             box-sizing: border-box;
             position: relative;
+            display: flex;
+            flex-direction: column;
         }
 
-        .modal-content h3 {
-            margin: 0 0 1.5rem 0;
+        .modal-header-custom {
+            display: flex;
+            align-items: center;
+            padding: 0 1.5rem;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            height: 3.5rem;
+            flex-shrink: 0;
+        }
+
+        .modal-header-custom h3 {
+            margin: 0;
             color: #f8fafc;
-            font-size: 1.2rem;
+            font-size: 1.1rem;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .back-btn-custom {
+            color: #f8fafc;
+            text-decoration: none;
+            font-size: 1.5rem;
+            margin-right: 1.5rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .photo-gallery {
@@ -242,12 +271,25 @@
             font-size: 0.85rem;
             color: #94a3b8;
         }
+
+        /* Additional styles for request modal if needed */
+        #request-modal .modal-content {
+            background: #1e293b;
+            border-radius: 1.5rem;
+            padding: 2rem;
+            max-width: 450px;
+        }
     </style>
 </head>
 
 <body>
     <div class="header">
-        <a href="/index.html" class="back-link">←</a>
+        <a href="/index.html" class="back-link">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="m15 18-6-6 6-6" />
+            </svg>
+        </a>
         <h1>방 있어요</h1>
     </div>
 
@@ -258,54 +300,161 @@
     </div>
 
     <!-- Detail Room Advertisement Modal -->
-    <div id="detail-modal" class="modal-overlay" style="display: none;"
-        onclick="if(event.target === this) closeDetailModal()">
-        <div class="modal-content">
-            <h3 id="detail-title"></h3>
-
-            <div id="detail-photos" class="photo-gallery"></div>
-
-            <div class="detail-info">
-                <div class="detail-row">
-                    <span class="label">건물명</span>
-                    <span class="value" id="detail-building"></span>
-                </div>
-                <div class="detail-row" style="flex-direction: column; gap: 4px; align-items: flex-start;">
-                    <span class="label">주소</span>
-                    <span class="value" id="detail-address" style="font-size: 0.85rem; opacity: 0.9;"></span>
-                </div>
-                <div class="detail-row">
-                    <span class="label">호수</span>
-                    <span class="value" id="detail-room"></span>
-                </div>
-                <div class="detail-row">
-                    <span class="label">입실 가능</span>
-                    <span class="value" id="detail-available"></span>
-                </div>
-                <div class="detail-row">
-                    <span class="label">보증금</span>
-                    <span class="value" id="detail-deposit"></span>
-                </div>
-                <div class="detail-row">
-                    <span class="label">월세</span>
-                    <span class="value" id="detail-rent"></span>
-                </div>
-                <div class="detail-row">
-                    <span class="label">관리비</span>
-                    <span class="value" id="detail-mgmt"></span>
-                </div>
+    <div id="detail-modal" class="modal-overlay">
+        <div class="modal-content-full">
+            <div class="modal-header-custom">
+                <span class="back-btn-custom" onclick="closeDetailModal()">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="m15 18-6-6 6-6" />
+                    </svg>
+                </span>
+                <h3 id="detail-title"></h3>
             </div>
 
-            <div class="form-group" style="margin-top: 1.5rem;">
-                <label>상세 설명</label>
-                <div id="detail-memo" class="detail-memo-box"></div>
-            </div>
+            <div style="padding: 1.5rem;">
+                <div id="detail-photos" class="photo-gallery"></div>
 
-            <button class="action-btn" onclick="closeDetailModal()">닫기</button>
+                <div class="detail-info">
+                    <div class="detail-row">
+                        <span class="label">건물명</span>
+                        <span class="value" id="detail-building"></span>
+                    </div>
+                    <div class="detail-row" style="flex-direction: column; gap: 4px; align-items: flex-start;">
+                        <span class="label">주소</span>
+                        <span class="value" id="detail-address" style="font-size: 0.85rem; opacity: 0.9;"></span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">호수</span>
+                        <span class="value" id="detail-room"></span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">입실 가능</span>
+                        <span class="value" id="detail-available"></span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">보증금</span>
+                        <span class="value" id="detail-deposit"></span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">월세</span>
+                        <span class="value" id="detail-rent"></span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">관리비</span>
+                        <span class="value" id="detail-mgmt"></span>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top: 1.5rem;">
+                    <label>상세 설명</label>
+                    <div id="detail-memo" class="detail-memo-box"></div>
+                </div>
+
+                <button class="action-btn" onclick="openRequestModal()">방구해요</button>
+            </div>
         </div>
     </div>
 
+    <!-- Contact Request Modal -->
+    <div id="request-modal" class="modal" onclick="if(event.target === this) closeRequestModal()">
+        <div class="modal-content">
+            <div class="modal-header" style="margin-bottom: 1.5rem;">
+                <h2 style="font-size: 1.25rem;">방구해요 신청</h2>
+            </div>
+
+            <div
+                style="margin-bottom: 1.5rem; text-align: center; display: flex; flex-direction: column; align-items: center;">
+                <a id="kakao-login-btn" href="javascript:loginWithKakao()" style="display: block;">
+                    <img src="https://k.kakaocdn.net/14/dn/btqCn0WbcP5/ctvwa9vDsn9198CoIfV25K/o.jpg" width="222"
+                        style="display: block; border-radius: 6px;" alt="카카오 로그인 버튼" />
+                </a>
+                <p style="font-size: 0.8rem; opacity: 0.6; margin-top: 0.8rem;">카카오로 인증하면 이름과 연락처가 자동 입력됩니다.</p>
+            </div>
+
+            <div class="form-group">
+                <label>이름</label>
+                <input type="text" id="req-name" class="form-input" placeholder="이름을 입력하세요">
+            </div>
+            <div class="form-group">
+                <label>연락처</label>
+                <input type="tel" id="req-phone" class="form-input" placeholder="연락처를 입력하세요">
+            </div>
+            <div class="form-group">
+                <label>메모</label>
+                <textarea id="req-memo" class="form-input" rows="4" placeholder="희망 입주 시기, 조건 등을 적어주세요"></textarea>
+            </div>
+            <div class="form-group" style="display: flex; justify-content: center; margin: 1rem 0;">
+                <div class="cf-turnstile" data-sitekey="0x4AAAAAACMwRXAVmwztlp0X"></div>
+            </div>
+            <div class="modal-footer" style="margin-top: 1.5rem;">
+                <button class="btn btn-secondary" onclick="closeRequestModal()">취소</button>
+                <button class="btn" onclick="submitRequest()">연락주세요</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Kakao SDK -->
+    <script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.4/kakao.min.js"
+        integrity="sha384-oYvguNC9sYmXfPjEreicC6CJJBeLPuHtXasfL7V9zX9vTRGXSshqRLS0qisP0o6b"
+        crossorigin="anonymous"></script>
+
     <script>
+        async function initKakao() {
+            try {
+                const res = await fetch('/api/config/kakao');
+                const data = await res.json();
+                if (data.kakaoKey) {
+                    Kakao.init(data.kakaoKey);
+                    console.log('Kakao SDK Initialized');
+                }
+            } catch (err) {
+                console.error('Failed to init Kakao:', err);
+            }
+        }
+        initKakao();
+
+        function loginWithKakao() {
+            if (!window.Kakao) {
+                alert('카카오 SDK 로딩 중입니다. 잠시 후 다시 시도해주세요.');
+                return;
+            }
+            if (!Kakao.isInitialized()) {
+                alert('카카오 SDK가 초기화되지 않았습니다. 잠시 후 다시 시도해주시거나 관리자에게 문의하세요.');
+                return;
+            }
+
+            Kakao.Auth.login({
+                success: function (authObj) {
+                    Kakao.API.request({
+                        url: '/v2/user/me',
+                        success: function (res) {
+                            const kakaoAccount = res.kakao_account;
+                            if (kakaoAccount) {
+                                if (kakaoAccount.profile && kakaoAccount.profile.nickname) {
+                                    document.getElementById('req-name').value = kakaoAccount.profile.nickname;
+                                }
+                                if (kakaoAccount.phone_number) {
+                                    // Format: +82 10-1234-5678 -> 01012345678
+                                    let phone = kakaoAccount.phone_number.replace('+82 ', '0').replace(/-/g, '').replace(/\s/g, '');
+                                    document.getElementById('req-phone').value = phone;
+                                }
+                                alert('카카오 인증 성공! 정보가 입력되었습니다.');
+                            }
+                        },
+                        fail: function (error) {
+                            console.error(error);
+                            alert('사용자 정보를 가져오는데 실패했습니다.');
+                        }
+                    });
+                },
+                fail: function (err) {
+                    console.error(err);
+                    alert('카카오 로그인에 실패했습니다.');
+                }
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', fetchRooms);
 
         async function fetchRooms() {
@@ -381,6 +530,7 @@
                 document.getElementById('detail-mgmt').textContent = (adv.management_fee || 0).toLocaleString() + '원';
 
                 document.getElementById('detail-memo').textContent = adv.description || '';
+                currentLandlordId = adv.created_by;
 
                 const gallery = document.getElementById('detail-photos');
                 gallery.innerHTML = '';
@@ -406,6 +556,63 @@
         function closeDetailModal() {
             document.getElementById('detail-modal').style.display = 'none';
             document.body.style.overflow = 'auto';
+        }
+
+        let currentAdvId = null;
+        let currentLandlordId = null;
+
+        function openRequestModal() {
+            if (!currentLandlordId) {
+                alert('임대인 정보를 찾을 수 없습니다.');
+                return;
+            }
+            document.getElementById('request-modal').style.display = 'flex';
+        }
+
+        function closeRequestModal() {
+            document.getElementById('request-modal').style.display = 'none';
+        }
+
+        async function submitRequest() {
+            const name = document.getElementById('req-name').value.trim();
+            const phone = document.getElementById('req-phone').value.trim();
+            const memo = document.getElementById('req-memo').value.trim();
+            const turnstileResponse = turnstile.getResponse();
+
+            if (!name || !phone) {
+                alert('이름과 연락처를 입력해주세요.');
+                return;
+            }
+
+            if (!turnstileResponse) {
+                alert('보안 검증을 완료해주세요.');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/apply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, phone, memo, turnstileResponse, landlordId: currentLandlordId })
+                });
+
+                if (res.ok) {
+                    alert(`${name}님, 신청이 접수되었습니다.\n곧 연락드리겠습니다!`);
+                    closeRequestModal();
+
+                    // Clear fields
+                    document.getElementById('req-name').value = '';
+                    document.getElementById('req-phone').value = '';
+                    document.getElementById('req-memo').value = '';
+                    turnstile.reset();
+                } else {
+                    const data = await res.json();
+                    alert('신청 실패: ' + (data.error || '알 수 없는 오류'));
+                }
+            } catch (err) {
+                console.error(err);
+                alert('서버와 통신 중 오류가 발생했습니다.');
+            }
         }
     </script>
 </body>

@@ -414,7 +414,7 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeBuildingModal()">취소</button>
-                <button class="btn" onclick="saveNewBuilding()">저장</button>
+                <button class="btn" id="btn-save-building" onclick="saveNewBuilding()">저장</button>
             </div>
         </div>
     </div>
@@ -480,10 +480,13 @@
                 header.innerHTML = `
                 <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
                     <h1>건물 관리</h1>
-                    <select id="building-filter" onchange="filterBuildingManagement()" style="padding:0.4rem 0.6rem; border-radius:0.5rem; background:var(--card-bg); color:white; border:1px solid rgba(255,255,255,0.1); font-size: 0.9rem;">
-                        <option value="ALL">ALL (전체 건물)</option>
-                        ${buildings.map(b => `<option value="${b.id}" ${b.id == filterId ? 'selected' : ''}>${b.name}</option>`).join('')}
-                    </select>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <select id="building-filter" onchange="filterBuildingManagement()" style="padding:0.4rem 0.6rem; border-radius:0.5rem; background:var(--card-bg); color:white; border:1px solid rgba(255,255,255,0.1); font-size: 0.9rem;">
+                            <option value="ALL">ALL (전체 건물)</option>
+                            ${buildings.map(b => `<option value="${b.id}" ${b.id == filterId ? 'selected' : ''}>${b.name}</option>`).join('')}
+                        </select>
+                        <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="addNewBuilding()">건물 추가</button>
+                    </div>
                 </div>
                 `;
             }
@@ -501,6 +504,12 @@
             }
 
             grid.className = 'mgmt-list';
+
+            if (filtered.length === 0) {
+                grid.innerHTML = '<div style="text-align:center; padding:3rem; opacity:0.5;">데이터가 없습니다.</div>';
+                return;
+            }
+
             const listHtml = filtered.map(b => {
                 const address = b.addresses && b.addresses.length > 0 ? b.addresses[0].address : '-';
 
@@ -545,18 +554,7 @@
                 `;
             }).join('');
 
-            const addText = filtered.length === 0 ? "새로 추가하시겠습니까" : "더 추가하시겠습니까";
-            const addRowHtml = `
-            <div class="mgmt-item">
-                <div class="mgmt-summary" style="justify-content: center; padding: 0.5rem;">
-                    <button class="btn" onclick="addNewBuilding()" style="background: rgba(255, 255, 255, 0.05); border: 1px dashed rgba(255, 255, 255, 0.2); width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.7);">
-                        ${addText}
-                    </button>
-                </div>
-            </div>
-            `;
-
-            grid.innerHTML = listHtml + addRowHtml;
+            grid.innerHTML = listHtml;
         }
 
         async function filterBuildingManagement() {
@@ -828,6 +826,7 @@
         }
 
         async function saveNewBuilding() {
+            const saveBtn = document.getElementById('btn-save-building');
             const name = document.getElementById('new-building-name').value;
             if (!name) { alert('건물 이름을 입력하세요.'); return; }
 
@@ -846,6 +845,9 @@
             }).filter(d => d.room_number !== '');
 
             try {
+                saveBtn.innerText = '저장중..';
+                saveBtn.disabled = true;
+
                 let buildingId;
                 if (currentEditingBuildingId) {
                     buildingId = currentEditingBuildingId;
@@ -937,6 +939,9 @@
                 await initBuildings();
             } catch (err) {
                 alert('저장 실패: ' + err.message);
+            } finally {
+                saveBtn.innerText = '저장';
+                saveBtn.disabled = false;
             }
         }
 

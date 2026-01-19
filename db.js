@@ -138,6 +138,7 @@ function ensureColumns() {
     // Columns to ensure in tables
     const columns = [
         { table: 'users', name: 'approved', type: 'INTEGER DEFAULT 0' },
+        { table: 'users', name: 'status', type: 'INTEGER DEFAULT 1' },
         { table: 'users', name: 'noti', type: 'INTEGER DEFAULT 0' },
         { table: 'payments', name: 'type', type: 'INTEGER DEFAULT 1' },
         { table: 'item_advs', name: 'building_id', type: 'INTEGER' },

@@ -37,6 +37,7 @@
             font-size: 1.25rem;
             margin: 0;
             background: linear-gradient(to right, #6366f1, #a855f7);
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -196,25 +197,6 @@
         .notice-item.expanded {
             background: rgba(255, 255, 255, 0.08);
         }
-
-        .back-btn {
-            position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            background: #6366f1;
-            color: white;
-            width: 3.5rem;
-            height: 3.5rem;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
-            cursor: pointer;
-            text-decoration: none;
-            font-size: 1.5rem;
-            z-index: 200;
-        }
     </style>
 </head>
 
@@ -229,7 +211,7 @@
         </div>
     </div>
 
-    <a href="/dashboard.html" class="back-btn">←</a>
+
 
     <script src="/js/common.js"></script>
     <script>
