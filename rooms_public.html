@@ -363,13 +363,14 @@
                 <h2 style="font-size: 1.25rem;">방구해요 신청</h2>
             </div>
 
-            <div
-                style="margin-bottom: 1.5rem; text-align: center; display: flex; flex-direction: column; align-items: center;">
-                <a id="kakao-login-btn" href="javascript:loginWithKakao()" style="display: block;">
-                    <img src="https://k.kakaocdn.net/14/dn/btqCn0WbcP5/ctvwa9vDsn9198CoIfV25K/o.jpg" width="222"
-                        style="display: block; border-radius: 6px;" alt="카카오 로그인 버튼" />
-                </a>
-                <p style="font-size: 0.8rem; opacity: 0.6; margin-top: 0.8rem;">카카오로 인증하면 이름과 연락처가 자동 입력됩니다.</p>
+            <div style="margin-bottom: 1.5rem; text-align: center;">
+                <button onclick="loginWithKakao()"
+                    style="background:#FEE500; color:#000000; border:none; border-radius:12px; display:flex; align-items:center; justify-content:center; gap:10px; width:100%; height:48px; font-weight:600; cursor:pointer; font-size: 0.95rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                    <img src="https://developers.kakao.com/assets/img/about/logos/kakaotalksharing/kakaotalk_sharing_btn_small.png"
+                        width="24" height="24" alt="" />
+                    카카오로 1초 인증
+                </button>
+                <p style="font-size: 0.8rem; opacity: 0.6; margin-top: 0.8rem;">인증 시 이름과 연락처가 자동 입력됩니다.</p>
             </div>
 
             <div class="form-group">
@@ -394,22 +395,38 @@
         </div>
     </div>
 
-    <!-- Kakao SDK -->
-    <script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.4/kakao.min.js"
-        integrity="sha384-oYvguNC9sYmXfPjEreicC6CJJBeLPuHtXasfL7V9zX9vTRGXSshqRLS0qisP0o6b"
-        crossorigin="anonymous"></script>
+    <!-- Kakao SDK (v1 for stable Auth.login) -->
+    <script src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
 
     <script>
         async function initKakao() {
+            let retries = 0;
+            while (!window.Kakao && retries < 20) {
+                await new Promise(r => setTimeout(r, 100));
+                retries++;
+            }
+
+            if (!window.Kakao) {
+                console.error('Kakao SDK failed to load');
+                return;
+            }
+
             try {
                 const res = await fetch('/api/config/kakao');
+                if (!res.ok) throw new Error('Failed to fetch config');
                 const data = await res.json();
+
                 if (data.kakaoKey) {
-                    Kakao.init(data.kakaoKey);
-                    console.log('Kakao SDK Initialized');
+                    if (!Kakao.isInitialized()) {
+                        Kakao.init(data.kakaoKey);
+                        console.log('Kakao SDK Initialized with:', data.kakaoKey);
+                    }
+                } else {
+                    console.error('No Kakao Key found in server response');
                 }
             } catch (err) {
-                console.error('Failed to init Kakao:', err);
+                console.error('Kakao Init Error:', err);
+                // alert('카카오 초기화 실패: ' + err.message);
             }
         }
         initKakao();
@@ -491,16 +508,16 @@
                 const available = room.available_date || '-';
 
                 item.innerHTML = `
-                    <div class="notice-summary" onclick="openDetailModal(${room.id})">
-                        <span class="notice-type">임대</span>
-                        <div class="notice-text-group">
-                            <span class="notice-title">${room.building || ''} ${room.room_number}호</span>
-                            <div class="notice-meta">
-                                <span>${deposit} / ${rent} / ${mgmt} | 입실가능: ${available}</span>
-                            </div>
-                        </div>
+            <div class="notice-summary" onclick="openDetailModal(${room.id})">
+                <span class="notice-type">임대</span>
+                <div class="notice-text-group">
+                    <span class="notice-title">${room.building || ''} ${room.room_number}호</span>
+                    <div class="notice-meta">
+                        <span>${deposit} / ${rent} / ${mgmt} | 입실가능: ${available}</span>
                     </div>
-                `;
+                </div>
+            </div>
+            `;
                 list.appendChild(item);
             });
         }
