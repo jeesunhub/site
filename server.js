@@ -194,9 +194,24 @@ app.post('/api/login', (req, res) => {
     });
 });
 
+// Helper to format phone number for display (01012345678 -> 010-1234-5678)
+function formatPhone(val) {
+    if (!val) return '';
+    const num = String(val).replace(/[^0-9]/g, '');
+    if (num.length <= 4) return num;
+    if (num.length <= 8) {
+        return num.slice(0, num.length - 4) + '-' + num.slice(num.length - 4);
+    }
+    const part3 = num.slice(-4);
+    const part2 = num.slice(-8, -4);
+    const part1 = num.slice(0, -8);
+    return `${part1}-${part2}-${part3}`;
+}
+
 // 1a. Signup API
 app.post('/api/signup', (req, res) => {
-    const { login_id, password, nickname, birth_date, phone_number, role } = req.body;
+    let { login_id, password, nickname, birth_date, phone_number, role } = req.body;
+    const cleanPhone = phone_number ? phone_number.replace(/[^0-9]/g, '') : '';
 
     // Check duplicate login_id
     db.get('SELECT id FROM users WHERE login_id = ?', [login_id], (err, row) => {
@@ -204,20 +219,20 @@ app.post('/api/signup', (req, res) => {
         if (row) return res.status(400).json({ error: 'ID_EXISTS' });
 
         // Check duplicate user (phone + DOB)
-        db.get('SELECT id FROM users WHERE phone_number = ? AND birth_date = ?', [phone_number, birth_date], (err, row) => {
+        db.get('SELECT id FROM users WHERE phone_number = ? AND birth_date = ?', [cleanPhone, birth_date], (err, row) => {
             if (err) return res.status(500).json({ error: err.message });
             if (row) return res.status(400).json({ error: 'USER_EXISTS' });
 
             // Insert new user
             db.run(`INSERT INTO users (login_id, password, nickname, birth_date, phone_number, role, approved) VALUES (?, ?, ?, ?, ?, ?, 0)`,
-                [login_id, password, nickname, birth_date, phone_number, role],
+                [login_id, password, nickname, birth_date, cleanPhone, role],
                 function (err) {
                     if (err) return res.status(500).json({ error: err.message });
                     const newUserId = this.lastID;
 
                     // Create Notification
                     const title = role === 'landlord' ? '임대인 가입 신청' : '세입자 가입 신청';
-                    const content = `아이디: ${login_id}\n이름: ${nickname}\n생년월일: ${birth_date}\n전화번호: ${phone_number}`;
+                    const content = `아이디: ${login_id}\n이름: ${nickname}\n생년월일: ${birth_date}\n전화번호: ${formatPhone(cleanPhone)}`;
 
                     db.run(`INSERT INTO noti (author_id, title, content, type) VALUES (?, ?, ?, ?)`,
                         [newUserId, title, content, '가입신청'],
@@ -234,15 +249,16 @@ app.post('/api/signup', (req, res) => {
 
 // 1b. Room Application API (Applicant)
 app.post('/api/apply', (req, res) => {
-    const { name, phone, memo, landlordId } = req.body;
+    const { name, phone, birth, memo, landlordId } = req.body;
+    const cleanPhone = phone ? phone.replace(/[^0-9]/g, '') : '';
 
-    if (!name || !phone) {
-        return res.status(400).json({ error: 'Name and phone are required' });
+    if (!name || !phone || !birth) {
+        return res.status(400).json({ error: 'Name, phone and birth date are required' });
     }
 
     const login_id = name;
 
-    db.get('SELECT id FROM users WHERE login_id = ? OR phone_number = ?', [login_id, phone], (err, row) => {
+    db.get('SELECT id FROM users WHERE login_id = ? OR phone_number = ?', [login_id, cleanPhone], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
 
         const password = Math.floor(1000000000 + Math.random() * 9000000000).toString(); // 10 digit random
@@ -250,8 +266,8 @@ app.post('/api/apply', (req, res) => {
         const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
         const proceedWithInsert = (finalId) => {
-            db.run(`INSERT INTO users (login_id, password, nickname, role, phone_number, color, approved, status) VALUES (?, ?, ?, ?, ?, ?, 0, 2)`,
-                [finalId, password, name, 'tenant', phone, randomColor],
+            db.run(`INSERT INTO users (login_id, password, nickname, role, birth_date, phone_number, color, approved, status) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 2)`,
+                [finalId, password, name, 'tenant', birth, cleanPhone, randomColor],
                 function (err) {
                     if (err) {
                         if (err.message.includes('UNIQUE')) {
@@ -273,7 +289,7 @@ app.post('/api/apply', (req, res) => {
                     }
 
                     // Create Notification
-                    const content = `방 구하는 사람 정보\n이름: ${name}\n연락처: ${phone}\n메모: ${memo}`;
+                    const content = `방 구하는 사람 정보\n이름: ${name}\n생년월일: ${birth}\n연락처: ${formatPhone(cleanPhone)}\n메모: ${memo}`;
                     db.run(`INSERT INTO noti (author_id, title, content, type) VALUES (?, ?, ?, ?)`,
                         [newUserId, '방구해요 신청', content, '방구해요'],
                         function (err) {
@@ -962,9 +978,9 @@ app.post('/api/users/find', (req, res) => {
 });
 
 // 20. Create or Update User (Quick Add/Save)
-// 20. Create or Update User (Quick Add/Save)
 app.post('/api/users/quick', (req, res) => {
     const { id, login_id, password, nickname, role, birth_date, phone_number } = req.body;
+    const cleanPhone = phone_number ? phone_number.replace(/[^0-9]/g, '') : '';
 
     // Check for existing user with this login_id to prevent UNIQUE constraint errors
     db.get('SELECT id FROM users WHERE login_id = ?', [login_id], (err, existingUser) => {
@@ -980,19 +996,34 @@ app.post('/api/users/quick', (req, res) => {
         if (targetId) {
             // Update the identified target user
             db.run(`UPDATE users SET login_id = ?, nickname = ?, birth_date = ?, phone_number = ? WHERE id = ?`,
-                [login_id, nickname, birth_date, phone_number, targetId],
+                [login_id, nickname, birth_date, cleanPhone, targetId],
                 function (err) {
                     if (err) return res.status(500).json({ error: err.message });
                     res.json({ message: 'User updated', userId: targetId });
                 }
             );
         } else {
-            // Create new user
-            db.run(`INSERT INTO users (login_id, password, nickname, role, birth_date, phone_number) VALUES (?, ?, ?, ?, ?, ?)`,
-                [login_id, password, nickname, role, birth_date, phone_number],
+            // Truly new - Insert
+            const colors = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6'];
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+            db.run(`INSERT INTO users (login_id, password, nickname, role, color, birth_date, phone_number, approved) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+                [login_id, password || '1234', nickname, role, randomColor, birth_date, cleanPhone],
                 function (err) {
                     if (err) return res.status(500).json({ error: err.message });
-                    res.json({ message: 'User created', userId: this.lastID });
+                    const newUserId = this.lastID;
+
+                    // Notification
+                    const title = role === 'landlord' ? '임대인 등록 완료' : '세입자 등록 완료';
+                    const content = `이름: ${nickname}\n생년월일: ${birth_date}\n전화번호: ${formatPhone(cleanPhone)}`;
+
+                    db.run(`INSERT INTO noti (author_id, title, content, type) VALUES (?, ?, ?, ?)`,
+                        [newUserId, title, content, '시스템'],
+                        function (err) {
+                            if (err) console.error('Error creating user quick notification:', err.message);
+                            res.json({ message: 'User created', userId: newUserId });
+                        }
+                    );
                 }
             );
         }

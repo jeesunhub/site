@@ -7,6 +7,7 @@
     <title>가입 신청 - Sugar</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
+    <script src="/js/common.js"></script>
     <style>
         body {
             margin: 0;
@@ -453,6 +454,10 @@
         initWheel('wheel-year', currentYear - 100, currentYear, 1990);
         initWheel('wheel-month', 1, 12, 1);
         initWheel('wheel-day', 1, 31, 1);
+
+        document.getElementById('phone_number').addEventListener('input', (e) => {
+            e.target.value = formatPhone(e.target.value);
+        });
 
         function handleSignUp() {
             const login_id = document.getElementById('login_id').value.trim();

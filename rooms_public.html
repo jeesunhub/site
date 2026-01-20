@@ -375,11 +375,15 @@
 
             <div class="form-group">
                 <label>이름</label>
-                <input type="text" id="req-name" class="form-input" placeholder="이름을 입력하세요">
+                <input type="text" id="req-name" class="form-input" placeholder="카카오 인증 후 자동 입력됩니다" readonly>
+            </div>
+            <div class="form-group">
+                <label>생년월일</label>
+                <input type="text" id="req-birth" class="form-input" placeholder="카카오 인증 후 자동 입력됩니다" readonly>
             </div>
             <div class="form-group">
                 <label>연락처</label>
-                <input type="tel" id="req-phone" class="form-input" placeholder="연락처를 입력하세요">
+                <input type="tel" id="req-phone" class="form-input" placeholder="카카오 인증 후 자동 입력됩니다" readonly>
             </div>
             <div class="form-group">
                 <label>메모</label>
@@ -394,6 +398,9 @@
             </div>
         </div>
     </div>
+
+    <!-- Common JS -->
+    <script src="/js/common.js"></script>
 
     <!-- Kakao SDK (v1 for stable Auth.login) -->
     <script src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
@@ -447,15 +454,36 @@
                         url: '/v2/user/me',
                         success: function (res) {
                             const kakaoAccount = res.kakao_account;
+                            console.log('Kakao Account Data:', kakaoAccount);
                             if (kakaoAccount) {
-                                if (kakaoAccount.profile && kakaoAccount.profile.nickname) {
-                                    document.getElementById('req-name').value = kakaoAccount.profile.nickname;
+                                // Prefer real name if available (requires permission), fallback to nickname
+                                const userName = kakaoAccount.name || (kakaoAccount.profile ? kakaoAccount.profile.nickname : '');
+                                if (userName) {
+                                    document.getElementById('req-name').value = userName;
                                 }
+
                                 if (kakaoAccount.phone_number) {
-                                    // Format: +82 10-1234-5678 -> 01012345678
-                                    let phone = kakaoAccount.phone_number.replace('+82 ', '0').replace(/-/g, '').replace(/\s/g, '');
-                                    document.getElementById('req-phone').value = phone;
+                                    // Robust phone number cleaning: +82 10-1234-5678 -> 01012345678
+                                    let phoneValue = kakaoAccount.phone_number.replace('+82 ', '0').replace(/[^0-9]/g, '');
+
+                                    // Case where it might stay as 8210... if replacement failed or format differed
+                                    if (phoneValue.startsWith('82')) {
+                                        phoneValue = '0' + phoneValue.substring(2);
+                                    }
+
+                                    document.getElementById('req-phone').value = formatPhone(phoneValue);
                                 }
+
+                                // Handle Birth Date (YYYY-MM-DD)
+                                if (kakaoAccount.birthyear && kakaoAccount.birthday) {
+                                    const y = kakaoAccount.birthyear;
+                                    const m = kakaoAccount.birthday.substring(0, 2);
+                                    const d = kakaoAccount.birthday.substring(2, 4);
+                                    document.getElementById('req-birth').value = `${y}-${m}-${d}`;
+                                } else if (kakaoAccount.birthyear) {
+                                    document.getElementById('req-birth').value = kakaoAccount.birthyear;
+                                }
+
                                 alert('카카오 인증 성공! 정보가 입력되었습니다.');
                             }
                         },
@@ -593,11 +621,12 @@
         async function submitRequest() {
             const name = document.getElementById('req-name').value.trim();
             const phone = document.getElementById('req-phone').value.trim();
+            const birth = document.getElementById('req-birth').value.trim();
             const memo = document.getElementById('req-memo').value.trim();
             const turnstileResponse = turnstile.getResponse();
 
-            if (!name || !phone) {
-                alert('이름과 연락처를 입력해주세요.');
+            if (!name || !phone || !birth) {
+                alert('카카오 인증을 통해 이름, 생년월일, 연락처를 입력해주세요.');
                 return;
             }
 
@@ -610,7 +639,7 @@
                 const res = await fetch('/api/apply', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, phone, memo, turnstileResponse, landlordId: currentLandlordId })
+                    body: JSON.stringify({ name, phone, birth, memo, turnstileResponse, landlordId: currentLandlordId })
                 });
 
                 if (res.ok) {
@@ -620,6 +649,7 @@
                     // Clear fields
                     document.getElementById('req-name').value = '';
                     document.getElementById('req-phone').value = '';
+                    document.getElementById('req-birth').value = '';
                     document.getElementById('req-memo').value = '';
                     turnstile.reset();
                 } else {
