@@ -122,6 +122,7 @@ if (databaseUrl) {
             console.error('Error opening database:', err.message);
         } else {
             console.log('Connected to the SQLite database:', DB_PATH);
+            db.run("PRAGMA foreign_keys = ON;"); // Enable foreign keys
             const schema = fs.readFileSync(SCHEMA_PATH, 'utf8');
             db.exec(schema, (err) => {
                 if (err) console.error('Error initializing schema:', err.message);
@@ -137,12 +138,11 @@ if (databaseUrl) {
 function ensureColumns() {
     // Columns to ensure in tables
     const columns = [
-        { table: 'users', name: 'approved', type: 'INTEGER DEFAULT 0' },
-        { table: 'users', name: 'status', type: 'INTEGER DEFAULT 1' },
         { table: 'users', name: 'noti', type: 'INTEGER DEFAULT 0' },
-        { table: 'payments', name: 'type', type: 'INTEGER DEFAULT 1' },
-        { table: 'item_advs', name: 'building_id', type: 'INTEGER' },
-        { table: 'images', name: 'type', type: "TEXT DEFAULT 'room'" }
+        { table: 'users', name: 'approved', type: 'INTEGER DEFAULT 0' },
+        { table: 'users', name: 'status', type: "TEXT DEFAULT '임시'" },
+        { table: 'applicants', name: 'created_at', type: "DATETIME DEFAULT CURRENT_TIMESTAMP" },
+        { table: 'advertisements', name: 'target_id', type: 'INTEGER' },
     ];
 
     columns.forEach(col => {

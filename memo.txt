@@ -1,9 +1,0 @@
-rooms table에 status 필드 추가
-status에는 0, 1, 2 가 있음
-0이면 "공실" 2이면 "광고중" 1이면 "계약완료"
-
-user status
-0이면 "탈퇴" 1이면 "정상"
-
-item_adv에서 status는 0이나 1.
-0이면 판매중, 1이면 판매완료

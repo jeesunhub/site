@@ -15,27 +15,37 @@ CREATE TABLE IF NOT EXISTS users (
     phone_number TEXT,
     noti INTEGER DEFAULT 0,
     approved INTEGER DEFAULT 0,
-    status INTEGER DEFAULT 1,
-
+    status TEXT DEFAULT '임시' CHECK (status IN ('임시', '승인', '종료')),
+    title TEXT,
+    description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS noti (
+CREATE TABLE IF NOT EXISTS messages (
     id SERIAL PRIMARY KEY,
     author_id INTEGER,
-    title TEXT,
-    content TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    type TEXT,
+    target TEXT CHECK(target IN ('direct', 'to_all', 'to_building', 'to_landlords')),
+    category TEXT CHECK(category IN ('가입신청', '방있어요', '물품공유', '시스템')),
+    related_id INTEGER,
+    related_table TEXT,
     confirmed INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (author_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS message_recipient (
+    id SERIAL PRIMARY KEY,
+    message_id INTEGER NOT NULL,
+    recipient_id INTEGER NOT NULL,
+    read_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+    FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS buildings (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
-    address1 TEXT,
-    address2 TEXT,
     memo TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -71,22 +81,31 @@ CREATE TABLE IF NOT EXISTS rooms (
     FOREIGN KEY (building_id) REFERENCES buildings(id)
 );
 
-CREATE TABLE IF NOT EXISTS landlord_tenant (
+CREATE TABLE IF NOT EXISTS items (
     id SERIAL PRIMARY KEY,
-    landlord_id INTEGER NOT NULL,
-    tenant_id INTEGER NOT NULL,
+    owner_id INTEGER NOT NULL,
+    title TEXT,
+    description TEXT,
+    status TEXT DEFAULT 'open',
+    building_id INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (owner_id) REFERENCES users(id),
+    FOREIGN KEY (building_id) REFERENCES buildings(id)
+);
+
+CREATE TABLE IF NOT EXISTS room_tenant (
+    id SERIAL PRIMARY KEY,
+    room_id INTEGER NOT NULL REFERENCES rooms(id),
+    tenant_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 
     start_date DATE NOT NULL,
-    end_date DATE,
-
-    FOREIGN KEY (landlord_id) REFERENCES users(id),
-    FOREIGN KEY (tenant_id) REFERENCES users(id)
+    end_date DATE
 );
 
 CREATE TABLE IF NOT EXISTS contracts (
     id SERIAL PRIMARY KEY,
 
-    landlord_id INTEGER NOT NULL,
+    room_id INTEGER NOT NULL,
     tenant_id INTEGER NOT NULL,
 
     payment_type TEXT NOT NULL CHECK (payment_type IN ('prepaid', 'postpaid')),
@@ -97,61 +116,59 @@ CREATE TABLE IF NOT EXISTS contracts (
 
     deposit INTEGER NOT NULL,
     monthly_rent INTEGER NOT NULL,
-    management_fee INTEGER NOT NULL,
+    maintenance_fee INTEGER NOT NULL,
     cleaning_fee INTEGER DEFAULT 0,
     extra_fee INTEGER DEFAULT 0,
 
-    keyword TEXT,
-    building TEXT,
-    room_number TEXT,
-
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-    FOREIGN KEY (landlord_id) REFERENCES users(id),
+    FOREIGN KEY (room_id) REFERENCES rooms(id),
     FOREIGN KEY (tenant_id) REFERENCES users(id)
 );
 
-CREATE TABLE IF NOT EXISTS monthly_bills (
+CREATE TABLE IF NOT EXISTS contract_keywords (
     id SERIAL PRIMARY KEY,
     contract_id INTEGER NOT NULL,
+    keyword TEXT,
+    FOREIGN KEY (contract_id) REFERENCES contracts(id)
+);
 
-    bill_month TEXT NOT NULL, -- '2025-01' format
-
-    rent INTEGER NOT NULL,
-    management_fee INTEGER NOT NULL,
-    total_amount INTEGER NOT NULL,
+CREATE TABLE IF NOT EXISTS invoices (
+    id SERIAL PRIMARY KEY,
+    contract_id INTEGER NOT NULL,
+    type INTEGER NOT NULL,
+    billing_month TEXT,
+    due_date DATE,
+    amount INTEGER NOT NULL,
+    status TEXT,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    UNIQUE (contract_id, bill_month),
     FOREIGN KEY (contract_id) REFERENCES contracts(id)
 );
 
 CREATE TABLE IF NOT EXISTS payments (
     id SERIAL PRIMARY KEY,
 
-    tenant_id INTEGER NOT NULL,
+    contract_id INTEGER NOT NULL,
     amount INTEGER NOT NULL,
     paid_at TIMESTAMP NOT NULL,
 
-    type INTEGER DEFAULT 1, -- 1: Monthly Rent, 2: Deposit, 4: Other
-
+    type INTEGER NOT NULL,
+    raw_text TEXT,
     memo TEXT,
 
-    FOREIGN KEY (tenant_id) REFERENCES users(id)
+    FOREIGN KEY (contract_id) REFERENCES contracts(id)
 );
 
-CREATE TABLE IF NOT EXISTS bill_payment_match (
+CREATE TABLE IF NOT EXISTS payment_allocation (
     id SERIAL PRIMARY KEY,
 
-    bill_id INTEGER NOT NULL,
     payment_id INTEGER NOT NULL,
-    matched_amount INTEGER NOT NULL,
+    invoice_id INTEGER NOT NULL,
+    amount INTEGER NOT NULL,
 
-    FOREIGN KEY (bill_id) REFERENCES monthly_bills(id),
     FOREIGN KEY (payment_id) REFERENCES payments(id),
-
-    UNIQUE (bill_id, payment_id)
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id)
 );
 
 CREATE TABLE IF NOT EXISTS room_events (
@@ -163,34 +180,27 @@ CREATE TABLE IF NOT EXISTS room_events (
     FOREIGN KEY (room_id) REFERENCES rooms(id)
 );
 
-CREATE TABLE IF NOT EXISTS room_advs (
+CREATE TABLE IF NOT EXISTS advertisements (
     id SERIAL PRIMARY KEY,
-    room_id INTEGER NOT NULL,
+    related_id INTEGER,
+    related_table TEXT,
     title TEXT,
     description TEXT,
-    deposit INTEGER,
-    rent INTEGER,
-    management_fee INTEGER,
-    cleaning_fee INTEGER,
-    available_date TEXT,
-    status INTEGER DEFAULT 0,
+    price INTEGER,
     created_by INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (room_id) REFERENCES rooms(id),
-    FOREIGN KEY (created_by) REFERENCES users(id)
+    status TEXT,
+    target_id INTEGER
 );
 
-CREATE TABLE IF NOT EXISTS item_advs (
+CREATE TABLE IF NOT EXISTS applicants (
     id SERIAL PRIMARY KEY,
-    owner_id INTEGER,
-    building_id INTEGER,
-    name TEXT,
-    price INTEGER,
+    user_id INTEGER NOT NULL,
+    advertisement_id INTEGER NOT NULL,
     status TEXT,
-    description TEXT,
-    is_anonymous INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (owner_id) REFERENCES users(id)
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (advertisement_id) REFERENCES advertisements(id)
 );
 
 CREATE TABLE IF NOT EXISTS images (
@@ -198,5 +208,6 @@ CREATE TABLE IF NOT EXISTS images (
     related_id INTEGER,
     image_url TEXT,
     is_main INTEGER DEFAULT 0,
+    related_table TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

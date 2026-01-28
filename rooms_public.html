@@ -7,7 +7,7 @@
     <title>방 있어요 - Sugar</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+
     <style>
         body {
             margin: 0;
@@ -254,8 +254,10 @@
         }
 
         .action-btn {
-            padding: 0.8rem 1.5rem;
-            border-radius: 0.6rem;
+            height: 3rem;
+            padding: 0 1.5rem;
+            border-radius: 0.8rem;
+            /* matched to main style */
             border: none;
             background: var(--primary);
             color: white;
@@ -263,6 +265,9 @@
             cursor: pointer;
             width: 100%;
             margin-top: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .form-group label {
@@ -365,33 +370,31 @@
 
             <div style="margin-bottom: 1.5rem; text-align: center;">
                 <button onclick="loginWithKakao()"
-                    style="background:#FEE500; color:#000000; border:none; border-radius:12px; display:flex; align-items:center; justify-content:center; gap:10px; width:100%; height:48px; font-weight:600; cursor:pointer; font-size: 0.95rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                    style="background:#FEE500; color:#000000; border:none; border-radius:12px; display:flex; align-items:center; justify-content:center; gap:10px; width:100%; height:3rem; font-weight:600; cursor:pointer; font-size: 0.95rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
                     <img src="https://developers.kakao.com/assets/img/about/logos/kakaotalksharing/kakaotalk_sharing_btn_small.png"
                         width="24" height="24" alt="" />
-                    카카오로 1초 인증
+                    카카오로 인증
                 </button>
                 <p style="font-size: 0.8rem; opacity: 0.6; margin-top: 0.8rem;">인증 시 이름과 연락처가 자동 입력됩니다.</p>
             </div>
 
             <div class="form-group">
                 <label>이름</label>
-                <input type="text" id="req-name" class="form-input" placeholder="카카오 인증 후 자동 입력됩니다" readonly>
+                <input type="text" id="req-name" class="form-input" placeholder="이름을 입력하세요 (카카오 인증 시 자동 입력)">
             </div>
             <div class="form-group">
                 <label>생년월일</label>
-                <input type="text" id="req-birth" class="form-input" placeholder="카카오 인증 후 자동 입력됩니다" readonly>
+                <input type="text" id="req-birth" class="form-input" placeholder="YYYY-MM-DD (카카오 인증 시 자동 입력)">
             </div>
             <div class="form-group">
                 <label>연락처</label>
-                <input type="tel" id="req-phone" class="form-input" placeholder="카카오 인증 후 자동 입력됩니다" readonly>
+                <input type="tel" id="req-phone" class="form-input" placeholder="연락처를 입력하세요 (카카오 인증 시 자동 입력)">
             </div>
             <div class="form-group">
                 <label>메모</label>
                 <textarea id="req-memo" class="form-input" rows="4" placeholder="희망 입주 시기, 조건 등을 적어주세요"></textarea>
             </div>
-            <div class="form-group" style="display: flex; justify-content: center; margin: 1rem 0;">
-                <div class="cf-turnstile" data-sitekey="0x4AAAAAACMwRXAVmwztlp0X"></div>
-            </div>
+
             <div class="modal-footer" style="margin-top: 1.5rem;">
                 <button class="btn btn-secondary" onclick="closeRequestModal()">취소</button>
                 <button class="btn" onclick="submitRequest()">연락주세요</button>
@@ -484,7 +487,7 @@
                                     document.getElementById('req-birth').value = kakaoAccount.birthyear;
                                 }
 
-                                alert('카카오 인증 성공! 정보가 입력되었습니다.');
+                                alert('카카오 인증 성공! 정보가 입력되었습니다.\n부족한 정보는 직접 입력해주세요.');
                             }
                         },
                         fail: function (error) {
@@ -504,7 +507,7 @@
 
         async function fetchRooms() {
             try {
-                const res = await fetch('/api/rooms/adv');
+                const res = await fetch('/api/ads?type=room');
                 const rooms = await res.json();
                 renderRooms(rooms);
             } catch (err) {
@@ -552,7 +555,7 @@
 
         async function openDetailModal(id) {
             try {
-                const res = await fetch(`/api/room_advs/${id}`);
+                const res = await fetch(`/api/ads/${id}`);
                 const adv = await res.json();
 
                 // Fetch building info for address
@@ -576,6 +579,7 @@
 
                 document.getElementById('detail-memo').textContent = adv.description || '';
                 currentLandlordId = adv.created_by;
+                currentBuildingId = adv.building_id;
 
                 const gallery = document.getElementById('detail-photos');
                 gallery.innerHTML = '';
@@ -605,6 +609,7 @@
 
         let currentAdvId = null;
         let currentLandlordId = null;
+        let currentBuildingId = null;
 
         function openRequestModal() {
             if (!currentLandlordId) {
@@ -623,15 +628,9 @@
             const phone = document.getElementById('req-phone').value.trim();
             const birth = document.getElementById('req-birth').value.trim();
             const memo = document.getElementById('req-memo').value.trim();
-            const turnstileResponse = turnstile.getResponse();
 
             if (!name || !phone || !birth) {
-                alert('카카오 인증을 통해 이름, 생년월일, 연락처를 입력해주세요.');
-                return;
-            }
-
-            if (!turnstileResponse) {
-                alert('보안 검증을 완료해주세요.');
+                alert('이름, 생년월일, 연락처를 모두 입력해주세요.');
                 return;
             }
 
@@ -639,7 +638,7 @@
                 const res = await fetch('/api/apply', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, phone, birth, memo, turnstileResponse, landlordId: currentLandlordId })
+                    body: JSON.stringify({ name, phone, birth, memo, landlordId: currentLandlordId, buildingId: currentBuildingId })
                 });
 
                 if (res.ok) {
@@ -651,7 +650,6 @@
                     document.getElementById('req-phone').value = '';
                     document.getElementById('req-birth').value = '';
                     document.getElementById('req-memo').value = '';
-                    turnstile.reset();
                 } else {
                     const data = await res.json();
                     alert('신청 실패: ' + (data.error || '알 수 없는 오류'));

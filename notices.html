@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>공지사항 - Sugar</title>
+    <title>메시지함 - Sugar</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     <style>
@@ -126,6 +126,21 @@
             padding-top: 2px;
         }
 
+        .status-btn-tmp {
+            background: rgba(255, 255, 255, 0.1);
+            color: #94a3b8;
+        }
+
+        .status-btn-approve {
+            background: rgba(34, 197, 94, 0.2);
+            color: #4ade80;
+        }
+
+        .status-btn-reject {
+            background: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+        }
+
         .notice-actions {
             display: flex;
             gap: 0.5rem;
@@ -134,75 +149,26 @@
         }
 
         .action-btn {
-            height: 2rem;
-            /* Matches approximate text height */
+            height: 2.2rem;
+            /* Standardized for list layout */
             padding: 0 1rem;
-            border-radius: 0.4rem;
-            border: none;
+            border-radius: 0.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
             font-size: 0.8rem;
-            font-weight: 600;
+            font-weight: 500;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-        }
-
-        .btn-approve {
-            background: #22c55e;
-            color: white;
-        }
-
-        .btn-approve:disabled {
-            background: rgba(34, 197, 94, 0.2);
-            color: rgba(255, 255, 255, 0.3);
-            cursor: default;
-        }
-
-        .btn-reject {
-            background: #ef4444;
-            color: white;
-        }
-
-        .btn-reject:disabled {
-            background: rgba(239, 68, 68, 0.2);
-            color: rgba(255, 255, 255, 0.3);
-            cursor: default;
-        }
-
-        .notice-detail {
-            display: none;
-            padding: 0 1.5rem 0 1.5rem;
-            /* Remove top/bottom padding */
-            background: rgba(0, 0, 0, 0.2);
-            font-size: 0.95rem;
-            line-height: 1.6;
-            color: rgba(255, 255, 255, 0.9);
-            white-space: pre-wrap;
-            border-top: 1px solid rgba(255, 255, 255, 0.05);
-            text-align: left;
-            /* Explicit left align */
-            overflow: hidden;
-            max-height: 0;
-            /* Animate expand */
-            transition: max-height 0.3s ease-out, padding 0.3s ease;
-        }
-
-        .notice-item.expanded .notice-detail {
-            display: block;
-            max-height: 500px;
-            /* Arbitrary large height */
-            padding: 0 1.5rem;
-        }
-
-        .notice-item.expanded {
-            background: rgba(255, 255, 255, 0.08);
+            min-width: 4rem;
+            white-space: nowrap;
         }
     </style>
 </head>
 
 <body>
     <div class="header">
-        <h1>공지사항</h1>
+        <h1>메시지함</h1>
     </div>
 
     <div class="container">
@@ -238,93 +204,90 @@
             container.innerHTML = '';
 
             if (notices.length === 0) {
-                container.innerHTML = '<div style="text-align:center; opacity:0.5; padding:3rem;">공지사항이 없습니다.</div>';
+                container.innerHTML = '<div style="text-align:center; opacity:0.5; padding:3rem;">메시지함이 비어있습니다.</div>';
                 return;
             }
 
             notices.forEach(notice => {
                 const item = document.createElement('div');
                 item.className = 'notice-item';
+                item.onclick = () => location.href = `/message_detail.html?id=${notice.id}`;
 
-                const isSignup = notice.type === '가입신청';
                 const date = new Date(notice.created_at).toLocaleDateString();
-                const author = notice.nickname || 'Unknown';
 
-                let buttonsHtml = '';
-                if (isSignup) {
-                    if (notice.user_approved === 0) {
-                        buttonsHtml = `
-                            <button class="action-btn btn-approve" onclick="handleAction(event, 'approve', ${notice.author_id})">승인</button>
-                            <button class="action-btn btn-reject" onclick="handleAction(event, 'reject', ${notice.author_id})">거절</button>
-                        `;
-                    } else if (notice.user_approved === 1) {
-                        buttonsHtml = `<button class="action-btn btn-approve" disabled>승인됨</button>`;
-                    } else if (notice.user_approved === 2) {
-                        buttonsHtml = `<button class="action-btn btn-reject" disabled>거절됨</button>`;
-                    }
-                }
+                // Determine the status to display
+                let displayStatus = notice.related_status || notice.user_status || '-';
+
+                // Translation mapping
+                const statusMap = {
+                    'advertising': '진행중',
+                    'drawing': '추첨중',
+                    'completed': '완료',
+                    'open': '진행중',
+                    'closed': '종료',
+                    '승인': '승인',
+                    '임시': '임시',
+                    '거절': '거절',
+                    '종료': '종료'
+                };
+
+                const statusText = statusMap[displayStatus] || displayStatus;
+
+                // Style status button
+                let statusClass = 'status-btn-tmp';
+                if (['승인', 'completed', '완료'].includes(displayStatus)) statusClass = 'status-btn-approve';
+                if (['거절', '종료', 'closed'].includes(displayStatus)) statusClass = 'status-btn-reject';
+                if (['advertising', 'open', 'drawing', '진행중', '추첨중'].includes(displayStatus)) statusClass = 'status-btn-tmp'; // Blueish or default
+
+                const isAdmin = user.role === 'admin';
+                const isSignup = notice.category === '가입신청';
+                const deleteBtnHtml = (isAdmin && isSignup) ? `
+                    <button class="action-btn status-btn-reject" onclick="deleteMessage(event, ${notice.id})">삭제</button>
+                ` : '';
+
+                // Display category in the badge (e.g. '방있어요', '물품공유')
+                const displayCategory = notice.category || '알림';
 
                 item.innerHTML = `
-                    <div class="notice-summary" onclick="toggleDetail(this)">
-                        <span class="notice-type ${isSignup ? 'signup' : ''}">${notice.type || '공지'}</span>
+                    <div class="notice-summary">
+                        <div class="notice-actions-left" style="flex-shrink: 0; min-width: 4rem; display: flex; justify-content: center;">
+                            <span class="notice-type ${isSignup ? 'signup' : ''}">${displayCategory}</span>
+                        </div>
                         <div class="notice-text-group">
                             <span class="notice-title" title="${notice.title}">${notice.title}</span>
                             <div class="notice-meta">
                                 <span>${date}</span>
-                                <span>${author}</span>
+                                <span>${notice.nickname || 'Unknown'}</span>
                             </div>
                         </div>
-                        <div class="notice-actions">
-                            ${buttonsHtml}
+                        <div class="notice-actions" style="display: flex; align-items: center; gap: 0.2rem;">
+                            <button class="action-btn ${statusClass}">${statusText}</button>
+                            ${deleteBtnHtml}
                         </div>
-                    </div>
-                    <div class="notice-detail" onclick="toggleDetail(this.parentElement)">${notice.content || '내용이 없습니다.'}</div>`;
+                    </div>`;
 
                 container.appendChild(item);
             });
         }
 
-        function toggleDetail(element) {
-            if (element.classList.contains('notice-summary')) {
-                // Clicked summary, find parent item
-                element = element.parentElement;
-            }
-
-            // If clicking detail, it bubbles to parent unless handled. 
-            // Implementation requirement: "상세 정보 클릭시 다시 리스트만 보여짐"
-            // So toggle class on the item.
-
-            const isExpanded = element.classList.contains('expanded');
-
-            // Close all others (Optional, but usually better UX for accordion)
-            // Uncomment next line if exclusive expansion is desired
-            // document.querySelectorAll('.notice-item.expanded').forEach(el => el.classList.remove('expanded'));
-
-            if (isExpanded) {
-                element.classList.remove('expanded');
-            } else {
-                element.classList.add('expanded');
-            }
-        }
-
-        async function handleAction(event, action, targetId) {
-            event.stopPropagation(); // Don't toggle accordion
-
-            const message = action === 'approve' ? '승인하시겠습니까?' : '거절하시겠습니까?';
-            if (!confirm(message)) return;
+        async function deleteMessage(event, id) {
+            event.stopPropagation();
+            if (!confirm('메시지를 삭제하시겠습니까?')) return;
 
             try {
-                const res = await fetch(`/api/users/${targetId}/${action}`, { method: 'POST' });
+                const res = await fetch(`/api/notices/${id}`, { method: 'DELETE' });
                 if (res.ok) {
-                    fetchNotices(); // Refresh
+                    fetchNotices(); // Refresh list
                 } else {
-                    alert('처리 중 오류가 발생했습니다.');
+                    alert('삭제에 실패했습니다.');
                 }
             } catch (err) {
                 console.error(err);
                 alert('서버 오류');
             }
         }
+
+        // Removed handleAction and toggleDetail as we now navigate to a detail page
 
         fetchNotices();
     </script>

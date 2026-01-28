@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     <script src="/js/common.js"></script>
+    <script src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -124,7 +125,8 @@
 
         .submit-btn {
             flex: 2;
-            padding: 1rem;
+            height: 3rem;
+            padding: 0 1rem;
             border-radius: 0.8rem;
             border: none;
             background: linear-gradient(to right, #6366f1, #a855f7);
@@ -132,11 +134,15 @@
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .cancel-btn {
             flex: 1;
-            padding: 1rem;
+            height: 3rem;
+            padding: 0 1rem;
             border-radius: 0.8rem;
             border: 1px solid rgba(255, 255, 255, 0.1);
             background: rgba(255, 255, 255, 0.05);
@@ -144,6 +150,9 @@
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .submit-btn:hover,
@@ -157,6 +166,41 @@
 
         .cancel-btn:hover {
             background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Select Styles */
+        .form-group select {
+            width: 100%;
+            padding: 0.8rem 1rem;
+            border-radius: 0.8rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.2);
+            color: white;
+            box-sizing: border-box;
+            outline: none;
+            transition: all 0.3s;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            height: 3rem;
+            display: block;
+            appearance: none;
+            cursor: pointer;
+        }
+
+        .form-group select:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: rgba(255, 255, 255, 0.05) !important;
+        }
+
+        .form-group select:focus {
+            border-color: #6366f1;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .form-group select option {
+            background: #1e293b;
+            color: white;
         }
 
         /* Modal Styles */
@@ -286,12 +330,73 @@
             margin-top: 0.3rem;
             display: none;
         }
+
+        .kakao-btn-container {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .kakao-btn {
+            background: #FEE500;
+            color: #000000;
+            border: none;
+            border-radius: 0.8rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            height: 3rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 1rem;
+            font-family: 'Outfit', sans-serif;
+            transition: all 0.2s;
+        }
+
+        .kakao-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .kakao-hint {
+            font-size: 0.8rem;
+            opacity: 0.6;
+            margin-top: 0.6rem;
+        }
+
+        input[readonly] {
+            opacity: 0.7;
+            cursor: not-allowed;
+            background: rgba(255, 255, 255, 0.05) !important;
+        }
+
+        .wheel-picker-container.readonly {
+            pointer-events: none;
+            opacity: 0.7;
+        }
     </style>
 </head>
 
 <body>
     <div class="signup-card">
         <h1 id="page-title">가입 신청</h1>
+
+        <div id="kakao-section" class="kakao-btn-container">
+            <button onclick="loginWithKakao()" class="kakao-btn">
+                <img src="https://developers.kakao.com/assets/img/about/logos/kakaotalksharing/kakaotalk_sharing_btn_small.png"
+                    width="24" height="24" alt="" />
+                카카오로 인증
+            </button>
+            <p class="kakao-hint">인증 시 이름, 생년월일, 연락처가 자동 입력됩니다.</p>
+            <div id="test-mode-section"
+                style="display:none; margin-top: 1rem; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 1rem;">
+                <button onclick="generateRandomTenant()" class="cancel-btn"
+                    style="width: 100%; flex: none; background: rgba(99,102,241,0.1); border-color: rgba(99,102,241,0.2); color: var(--accent);">
+                    🎲 세입자 랜덤 생성 (TEST)
+                </button>
+            </div>
+        </div>
 
         <div class="form-group">
             <label>아이디</label>
@@ -311,23 +416,31 @@
 
         <div class="form-group">
             <label>이름</label>
-            <input type="text" id="name" placeholder="이름을 입력하세요">
+            <input type="text" id="name" placeholder="이름을 입력하세요 (카카오 인증 시 자동 입력)" readonly>
         </div>
 
         <div class="form-group">
             <label>생년월일</label>
-            <div class="wheel-picker-container">
-                <div class="wheel-highlight"></div>
-                <div class="wheel" id="wheel-year"></div>
-                <div class="wheel" id="wheel-month"></div>
-                <div class="wheel" id="wheel-day"></div>
-            </div>
-            <input type="hidden" id="birth_date">
+            <input type="text" id="birth_date" placeholder="YYYY-MM-DD (카카오 인증 시 자동 입력)" readonly>
         </div>
 
         <div class="form-group">
             <label>전화번호</label>
-            <input type="tel" id="phone_number" placeholder="'-' 없이 숫자만 입력">
+            <input type="tel" id="phone_number" placeholder="연락처를 입력하세요 (카카오 인증 시 자동 입력)" readonly>
+        </div>
+
+        <div class="form-group" id="building-group" style="display: none;">
+            <label>임대 건물 정보</label>
+            <select id="building_id" disabled onchange="handleBuildingChange()">
+                <option value="">카카오 인증 후 선택 가능합니다</option>
+            </select>
+        </div>
+
+        <div class="form-group" id="room-group" style="display: none;">
+            <label>방 호수</label>
+            <select id="room_number" disabled>
+                <option value="">건물을 먼저 선택해주세요</option>
+            </select>
         </div>
 
         <div class="consent-box">
@@ -378,6 +491,192 @@
 
         document.getElementById('page-title').textContent = (role === 'landlord' ? '임대인' : '세입자') + ' 가입 신청';
 
+        if (role === 'tenant') {
+            document.getElementById('building-group').style.display = 'block';
+            document.getElementById('room-group').style.display = 'block';
+        }
+
+        async function loadBuildings() {
+            try {
+                const res = await fetch('/api/admin/buildings');
+                const buildings = await res.json();
+                const select = document.getElementById('building_id');
+                select.innerHTML = '<option value="">건물을 선택해주세요</option>';
+                buildings.forEach(b => {
+                    const opt = document.createElement('option');
+                    opt.value = b.id;
+                    opt.textContent = b.name;
+                    select.appendChild(opt);
+                });
+            } catch (err) {
+                console.error('Failed to load buildings:', err);
+            }
+        }
+
+        async function handleBuildingChange() {
+            const buildingId = document.getElementById('building_id').value;
+            const roomSelect = document.getElementById('room_number');
+
+            if (!buildingId) {
+                roomSelect.innerHTML = '<option value="">건물을 먼저 선택해주세요</option>';
+                roomSelect.disabled = true;
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/buildings/${buildingId}/rooms`);
+                const rooms = await res.json();
+                roomSelect.innerHTML = '<option value="">호수를 선택해주세요</option>';
+                rooms.forEach(r => {
+                    const opt = document.createElement('option');
+                    opt.value = r.id; // Store room_id
+                    opt.textContent = r.room_number + '호';
+                    roomSelect.appendChild(opt);
+                });
+                roomSelect.disabled = false;
+            } catch (err) {
+                console.error('Failed to load rooms:', err);
+                alert('방 정보를 불러오는데 실패했습니다.');
+            }
+        }
+
+        async function initKakao() {
+            let retries = 0;
+            while (!window.Kakao && retries < 20) {
+                await new Promise(r => setTimeout(r, 100));
+                retries++;
+            }
+
+            if (!window.Kakao) return;
+
+            try {
+                const res = await fetch('/api/config/kakao');
+                if (!res.ok) throw new Error('Failed to fetch config');
+                const data = await res.json();
+
+                if (data.kakaoKey) {
+                    if (!Kakao.isInitialized()) {
+                        Kakao.init(data.kakaoKey);
+                    }
+                }
+            } catch (err) {
+                console.error('Kakao Init Error:', err);
+            }
+        }
+        initKakao();
+
+        async function checkTestMode() {
+            try {
+                const res = await fetch('/api/config/mode');
+                const data = await res.json();
+                if (data.mode === 'TEST') {
+                    document.getElementById('test-mode-section').style.display = 'block';
+                }
+            } catch (err) {
+                console.error('Failed to check mode:', err);
+            }
+        }
+        checkTestMode();
+
+        function generateRandomTenant() {
+            const lastNames = ['김', '이', '박', '최', '정', '강', '조', '윤', '장', '임', '한', '오', '서', '신', '권', '황', '안', '송', '전', '홍'];
+            const firstNames = ['민준', '서준', '도윤', '예준', '시우', '하준', '주원', '지호', '지후', '준서', '서윤', '서연', '지우', '하윤', '하은', '민서', '지유', '윤서', '지민', '채원'];
+
+            const randomName = lastNames[Math.floor(Math.random() * lastNames.length)] + firstNames[Math.floor(Math.random() * firstNames.length)];
+
+            // Random birth date (Age 20 ~ 50)
+            const year = 2026 - (20 + Math.floor(Math.random() * 30));
+            const month = String(1 + Math.floor(Math.random() * 12)).padStart(2, '0');
+            const day = String(1 + Math.floor(Math.random() * 28)).padStart(2, '0');
+            const randomBirth = `${year}-${month}-${day}`;
+
+            // Random phone
+            const p2 = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+            const p3 = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+            const randomPhone = `010-${p2}-${p3}`;
+
+            document.getElementById('name').value = randomName;
+            document.getElementById('birth_date').value = randomBirth;
+            document.getElementById('phone_number').value = randomPhone;
+            document.getElementById('consent').checked = true;
+
+            if (role === 'tenant') {
+                loadBuildings();
+                document.getElementById('building_id').disabled = false;
+            }
+
+            alert('랜덤 정보가 생성되었습니다.');
+        }
+
+        function loginWithKakao() {
+            if (!window.Kakao || !Kakao.isInitialized()) {
+                alert('카카오 SDK 초기화 중입니다. 잠시 후 다시 시도해주세요.');
+                return;
+            }
+
+            Kakao.Auth.login({
+                success: function (authObj) {
+                    Kakao.API.request({
+                        url: '/v2/user/me',
+                        success: function (res) {
+                            const kakaoAccount = res.kakao_account;
+                            console.log('Kakao Account Data:', kakaoAccount);
+                            if (kakaoAccount) {
+                                let updated = false;
+
+                                // Name
+                                const userName = kakaoAccount.name || (kakaoAccount.profile ? kakaoAccount.profile.nickname : '');
+                                if (userName) {
+                                    document.getElementById('name').value = userName;
+                                    updated = true;
+                                }
+
+                                // Phone
+                                if (kakaoAccount.phone_number) {
+                                    let phoneValue = kakaoAccount.phone_number.replace('+82 ', '0').replace(/[^0-9]/g, '');
+                                    if (phoneValue.startsWith('82')) {
+                                        phoneValue = '0' + phoneValue.substring(2);
+                                    }
+                                    document.getElementById('phone_number').value = formatPhone(phoneValue);
+                                    updated = true;
+                                }
+
+                                // Birth Date
+                                if (kakaoAccount.birthyear && kakaoAccount.birthday) {
+                                    const y = kakaoAccount.birthyear;
+                                    const m = kakaoAccount.birthday.substring(0, 2);
+                                    const d = kakaoAccount.birthday.substring(2, 4);
+                                    document.getElementById('birth_date').value = `${y}-${m}-${d}`;
+                                    updated = true;
+                                } else if (kakaoAccount.birthyear) {
+                                    document.getElementById('birth_date').value = kakaoAccount.birthyear;
+                                    updated = true;
+                                }
+
+                                if (updated) {
+                                    if (role === 'tenant') {
+                                        loadBuildings();
+                                        document.getElementById('building_id').disabled = false;
+                                    }
+                                    alert('카카오 인증 성공! 정보가 입력되었습니다.\n아이디와 비밀번호를 설정해주세요.');
+                                } else {
+                                    alert('카카오 계정에서 정보를 가져오지 못했습니다.');
+                                }
+                            }
+                        },
+                        fail: function (error) {
+                            console.error(error);
+                            alert('사용자 정보를 가져오는데 실패했습니다.');
+                        }
+                    });
+                },
+                fail: function (err) {
+                    console.error(err);
+                    alert('카카오 로그인에 실패했습니다.');
+                }
+            });
+        }
+
         function showModal(title, text) {
             document.getElementById('alert-title').textContent = title;
             document.getElementById('alert-text').textContent = text;
@@ -392,68 +691,7 @@
             document.getElementById('confirm-modal').style.display = 'none';
         }
 
-        // Wheel Picker Logic
-        function initWheel(id, start, end, selected) {
-            const wheel = document.getElementById(id);
-            for (let i = start; i <= end; i++) {
-                const item = document.createElement('div');
-                item.textContent = i + (id.includes('year') ? '년' : id.includes('month') ? '월' : '일');
-                item.dataset.value = i;
-                wheel.appendChild(item);
-            }
-
-            // Padding items for scroll
-            wheel.prepend(document.createElement('div'));
-            // wheel.prepend(document.createElement('div'));
-            wheel.appendChild(document.createElement('div'));
-            // wheel.appendChild(document.createElement('div'));
-
-            wheel.addEventListener('scroll', () => {
-                const items = wheel.querySelectorAll('div[data-value]');
-                let closest = null;
-                let minDiff = Infinity;
-                const wheelCenter = wheel.getBoundingClientRect().top + wheel.offsetHeight / 2;
-
-                items.forEach(item => {
-                    const rect = item.getBoundingClientRect();
-                    const itemCenter = rect.top + rect.height / 2;
-                    const diff = Math.abs(wheelCenter - itemCenter);
-                    if (diff < minDiff) {
-                        minDiff = diff;
-                        closest = item;
-                    }
-                    item.classList.remove('selected');
-                });
-
-                if (closest) {
-                    closest.classList.add('selected');
-                    updateBirthDate();
-                }
-            });
-
-            // Set initial position
-            setTimeout(() => {
-                const target = wheel.querySelector(`div[data-value="${selected}"]`);
-                if (target) {
-                    wheel.scrollTop = target.offsetTop - wheel.offsetHeight / 2 + target.offsetHeight / 2;
-                }
-            }, 100);
-        }
-
-        function updateBirthDate() {
-            const y = document.querySelector('#wheel-year .selected')?.dataset.value;
-            const m = document.querySelector('#wheel-month .selected')?.dataset.value;
-            const d = document.querySelector('#wheel-day .selected')?.dataset.value;
-            if (y && m && d) {
-                const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                document.getElementById('birth_date').value = dateStr;
-            }
-        }
-
-        const currentYear = new Date().getFullYear();
-        initWheel('wheel-year', currentYear - 100, currentYear, 1990);
-        initWheel('wheel-month', 1, 12, 1);
-        initWheel('wheel-day', 1, 31, 1);
+        // Removed Wheel Picker logic as it's no longer used for birthdate
 
         document.getElementById('phone_number').addEventListener('input', (e) => {
             e.target.value = formatPhone(e.target.value);
@@ -466,10 +704,17 @@
             const name = document.getElementById('name').value.trim();
             const birth_date = document.getElementById('birth_date').value;
             const phone_number = document.getElementById('phone_number').value.replace(/[^0-9]/g, '');
+            const building_id = document.getElementById('building_id').value;
+            const room_number = document.getElementById('room_number').value;
             const consent = document.getElementById('consent').checked;
 
             if (!login_id || !name || !birth_date || !phone_number) {
                 showModal('입력 오류', '모든 필수 항목을 입력해주세요.');
+                return;
+            }
+
+            if (role === 'tenant' && (!building_id || !room_number)) {
+                showModal('정보 선택 필요', '임대 건물과 방 호수를 선택해주세요.');
                 return;
             }
 
@@ -513,13 +758,15 @@
             const name = document.getElementById('name').value.trim();
             const birth_date = document.getElementById('birth_date').value;
             const phone_number = document.getElementById('phone_number').value.replace(/[^0-9]/g, '');
+            const building_id = document.getElementById('building_id').value;
+            const room_number = document.getElementById('room_number').value;
 
             try {
                 const res = await fetch('/api/signup', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        login_id, password, nickname: name, birth_date, phone_number, role
+                        login_id, password, nickname: name, birth_date, phone_number, role, building_id, room_number
                     })
                 });
 

@@ -310,7 +310,12 @@
 
         async function fetchItems() {
             try {
-                const res = await fetch('/api/items/adv');
+                const user = JSON.parse(localStorage.getItem('user'));
+                let url = '/api/ads?type=item';
+                if (user) {
+                    url += `&viewer_id=${user.id}&viewer_role=${user.role}`;
+                }
+                const res = await fetch(url);
                 const items = await res.json();
                 renderItems(items);
             } catch (err) {
@@ -339,7 +344,7 @@
                     <div class="notice-summary" onclick="openDetailModal(${item.id})">
                         <span class="notice-type">나눔/판매</span>
                         <div class="notice-text-group">
-                            <span class="notice-title" style="display:flex; align-items:flex-end;">${item.name}</span>
+                            <span class="notice-title" style="display:flex; align-items:flex-end;">${item.title}</span>
                             <div class="notice-meta" style="display:flex; align-items:center;">
                                 <span>${price}</span>
                                 <span style="margin-left:auto;">${owner}</span>
@@ -353,10 +358,10 @@
 
         async function openDetailModal(id) {
             try {
-                const res = await fetch(`/api/item_advs/${id}`);
+                const res = await fetch(`/api/ads/${id}`);
                 const item = await res.json();
 
-                document.getElementById('detail-title').textContent = item.name || '제목 없음';
+                document.getElementById('detail-title').textContent = item.title || '제목 없음';
 
                 const priceStr = item.price ? (item.price / 1).toLocaleString() + '원' : '무료나눔';
                 document.getElementById('detail-price').textContent = priceStr;

@@ -485,7 +485,7 @@
                             <option value="ALL">ALL (전체 건물)</option>
                             ${buildings.map(b => `<option value="${b.id}" ${b.id == filterId ? 'selected' : ''}>${b.name}</option>`).join('')}
                         </select>
-                        <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="addNewBuilding()">건물 추가</button>
+                        <button class="btn" onclick="addNewBuilding()">건물 추가</button>
                     </div>
                 </div>
                 `;
@@ -497,7 +497,7 @@
                 <div style="display:flex; align-items:center; width:100%;">
                     <div class="search-container" style="display: flex; gap: 0.5rem; flex:1; max-width:400px;">
                         <input type="text" id="event-search" class="search-input" placeholder="이벤트 내용 검색..." style="flex:1;" onkeyup="if(event.key === 'Enter') searchEvents()">
-                        <button class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.9rem; white-space: nowrap;" onclick="searchEvents()">검색</button>
+                        <button class="btn btn-secondary" style="white-space: nowrap;" onclick="searchEvents()">검색</button>
                     </div>
                 </div>
                 `;

@@ -474,7 +474,7 @@
 
         async function fetchAdvRooms() {
             try {
-                const res = await fetch(`/api/rooms/adv?role=${user.role}&user_id=${user.id}`);
+                const res = await fetch(`/api/ads?type=room&role=${user.role}&user_id=${user.id}`);
                 const rooms = await res.json();
                 renderRooms(rooms);
             } catch (err) {
@@ -675,7 +675,7 @@
             document.getElementById('photo-input').value = '';
 
             try {
-                const res = await fetch(`/api/room_advs/${id}`);
+                const res = await fetch(`/api/ads/${id}`);
                 const adv = await res.json();
 
                 if (cachedBuildings.length === 0) await fetchBuildings();
@@ -692,9 +692,12 @@
 
                 document.getElementById('modal-building').value = adv.building_id;
 
+                document.getElementById('modal-building').value = adv.building_id;
+
                 // Fetch rooms for this building
                 await fetchRooms(adv.building_id);
-                document.getElementById('modal-room').value = adv.room_id;
+                // When using advertisements table, related_id is room_id for room ads
+                document.getElementById('modal-room').value = adv.related_id;
 
                 document.getElementById('modal-title').value = adv.title;
                 document.getElementById('modal-deposit').value = adv.deposit;
@@ -749,7 +752,8 @@
             const roomId = parseInt(rawRoomId, 10);
 
             const formData = new FormData();
-            formData.append('room_id', roomId);
+            formData.append('related_id', roomId);
+            formData.append('type', 'room');
             formData.append('title', document.getElementById('modal-title').value);
             formData.append('description', document.getElementById('modal-memo').value);
             formData.append('deposit', document.getElementById('modal-deposit').value);
@@ -764,7 +768,7 @@
             });
 
             const method = currentAdvId ? 'PUT' : 'POST';
-            const url = currentAdvId ? `/api/room_advs/${currentAdvId}` : '/api/room_advs';
+            const url = currentAdvId ? `/api/ads/${currentAdvId}` : '/api/ads';
 
             try {
                 const res = await fetch(url, {
@@ -788,7 +792,7 @@
             if (e && (e.target.closest('.action-btn') || e.target.closest('.modal-overlay'))) return;
 
             try {
-                const res = await fetch(`/api/room_advs/${id}`);
+                const res = await fetch(`/api/ads/${id}`);
                 const adv = await res.json();
 
                 // Need to fetch extra building info for address

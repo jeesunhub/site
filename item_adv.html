@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>물건 내놓기 - Sugar</title>
+    <title>물건 공유 - Sugar</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     <style>
@@ -121,6 +121,15 @@
             cursor: pointer;
             color: white;
             background: rgba(255, 255, 255, 0.1);
+        }
+
+        .building-badge {
+            font-size: 0.7rem;
+            color: #d8b4fe;
+            background: rgba(168, 85, 247, 0.2);
+            padding: 0.1rem 0.4rem;
+            border-radius: 0.3rem;
+            white-space: nowrap;
         }
 
         /* Modal Styles */
@@ -264,7 +273,7 @@
 <body>
     <!-- Navbar -->
     <div class="header">
-        <h1>물건 내놓기</h1>
+        <h1>물건 공유</h1>
         <a href="#" class="btn-add" onclick="openAddModal()">물건 추가</a>
     </div>
 
@@ -278,29 +287,52 @@
     <div id="add-modal" class="modal-overlay" style="display: none;" onclick="if(event.target === this) closeModal()">
         <div class="modal-content">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-                <h3 id="modal-title-text" style="margin:0;">물건 내놓기</h3>
+                <h3 id="modal-title-text" style="margin:0;">물건 공유</h3>
                 <div style="display:flex; align-items:center; gap:0.3rem;">
                     <input type="checkbox" id="modal-anon" style="width:auto; cursor:pointer;">
                     <label for="modal-anon" style="margin:0; cursor:pointer; font-size:0.85rem; color:#ccc;">익명으로
-                        내놓기</label>
+                        공유하기</label>
                 </div>
             </div>
 
             <div class="form-group">
-                <label>건물 선택</label>
-                <select id="modal-building" class="form-input">
-                    <option value="">건물을 선택하세요</option>
+                <label>건물</label>
+                <div id="building-wrapper">
+                    <select id="modal-building" class="form-input">
+                        <option value="">건물을 선택하세요</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>광고 제목 (리스트에 표시될 제목)</label>
+                <input type="text" id="modal-ad-title" class="form-input" placeholder="예: [깨끗함] 중고 의자 나눔합니다">
+            </div>
+
+            <div class="form-group">
+                <label>희망 가격 (원)</label>
+                <input type="number" id="modal-price" class="form-input" placeholder="0 (무료나눔은 0)">
+                <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.3rem;">재판매 금지, 폐기 시 폐기물 스티커 부착</div>
+            </div>
+
+            <div class="form-group">
+                <label>광고 범위</label>
+                <select id="modal-target-id" class="form-input">
+                    <option value="">전체공고 (모두에게 보임)</option>
                 </select>
             </div>
 
+            <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 1.5rem 0;">
+
             <div class="form-group">
-                <label>제목</label>
-                <input type="text" id="modal-title" class="form-input" placeholder="물건 제목 입력">
+                <label>물건 이름</label>
+                <input type="text" id="modal-item-name" class="form-input" placeholder="물건의 정확한 이름">
             </div>
 
             <div class="form-group">
-                <label>가격 (원)</label>
-                <input type="number" id="modal-price" class="form-input" placeholder="0 (무료나눔은 0)">
+                <label>물건 설명</label>
+                <textarea id="modal-item-desc" class="form-input" rows="4"
+                    placeholder="상세 설명을 입력해주세요 (사용감, 거래 장소 등)"></textarea>
             </div>
 
             <div class="form-group">
@@ -315,11 +347,6 @@
             </div>
 
 
-
-            <div class="form-group">
-                <label>설명</label>
-                <textarea id="modal-desc" class="form-input" rows="3" placeholder="상품 설명"></textarea>
-            </div>
 
             <div class="modal-actions">
                 <button class="action-btn" style="background:var(--surface); color:var(--text-secondary)"
@@ -342,7 +369,11 @@
 
         async function fetchItems() {
             try {
-                const res = await fetch(`/api/items/adv?role=${user.role}&user_id=${user.id}`);
+                let url = `/api/ads?type=item`;
+                if (user) {
+                    url += `&viewer_id=${user.id}&viewer_role=${user.role}`;
+                }
+                const res = await fetch(url);
                 const items = await res.json();
                 renderItems(items);
             } catch (err) {
@@ -361,29 +392,47 @@
 
             items.forEach(item => {
                 const li = document.createElement('li');
-                li.className = 'notice-item';
-
-                const price = item.price ? (item.price / 1).toLocaleString() + '원' : '무료나눔';
-                let owner = item.owner_name || '알 수 없음';
-                if (item.is_anonymous) {
-                    owner = '익명';
+                const isMine = item.created_by === user.id;
+                li.className = `notice-item ${isMine ? 'mine' : ''}`;
+                if (isMine) {
+                    li.style.background = 'rgba(99, 102, 241, 0.05)';
                 }
+                li.onclick = () => window.location.href = `/item_detail.html?id=${item.id}`;
+
+                const priceValue = item.price ? (item.price / 1).toLocaleString() + '원' : '무료나눔';
+                let owner = item.owner_name || '알 수 없음';
+                if (item.is_anonymous) owner = '익명';
+
                 const building = item.building_name || '건물미정';
                 const dateStr = item.created_at ? item.created_at.split(' ')[0] : '';
+
+                // Badge color based on status
+                let statusColor = '#94a3b8';
+                let statusLabel = '대기';
+                if (item.status === 'advertising') { statusColor = '#6366f1'; statusLabel = '진행중'; }
+                else if (item.status === 'completed') { statusColor = '#22c55e'; statusLabel = '완료'; }
+                else if (item.status === 'drawing') { statusColor = '#f59e0b'; statusLabel = '추첨중'; }
+
+                let actionButtons = `<button class="action-btn" style="background:${statusColor}; color:white; cursor:default;" onclick="event.stopPropagation()">${statusLabel}</button>`;
+
+                if (user.role === 'admin') {
+                    actionButtons += `<button class="action-btn" style="background:#ef4444" onclick="event.stopPropagation(); deleteAd(${item.id})">삭제</button>`;
+                }
+
+                const myBadge = isMine ? `<span style="background:var(--primary); color:white; font-size:0.65rem; padding:1px 4px; border-radius:3px; margin-right:4px; font-weight:600;">내 글</span>` : '';
 
                 li.innerHTML = `
                     <div class="notice-summary">
                         <div class="building-badge">${building}</div>
                         <div class="notice-text-group">
                             <div class="notice-title" style="display:flex; align-items:center; gap:0.5rem;">
-                                ${item.name} 
-                                <span style="font-size:0.8rem; color:#94a3b8; font-weight:400;">${price}</span>
+                                ${myBadge}${item.title} 
+                                <span style="font-size:0.8rem; color:#94a3b8; font-weight:400;">${priceValue}</span>
                             </div>
                             <div class="notice-meta">${dateStr} ${owner}</div>
                         </div>
                         <div class="notice-right">
-                             <button class="action-btn" onclick="openEditModal(${item.id})">수정</button>
-                             <button class="action-btn" style="background:#22c55e" onclick="alert('판매 완료 처리 준비 중')">완료</button>
+                             ${actionButtons}
                         </div>
                     </div>
                 `;
@@ -393,18 +442,36 @@
 
         // --- Modal Logic ---
 
+        async function deleteAd(id) {
+            if (!confirm('정말로 삭제하시겠습니까? 관련 사진과 물건 정보가 모두 삭제됩니다.')) return;
+            try {
+                const res = await fetch(`/api/ads/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    alert('삭제되었습니다.');
+                    fetchItems();
+                } else {
+                    const err = await res.json();
+                    alert('삭제 실패: ' + err.error);
+                }
+            } catch (e) {
+                console.error(e);
+                alert('삭제 중 오류가 발생했습니다.');
+            }
+        }
+
         async function openAddModal() {
             currentEditItemId = null;
             const titleElem = document.getElementById('modal-title-text');
-            if (titleElem) titleElem.textContent = '물건 내놓기';
+            if (titleElem) titleElem.textContent = '물건 공유';
 
             document.getElementById('add-modal').style.display = 'flex';
 
             // Reset
             document.getElementById('modal-building').value = '';
-            document.getElementById('modal-title').value = '';
+            document.getElementById('modal-ad-title').value = '';
+            document.getElementById('modal-item-name').value = '';
             document.getElementById('modal-price').value = '';
-            document.getElementById('modal-desc').value = '';
+            document.getElementById('modal-item-desc').value = '';
             document.getElementById('modal-anon').checked = false;
             selectedFiles = [];
 
@@ -435,14 +502,15 @@
             await fetchBuildings();
 
             try {
-                const res = await fetch(`/api/item_advs/${id}`);
+                const res = await fetch(`/api/ads/${id}`);
                 if (!res.ok) throw new Error('Failed to load item');
                 const item = await res.json();
 
-                document.getElementById('modal-building').value = item.building_id;
-                document.getElementById('modal-title').value = item.name;
+                document.getElementById('modal-building').value = item.building_id || item.related_id;
+                document.getElementById('modal-ad-title').value = item.title;
+                document.getElementById('modal-item-name').value = item.item_name || '';
                 document.getElementById('modal-price').value = item.price;
-                document.getElementById('modal-desc').value = item.description;
+                document.getElementById('modal-item-desc').value = item.item_description || '';
                 document.getElementById('modal-anon').checked = (item.is_anonymous === 1);
 
                 // Render existing photos
@@ -467,10 +535,8 @@
         }
 
         async function fetchBuildings() {
-            const select = document.getElementById('modal-building');
-            if (select.options.length > 1) return;
-
-            select.innerHTML = '<option value="">로딩 중...</option>';
+            const wrapper = document.getElementById('building-wrapper');
+            const targetSelect = document.getElementById('modal-target-id');
 
             let url = '';
             if (user.role === 'admin') url = '/api/admin/buildings';
@@ -485,20 +551,34 @@
                 if (!res.ok) throw new Error('Fetch failed');
                 const buildings = await res.json();
 
-                select.innerHTML = '<option value="">건물을 선택하세요</option>';
-                if (buildings.length === 0) {
-                    select.innerHTML = '<option value="">선택 가능한 건물이 없습니다</option>';
-                    return;
+                // Build Building Dropdown
+                if (user.role === 'tenant') {
+                    const building = buildings[0] || { id: '', name: '소속 건물 없음' };
+                    wrapper.innerHTML = `
+                        <input type="text" class="form-input" value="${building.name}" disabled>
+                        <input type="hidden" id="modal-building" value="${building.id}">
+                    `;
+                } else {
+                    let html = `<select id="modal-building" class="form-input">`;
+                    html += `<option value="">건물을 선택하세요</option>`;
+                    buildings.forEach(b => {
+                        html += `<option value="${b.id}">${b.name}</option>`;
+                    });
+                    html += `</select>`;
+                    wrapper.innerHTML = html;
                 }
+
+                // Build Ad Scope Dropdown
+                const currentVal = targetSelect.value;
+                targetSelect.innerHTML = '<option value="">전체공고 (모두에게 보임)</option>';
                 buildings.forEach(b => {
-                    const opt = document.createElement('option');
-                    opt.value = b.id;
-                    opt.textContent = b.name;
-                    select.appendChild(opt);
+                    targetSelect.innerHTML += `<option value="${b.id}">${b.name} 전용</option>`;
                 });
+                targetSelect.value = currentVal;
+
             } catch (err) {
                 console.error(err);
-                select.innerHTML = '<option value="">건물 로드 실패</option>';
+                wrapper.innerHTML = `<select id="modal-building" class="form-input" disabled><option>건물 로드 실패</option></select>`;
             }
         }
 
@@ -554,30 +634,36 @@
 
         async function submitItemAdv() {
             const buildingId = document.getElementById('modal-building').value;
-            const title = document.getElementById('modal-title').value;
+            const adTitle = document.getElementById('modal-ad-title').value;
+            const itemName = document.getElementById('modal-item-name').value;
             const price = document.getElementById('modal-price').value;
-            const desc = document.getElementById('modal-desc').value;
+            const itemDesc = document.getElementById('modal-item-desc').value;
             const isAnon = document.getElementById('modal-anon').checked;
+            const targetId = document.getElementById('modal-target-id').value;
 
             if (!buildingId) return alert('건물을 선택해주세요.');
-            if (!title) return alert('제목을 입력해주세요.');
+            if (!adTitle) return alert('광고 제목을 입력해주세요.');
+            if (!itemName) return alert('물건 이름을 입력해주세요.');
 
             const formData = new FormData();
-            formData.append('owner_id', user.id);
+            formData.append('created_by', user.id);
+            formData.append('type', 'item');
             formData.append('building_id', buildingId);
-            formData.append('name', title);
+            formData.append('title', adTitle); // Ad title
+            formData.append('item_name', itemName);
             formData.append('price', price || 0);
-            formData.append('description', desc);
+            formData.append('description', itemDesc); // Ad description/Item description
             formData.append('is_anonymous', isAnon);
+            formData.append('target_id', targetId);
 
             selectedFiles.forEach(file => {
                 formData.append('photos', file);
             });
 
-            let url = '/api/item_advs';
+            let url = '/api/ads';
             let method = 'POST';
             if (currentEditItemId) {
-                url = `/api/item_advs/${currentEditItemId}`;
+                url = `/api/ads/${currentEditItemId}`;
                 method = 'PUT';
             }
 

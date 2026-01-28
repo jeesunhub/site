@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>물건 상세정보 - Sugar</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .detail-container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 1rem 1.5rem;
+            background: #1e293b;
+            min-height: calc(100vh - 3.5rem);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.8rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0.6rem;
+            color: white;
+            font-size: 1rem;
+        }
+
+        .form-input:disabled {
+            background: transparent;
+            border-color: transparent;
+            padding: 0.2rem 0;
+            cursor: default;
+        }
+
+        .photo-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 0.8rem;
+            margin-top: 1rem;
+        }
+
+        .photo-item {
+            aspect-ratio: 1;
+            border-radius: 0.6rem;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.05);
+            position: relative;
+            cursor: pointer;
+        }
+
+        .photo-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .applicant-list {
+            margin-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 1.5rem;
+        }
+
+        .applicant-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 0.8rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .applicant-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .applicant-name {
+            font-weight: 600;
+            color: white;
+        }
+
+        .select-btn {
+            padding: 0.5rem 1rem;
+            background: var(--primary);
+            border: none;
+            border-radius: 0.4rem;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 2rem;
+            font-weight: 600;
+        }
+
+        /* Image Overlay */
+        #image-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            cursor: zoom-out;
+        }
+
+        #image-overlay img {
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+        }
+
+        /* Dropdown Styles */
+        .dropdown-container {
+            position: relative;
+            flex: 1;
+        }
+
+        .dropdown-menu-up {
+            display: none;
+            position: absolute;
+            bottom: calc(100% + 10px);
+            left: 0;
+            width: 100%;
+            min-width: 200px;
+            background: #1e293b;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1rem;
+            box-shadow: 0 -10px 25px rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 0.5rem;
+        }
+
+        .dropdown-menu-up.show {
+            display: block;
+            animation: slideUp 0.2s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .dropdown-item {
+            padding: 0.8rem 1rem;
+            border-radius: 0.6rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid transparent;
+        }
+
+        .dropdown-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .dropdown-item.selected {
+            background: rgba(99, 102, 241, 0.2);
+            border-color: var(--primary);
+        }
+
+        .dropdown-item.dimmed {
+            opacity: 0.5;
+        }
+
+        .dropdown-item .name {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .dropdown-item .id {
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+
+<body class="has-back-button">
+    <div class="detail-container">
+        <div id="edit-section" style="display:none;">
+            <div class="form-group">
+                <label>건물</label>
+                <div id="building-wrapper"></div>
+            </div>
+
+            <div class="form-group">
+                <label>광고 제목</label>
+                <input type="text" id="modal-ad-title" class="form-input">
+            </div>
+
+            <div class="form-group">
+                <label>희망 가격 (원)</label>
+                <input type="number" id="modal-price" class="form-input">
+                <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.3rem;">재판매 금지, 폐기 시 폐기물 스티커 부착</div>
+            </div>
+
+            <div class="form-group">
+                <label>광고 범위</label>
+                <select id="modal-target-id" class="form-input">
+                    <option value="">전체공고 (모두에게 보임)</option>
+                </select>
+            </div>
+
+            <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 1.5rem 0;">
+
+            <div class="form-group">
+                <label>물건 이름</label>
+                <input type="text" id="modal-item-name" class="form-input">
+            </div>
+
+            <div class="form-group">
+                <label>물건 설명</label>
+                <textarea id="modal-item-desc" class="form-input" rows="4"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>사진 (최대 5장)</label>
+                <button class="action-btn" style="background:var(--primary); margin-bottom:0.5rem;"
+                    onclick="document.getElementById('photo-input').click()">사진 추가</button>
+                <input type="file" id="photo-input" multiple accept="image/*" style="display:none"
+                    onchange="handleFileSelect(this)">
+                <div id="photo-preview" class="photo-list"></div>
+            </div>
+
+            <div style="display:flex; gap:0.8rem; margin-top:1rem;">
+                <div class="dropdown-container">
+                    <button id="btn-applicants-count" class="btn"
+                        style="width:100%; background:rgba(255,255,255,0.05); color:#94a3b8;"
+                        onclick="toggleApplicantsDropdown(event)">신청자(0)</button>
+                    <div id="applicants-dropdown" class="dropdown-menu-up">
+                        <!-- Applicants will be rendered here -->
+                    </div>
+                </div>
+                <button class="btn btn-add" onclick="confirmSaveAd()"
+                    style="flex:0 0 auto; width: 80px; padding: 0;">저장</button>
+            </div>
+        </div>
+
+        <div id="view-section" style="display:none;">
+            <div class="form-group">
+                <label>상태</label>
+                <span id="view-status" class="status-badge"></span>
+            </div>
+            <div class="form-group">
+                <label>건물 / 광고 제목</label>
+                <div style="font-size:1.1rem; font-weight:600;"><span id="view-building"
+                        style="color:var(--primary);"></span> <span id="view-ad-title"></span></div>
+            </div>
+            <div class="form-group">
+                <label>가격</label>
+                <div id="view-price" style="font-size:1.2rem; font-weight:600; color:#4ade80;"></div>
+                <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.3rem;">재판매 금지, 폐기 시 폐기물 스티커 부착</div>
+            </div>
+            <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 1.5rem 0;">
+            <div class="form-group">
+                <label>물건 이름</label>
+                <div id="view-item-name" style="font-size:1rem; color:white;"></div>
+            </div>
+            <div class="form-group">
+                <label>물건 설명</label>
+                <div id="view-item-desc" style="white-space:pre-wrap; color:#cbd5e1; line-height:1.6;"></div>
+            </div>
+            <div class="form-group">
+                <label>사진</label>
+                <div id="view-photos" class="photo-list"></div>
+            </div>
+
+            <button id="apply-btn" class="btn" style="width:100%; margin-top:1rem; display:none;"
+                onclick="applyForAd()">신청하기</button>
+
+            <div id="view-applicants-container" style="display:none; margin-top:1rem;">
+                <div class="dropdown-container">
+                    <button id="btn-view-applicants" class="btn"
+                        style="width:100%; background:rgba(255,255,255,0.05); color:#94a3b8;"
+                        onclick="toggleApplicantsDropdown(event, true)">신청자(0)</button>
+                    <div id="view-applicants-dropdown" class="dropdown-menu-up">
+                        <!-- Applicants will be rendered here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Overlay -->
+    <div id="image-overlay" onclick="this.style.display='none'">
+        <img id="overlay-img" src="">
+    </div>
+
+    <script src="/js/common.js"></script>
+    <script>
+        const user = JSON.parse(localStorage.getItem('user'));
+        const adId = new URLSearchParams(window.location.search).get('id');
+        let currentAd = null;
+        let currentApplicants = [];
+        let selectedWinnerId = null;
+        let selectedWinnerName = '';
+        let selectedFiles = [];
+
+        if (!user) window.location.href = '/index.html';
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            renderNavbar();
+            if (!adId) {
+                alert('잘못된 접근입니다.');
+                history.back();
+                return;
+            }
+            await loadAdDetail();
+        });
+
+        async function loadAdDetail() {
+            try {
+                const res = await fetch(`/api/ads/${adId}`);
+                if (!res.ok) throw new Error('광고를 찾을 수 없습니다.');
+                currentAd = await res.json();
+
+                const isAuthor = currentAd.created_by === user.id;
+                const isAdmin = user.role === 'admin';
+
+                if (isAuthor || isAdmin) {
+                    await showEditMode();
+                } else {
+                    showViewMode();
+                }
+            } catch (err) {
+                console.error(err);
+                alert(err.message);
+            }
+        }
+
+        async function showEditMode() {
+            document.getElementById('edit-section').style.display = 'block';
+            await fetchBuildings();
+
+            document.getElementById('modal-building').value = currentAd.building_id;
+            document.getElementById('modal-ad-title').value = currentAd.title;
+            document.getElementById('modal-price').value = currentAd.price;
+            document.getElementById('modal-item-name').value = currentAd.item_name || '';
+            document.getElementById('modal-item-desc').value = currentAd.item_description || '';
+            document.getElementById('modal-target-id').value = currentAd.target_id || '';
+
+            renderPhotos(currentAd.images, true);
+            await loadApplicants();
+        }
+
+        function showViewMode() {
+            document.getElementById('view-section').style.display = 'block';
+
+            const statusLabel = { 'advertising': '진행중', 'completed': '완료', 'drawing': '추첨중' }[currentAd.status] || '대기';
+            const statusElem = document.getElementById('view-status');
+            statusElem.textContent = statusLabel;
+            statusElem.className = 'status-badge ' + (currentAd.status || 'default');
+
+            document.getElementById('view-building').textContent = `[${currentAd.building_name}]`;
+            document.getElementById('view-ad-title').textContent = currentAd.title;
+            document.getElementById('view-price').textContent = currentAd.price > 0 ? currentAd.price.toLocaleString() + '원' : '무료나눔';
+            document.getElementById('view-item-name').textContent = currentAd.item_name;
+            document.getElementById('view-item-desc').textContent = currentAd.item_description;
+
+            renderPhotos(currentAd.images, false);
+
+            if (currentAd.status === 'advertising' && currentAd.created_by !== user.id) {
+                document.getElementById('apply-btn').style.display = 'block';
+            }
+
+            if (currentAd.status === 'completed' || currentAd.status === 'drawing') {
+                document.getElementById('view-applicants-container').style.display = 'block';
+                loadApplicants();
+            }
+        }
+
+        function renderPhotos(images, editable) {
+            const container = editable ? document.getElementById('photo-preview') : document.getElementById('view-photos');
+            container.innerHTML = '';
+
+            if (images) {
+                images.forEach(img => {
+                    const div = document.createElement('div');
+                    div.className = 'photo-item';
+                    div.innerHTML = `<img src="${img.image_url}">`;
+                    if (editable) {
+                        div.innerHTML += `<div style="position:absolute; top:0; right:0; background:rgba(239, 68, 68, 0.8); color:white; width:20px; height:20px; text-align:center; line-height:20px; font-size:12px; cursor:pointer;" onclick="deleteExistingImage(${img.id}, event)">×</div>`;
+                    } else {
+                        div.onclick = () => showLargeImage(img.image_url);
+                    }
+                    container.appendChild(div);
+                });
+            }
+        }
+
+        function showLargeImage(url) {
+            document.getElementById('overlay-img').src = url;
+            document.getElementById('image-overlay').style.display = 'flex';
+        }
+
+        async function fetchBuildings() {
+            const wrapper = document.getElementById('building-wrapper');
+            const targetSelect = document.getElementById('modal-target-id');
+            let url = user.role === 'admin' ? '/api/admin/buildings' : `/api/landlord/${user.id}/buildings`;
+            if (user.role === 'tenant') url = `/api/tenant/${user.id}/buildings`;
+
+            try {
+                const res = await fetch(url);
+                const buildings = await res.json();
+
+                // Building for Item
+                let html = `<select id="modal-building" class="form-input" ${user.role === 'tenant' ? 'disabled' : ''}>`;
+                buildings.forEach(b => {
+                    html += `<option value="${b.id}">${b.name}</option>`;
+                });
+                html += `</select>`;
+                wrapper.innerHTML = html;
+
+                // Ad Visibility Scope
+                const currentVal = targetSelect.value;
+                targetSelect.innerHTML = '<option value="">전체공고 (모두에게 보임)</option>';
+                buildings.forEach(b => {
+                    targetSelect.innerHTML += `<option value="${b.id}">${b.name} 전용</option>`;
+                });
+                targetSelect.value = currentVal;
+            } catch (err) { console.error(err); }
+        }
+
+        function handleFileSelect(input) {
+            const files = Array.from(input.files);
+            selectedFiles = selectedFiles.concat(files);
+            renderNewPhotoPreviews();
+        }
+
+        function renderNewPhotoPreviews() {
+            const container = document.getElementById('photo-preview');
+            container.querySelectorAll('.new-photo').forEach(el => el.remove());
+
+            selectedFiles.forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const div = document.createElement('div');
+                    div.className = 'photo-item new-photo';
+                    div.innerHTML = `<img src="${e.target.result}">
+                                     <div style="position:absolute; top:0; right:0; background:rgba(0,0,0,0.5); color:white; width:20px; height:20px; text-align:center; line-height:20px; font-size:12px; cursor:pointer;" onclick="removeNewPhoto(${index})">×</div>`;
+                    container.appendChild(div);
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function removeNewPhoto(index) {
+            selectedFiles.splice(index, 1);
+            renderNewPhotoPreviews();
+        }
+
+        async function deleteExistingImage(imgId, event) {
+            event.stopPropagation();
+            if (!confirm('사진을 삭제하시겠습니까?')) return;
+            const res = await fetch(`/api/images/${imgId}`, { method: 'DELETE' });
+            if (res.ok) {
+                event.target.closest('.photo-item').remove();
+            }
+        }
+
+        function toggleApplicantsDropdown(e, isViewMode = false) {
+            if (e) e.stopPropagation();
+            if (currentApplicants.length === 0) return alert('신청자가 없습니다.');
+            const dropdownId = isViewMode ? 'view-applicants-dropdown' : 'applicants-dropdown';
+            const menu = document.getElementById(dropdownId);
+            const isShow = menu.classList.contains('show');
+
+            // Close if already open
+            if (isShow) {
+                menu.classList.remove('show');
+            } else {
+                renderApplicantsDropdown(isViewMode);
+                menu.classList.add('show');
+
+                // Global click to close
+                window.onclick = (event) => {
+                    if (!event.target.closest('.dropdown-container')) {
+                        menu.classList.remove('show');
+                        window.onclick = null;
+                    }
+                };
+            }
+        }
+
+        function renderApplicantsDropdown(isViewMode = false) {
+            const dropdownId = isViewMode ? 'view-applicants-dropdown' : 'applicants-dropdown';
+            const container = document.getElementById(dropdownId);
+            container.innerHTML = '';
+
+            if (currentApplicants.length === 0) {
+                container.innerHTML = '<div style="padding:1rem; text-align:center; opacity:0.5; font-size:0.85rem;">신청자가 없습니다.</div>';
+                return;
+            }
+
+            currentApplicants.forEach(app => {
+                const isWinner = app.status === 'won';
+                const isSelected = selectedWinnerId === app.user_id || isWinner;
+                const div = document.createElement('div');
+                div.className = `dropdown-item ${isSelected ? 'selected' : (selectedWinnerId ? 'dimmed' : '')}`;
+
+                // Only allow selection in edit mode and if not already completed
+                const canSelect = !isViewMode && currentAd.status !== 'completed';
+
+                if (canSelect) {
+                    div.onclick = (e) => {
+                        e.stopPropagation();
+                        selectApplicant(app.user_id, app.nickname);
+                        renderApplicantsDropdown(isViewMode);
+                        updateBtnText();
+                    };
+                } else {
+                    div.style.cursor = 'default';
+                    div.onclick = (e) => e.stopPropagation();
+                }
+
+                let timeStr = '';
+                if (app.created_at) {
+                    const dateObj = new Date(app.created_at.replace(' ', 'T') + 'Z');
+                    if (!isNaN(dateObj)) {
+                        timeStr = dateObj.toLocaleTimeString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+                    }
+                }
+
+                div.innerHTML = `
+                    <div style="display:flex; align-items:baseline; gap:0.5rem; overflow:hidden; flex:1;">
+                        <span class="name" style="white-space:nowrap; color:white;">${app.nickname || '이름없음'}</span>
+                        <span class="id" style="white-space:nowrap; opacity:0.4; font-size:0.75rem;">@${app.login_id}</span>
+                        <span style="font-size:0.7rem; color:var(--primary); opacity:0.8; margin-left:auto; white-space:nowrap;">${timeStr}</span>
+                    </div>
+                    ${isSelected ? `<span style="color:var(--primary); font-weight:bold; flex-shrink:0; margin-left:0.6rem;">${isWinner ? '당첨' : '✓'}</span>` : ''}
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function updateBtnText() {
+            const btnEdit = document.getElementById('btn-applicants-count');
+            const btnView = document.getElementById('btn-view-applicants');
+
+            // Priority 1: Session selection (unsaved)
+            // Priority 2: Database winner (status='won')
+            let winnerName = selectedWinnerName;
+            if (!winnerName) {
+                const winner = currentApplicants.find(a => a.status === 'won');
+                if (winner) winnerName = winner.nickname;
+            }
+
+            const update = (btn) => {
+                if (!btn) return;
+                if (winnerName) {
+                    btn.textContent = `신청자(${winnerName})`;
+                    btn.style.color = 'var(--primary)';
+                    btn.style.background = 'rgba(99, 102, 241, 0.1)';
+                } else {
+                    btn.textContent = `신청자(${currentApplicants.length})`;
+                    btn.style.color = '#94a3b8';
+                    btn.style.background = 'rgba(255, 255, 255, 0.05)';
+                }
+            };
+
+            update(btnEdit);
+            update(btnView);
+        }
+
+
+        function selectApplicant(id, name) {
+            if (selectedWinnerId === id) {
+                selectedWinnerId = null;
+                selectedWinnerName = '';
+            } else {
+                selectedWinnerId = id;
+                selectedWinnerName = name;
+            }
+        }
+
+
+        async function confirmSaveAd() {
+            let msg = '수정 내용을 저장하시겠습니까?';
+            if (selectedWinnerId) {
+                msg = `[${selectedWinnerName}] 님을 당첨자로 선택하고 광고를 종료하시겠습니까?`;
+            }
+            if (confirm(msg)) {
+                await saveAd();
+            }
+        }
+
+        async function saveAd() {
+            try {
+                const formData = new FormData();
+                const adTitle = document.getElementById('modal-ad-title').value;
+                formData.append('title', adTitle);
+                formData.append('price', document.getElementById('modal-price').value || 0);
+                formData.append('item_name', document.getElementById('modal-item-name').value);
+                formData.append('description', document.getElementById('modal-item-desc').value);
+                formData.append('building_id', document.getElementById('modal-building').value);
+                formData.append('type', currentAd.related_table);
+                formData.append('target_id', document.getElementById('modal-target-id').value);
+
+                selectedFiles.forEach(file => {
+                    formData.append('photos', file);
+                });
+
+                const res = await fetch(`/api/ads/${adId}`, {
+                    method: 'PUT',
+                    body: formData
+                });
+
+                if (res.ok) {
+                    if (selectedWinnerId) {
+                        // 1. Select Winner
+                        await fetch(`/api/ads/${adId}/select-winner`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ user_id: selectedWinnerId })
+                        });
+
+                        // 2. Send Message to Winner
+                        const msgTitle = `[물건나눔] 당첨 안내`;
+                        const msgContent = `축하드립니다! '${adTitle}' 광고의 당첨자로 선정되셨습니다. 작성자에게 연락하여 상세 일정을 조율해 주세요.`;
+                        await fetch('/api/messages/direct', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                author_id: user.id,
+                                recipient_id: selectedWinnerId,
+                                title: msgTitle,
+                                content: msgContent,
+                                category: 'direct',
+                                type: '물품공유'
+                            })
+                        });
+                    }
+                    alert('저장되었습니다.');
+                    location.reload();
+                } else {
+                    alert('저장 실패');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('통신 오류');
+            }
+        }
+
+        async function loadApplicants() {
+            try {
+                const res = await fetch(`/api/ads/${adId}/applicants`);
+                currentApplicants = await res.json();
+                updateBtnText();
+            } catch (e) { console.error(e); }
+        }
+
+        async function applyForAd() {
+            const res = await fetch(`/api/ads/${adId}/apply`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: user.id })
+            });
+            if (res.ok) {
+                alert('신청되었습니다.');
+                location.reload();
+            } else {
+                const err = await res.json();
+                if (err.error === 'ALREADY_APPLIED') alert('이미 신청한 광고입니다.');
+                else alert('신청 실패: ' + err.error);
+            }
+        }
+    </script>
+</body>
+
+</html>

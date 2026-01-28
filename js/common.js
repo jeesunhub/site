@@ -53,9 +53,21 @@ function renderNavbar() {
 
     const nav = document.createElement('nav');
     nav.className = 'navbar';
+
+    const showBack = document.body.classList.contains('has-back-button');
+    const backBtnHtml = showBack ? `
+        <button class="nav-back-btn" onclick="history.back()" aria-label="뒤로가기">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+        </button>
+    ` : '<div></div>';
+
     nav.innerHTML = `
         <div class="nav-container">
-            <div></div> <!-- Removed logo -->
+            <div class="nav-left">
+                ${backBtnHtml}
+            </div>
             
             <div class="nav-right">
                 <div class="nav-user-info" onclick="toggleMenu(event)">
@@ -71,7 +83,7 @@ function renderNavbar() {
                         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                         <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                     </svg>
-                    ${user.noti > 0 ? `<span class="noti-badge">${user.noti > 99 ? '99+' : user.noti}</span>` : ''}
+                    <span id="unread-badge" class="noti-badge" style="display:none;"></span>
                 </div>
                 
                 <div class="nav-dropdown" id="nav-menu">
@@ -85,7 +97,7 @@ function renderNavbar() {
                         </div>
                     </div>
                     <div class="dropdown-items">
-                        <a href="/notices.html">📢 공지사항</a>
+                        <a href="/notices.html">📢 메시지함 <span id="menu-unread-count"></span></a>
                         <hr>
                         <a href="/dashboard.html">🏠 대시보드</a>
                         ${user.role === 'admin' ? '<a href="/landlord_management.html">👑 임대인 관리</a>' : ''}
@@ -94,7 +106,7 @@ function renderNavbar() {
                         ${(user.role === 'landlord' || user.role === 'admin') ? '<a href="/payments.html">💰 납부 관리</a>' : ''}
                         <hr>
                         ${(user.role === 'landlord' || user.role === 'admin') ? '<a href="/room_adv.html">🏠 방 내놓기</a>' : ''}
-                        <a href="/item_adv.html">📦 물건 내놓기</a>
+                        <a href="/item_adv.html">📦 물건 공유</a>
                         <hr>
                         <a href="/settings_profile.html">⚙️ 프로필 설정</a>
                         <a href="/settings_system.html">🛠️ 시스템 설정</a>
@@ -105,7 +117,15 @@ function renderNavbar() {
             </div>
         </div>
     `;
-    document.body.prepend(nav);
+    const placeholder = document.getElementById('navbar-placeholder');
+    if (placeholder) {
+        placeholder.replaceWith(nav);
+    } else {
+        document.body.prepend(nav);
+    }
+
+    // Fetch and update unread count
+    updateUnreadCount(user.id);
 
     window.addEventListener('click', function (e) {
         const menu = document.getElementById('nav-menu');
@@ -113,6 +133,34 @@ function renderNavbar() {
             menu.style.display = 'none';
         }
     });
+}
+
+async function updateUnreadCount(userId) {
+    try {
+        const res = await fetch(`/api/messages/unread-count/${userId}`);
+        const data = await res.json();
+        const count = data.count || 0;
+
+        const badge = document.getElementById('unread-badge');
+        const menuCount = document.getElementById('menu-unread-count');
+
+        if (badge) {
+            if (count > 0) {
+                badge.textContent = count > 99 ? '99+' : count;
+                badge.style.display = 'flex';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        if (menuCount) {
+            menuCount.textContent = count > 0 ? `(${count})` : '';
+            menuCount.style.color = 'var(--primary)';
+            menuCount.style.fontWeight = 'bold';
+        }
+    } catch (err) {
+        console.error('Failed to update unread count:', err);
+    }
 }
 
 function toggleMenu(e) {

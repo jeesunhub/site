@@ -97,7 +97,13 @@
 
         .action-bar-right {
             display: flex;
-            gap: 1rem;
+            gap: 0.5rem;
+        }
+
+        .action-bar .btn {
+            white-space: nowrap;
+            padding: 0 1rem;
+            /* Slightly reduced padding */
         }
 
         .field-label-row {
@@ -144,7 +150,7 @@
             background: rgba(15, 23, 42, 0.9);
             backdrop-filter: blur(10px);
             position: sticky;
-            top: 0;
+            top: 70px;
             z-index: 100;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             height: 3.5rem;
@@ -253,7 +259,8 @@
 
 </head>
 
-<body id="page-body">
+<body id="page-body" class="has-back-button">
+    <!-- Navbar will be rendered by JS -->
     <div class="header" id="sticky-header">
         <h1 id="page-title">계약 등록/수정</h1>
     </div>
@@ -262,23 +269,41 @@
         <div class="form-container">
 
             <div class="form-section">
-                <h2>👤 세입자 정보</h2>
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.05); margin-bottom: 0.12rem; padding-bottom: 0.5rem;">
+                    <h2 style="border:none; margin:0; padding:0;">👤 세입자 정보</h2>
+                    <button type="button" id="btn-delete-tenant" class="btn-inline"
+                        style="color: #ef4444; display: none;" onclick="deleteTenant()">임차인 삭제</button>
+                </div>
                 <div class="form-grid">
                     <div class="form-group"><label>성명</label><input type="text" id="tenant-name"
-                            placeholder="세입자 이름을 입력하세요"></div>
-                    <div class="form-group"><label>생년월일</label><input type="date" id="tenant-dob"></div>
+                            placeholder="세입자 이름을 입력하세요" readonly
+                            style="background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5); cursor: not-allowed;">
+                    </div>
+                    <div class="form-group"><label>생년월일</label><input type="date" id="tenant-dob" readonly
+                            style="background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5); cursor: not-allowed;">
+                    </div>
                     <div class="form-group"><label>연락처</label><input type="tel" id="tenant-phone"
-                            placeholder="010-0000-0000" oninput="this.value = formatPhone(this.value)"></div>
+                            placeholder="010-0000-0000" oninput="this.value = formatPhone(this.value)" readonly
+                            style="background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5); cursor: not-allowed;">
+                    </div>
                 </div>
             </div>
             <div class="form-section">
                 <h2>🏢 건물 및 호수</h2>
                 <div class="form-grid">
-                    <div class="form-group"><label>건물 선택</label><select id="contract-building">
-                            <option value="">건물 선택</option>
-                        </select></div>
-                    <div class="form-group"><label>호수 (방번호)</label><input type="text" id="contract-room"
-                            placeholder="예: 201"></div>
+                    <div class="form-group">
+                        <label>건물명</label>
+                        <input type="text" id="contract-building-name" readonly
+                            style="background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5); cursor: not-allowed;">
+                        <input type="hidden" id="contract-building">
+                    </div>
+                    <div class="form-group">
+                        <label>호수 (방번호)</label>
+                        <input type="text" id="contract-room-name" readonly
+                            style="background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5); cursor: not-allowed;">
+                        <input type="hidden" id="contract-room">
+                    </div>
                 </div>
             </div>
             <div class="form-section">
@@ -287,31 +312,104 @@
                     <div class="form-group"><label>계약 시작일</label><input type="date" id="contract-start"></div>
                     <div class="form-group">
                         <div class="field-label-row"><label>계약 종료일</label>
-                            <div class="label-buttons"><button type="button" class="btn-inline"
-                                    onclick="addYears(-1)">-1년</button><button type="button" class="btn-inline"
-                                    onclick="addYears(1)">+1년</button></div>
+                            <div class="label-buttons">
+                                <button type="button" class="btn-inline" onclick="addMonths(12)">+1년</button>
+                                <button type="button" class="btn-inline" onclick="addMonths(6)">+6개월</button>
+                            </div>
                         </div><input type="date" id="contract-end">
                     </div>
                     <div class="form-group"><label>납부 방식</label><select id="contract-payment-type">
                             <option value="prepaid">선불</option>
                             <option value="postpaid" selected>후불</option>
                         </select></div>
-                    <div class="form-group"><label>보증금 (원)</label><input type="text" id="contract-deposit" value="0"
-                            oninput="this.value = formatCurrency(this.value)"></div>
-                    <div class="form-group"><label>월세 (원)</label><input type="text" id="contract-rent" value="0"
-                            oninput="this.value = formatCurrency(this.value)"></div>
-                    <div class="form-group"><label>관리비 (원)</label><input type="text" id="contract-fee" value="0"
-                            oninput="this.value = formatCurrency(this.value)"></div>
-                    <div class="form-group"><label>청소비 (원)</label><input type="text" id="contract-cleaning" value="0"
-                            oninput="this.value = formatCurrency(this.value)"></div>
+                    <div class="form-group">
+                        <div class="field-label-row"><label>보증금 (원)</label>
+                            <div class="label-buttons">
+                                <button type="button" class="btn-inline"
+                                    onclick="addAmount('contract-deposit', 10000000)">+1천만</button>
+                                <button type="button" class="btn-inline"
+                                    onclick="addAmount('contract-deposit', 1000000)">+1백만</button>
+                                <button type="button" class="btn-inline"
+                                    onclick="addAmount('contract-deposit', 100000)">+1십만</button>
+                            </div>
+                        </div>
+                        <input type="text" id="contract-deposit" value="0"
+                            oninput="this.value = formatCurrency(this.value)">
+                    </div>
+                    <div class="form-group">
+                        <div class="field-label-row"><label>월세 (원)</label>
+                            <div class="label-buttons">
+                                <button type="button" class="btn-inline"
+                                    onclick="addAmount('contract-rent', 100000)">+1십만</button>
+                                <button type="button" class="btn-inline"
+                                    onclick="addAmount('contract-rent', 50000)">+5만</button>
+                                <button type="button" class="btn-inline"
+                                    onclick="addAmount('contract-rent', 10000)">+1만</button>
+                            </div>
+                        </div>
+                        <input type="text" id="contract-rent" value="0"
+                            oninput="this.value = formatCurrency(this.value)">
+                    </div>
+                    <div class="form-group">
+                        <div class="field-label-row"><label>관리비 (원)</label>
+                            <div class="label-buttons">
+                                <button type="button" class="btn-inline"
+                                    onclick="addAmount('contract-fee', 100000)">+1십만</button>
+                                <button type="button" class="btn-inline"
+                                    onclick="addAmount('contract-fee', 50000)">+5만</button>
+                                <button type="button" class="btn-inline"
+                                    onclick="addAmount('contract-fee', 10000)">+1만</button>
+                            </div>
+                        </div>
+                        <input type="text" id="contract-fee" value="0"
+                            oninput="this.value = formatCurrency(this.value)">
+                    </div>
+                    <div class="form-group">
+                        <div class="field-label-row"><label>청소비 (원)</label>
+                            <div class="label-buttons">
+                                <button type="button" class="btn-inline"
+                                    onclick="addAmount('contract-cleaning', 100000)">+1십만</button>
+                                <button type="button" class="btn-inline"
+                                    onclick="addAmount('contract-cleaning', 50000)">+5만</button>
+                                <button type="button" class="btn-inline"
+                                    onclick="addAmount('contract-cleaning', 10000)">+1만</button>
+                            </div>
+                        </div>
+                        <input type="text" id="contract-cleaning" value="0"
+                            oninput="this.value = formatCurrency(this.value)">
+                    </div>
                 </div>
             </div>
             <div class="action-bar">
                 <button type="button" class="btn btn-secondary" onclick="showDebugModal()">Debug</button>
-                <div class="action-bar-right">
+                <div class="action-bar-right" id="action-buttons">
                     <button class="btn btn-secondary" id="cancel-btn" onclick="handleCancel()">취소</button>
                     <button class="btn" id="submit-btn" onclick="submitContract()">저장</button>
+
+                    <button class="btn btn-secondary" id="edit-btn" onclick="enableEditMode()"
+                        style="display:none;">수정</button>
+                    <button class="btn btn-secondary" id="extend-btn" onclick="enableExtendMode()"
+                        style="display:none;">연장</button>
+                    <button class="btn btn-reject" id="terminate-btn" onclick="openTerminateModal()"
+                        style="display:none;">퇴실</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Terminate Modal -->
+    <div id="terminate-modal" class="modal" onclick="if(event.target === this) closeModal('terminate-modal')">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>계약 종료 설정</h2>
+            </div>
+            <div class="form-group" style="margin-top: 1rem;">
+                <label>퇴실 일자 (계약 종료일)</label>
+                <input type="date" id="termination-date" class="form-input">
+            </div>
+            <div class="modal-footer" style="margin-top: 2rem; display: flex; gap: 1rem;">
+                <button class="btn btn-secondary" onclick="closeModal('terminate-modal')" style="flex: 1;">취소</button>
+                <button class="btn" id="confirm-terminate-btn" style="flex: 1;">완료</button>
             </div>
         </div>
     </div>
@@ -365,9 +463,67 @@
 
             await loadBuildings();
 
-            // Pre-fill from URL params (e.g. from Text Extraction)
-            if (urlParams.get('building_name')) document.getElementById('contract-building').value = urlParams.get('building_name');
-            if (urlParams.get('room_number')) document.getElementById('contract-room').value = urlParams.get('room_number');
+            // Pre-fill from URL params (e.g. from Text Extraction or Tenant Mgmt)
+            const urlBuildingName = urlParams.get('building_name');
+            const urlBuildingId = urlParams.get('building_id');
+            const urlRoomNumber = urlParams.get('room_number');
+            const urlRoomId = urlParams.get('room_id');
+
+            if (urlBuildingId) {
+                const bIdInput = document.getElementById('contract-building');
+                const bNameInput = document.getElementById('contract-building-name');
+                bIdInput.value = urlBuildingId;
+
+                // Fetch buildings to find the name
+                const apiPath = user.role === 'admin' ? '/api/admin/buildings' : `/api/landlord/${user.id}/buildings`;
+                const bRes = await fetch(apiPath);
+                const buildings = await bRes.json();
+                const matched = buildings.find(b => String(b.id) === String(urlBuildingId));
+                if (matched) {
+                    bNameInput.value = matched.name;
+                    await loadRooms(urlRoomId || urlRoomNumber);
+                }
+            } else if (urlBuildingName) {
+                const bIdInput = document.getElementById('contract-building');
+                const bNameInput = document.getElementById('contract-building-name');
+                bNameInput.value = urlBuildingName;
+
+                const apiPath = user.role === 'admin' ? '/api/admin/buildings' : `/api/landlord/${user.id}/buildings`;
+                const bRes = await fetch(apiPath);
+                const buildings = await bRes.json();
+                const matched = buildings.find(b => b.name === urlBuildingName);
+                if (matched) {
+                    bIdInput.value = matched.id;
+                    await loadRooms(urlRoomId || urlRoomNumber);
+                }
+            } else if (urlParams.get('tenant_name') && urlParams.get('tenant_dob')) {
+                const name = urlParams.get('tenant_name');
+                const dob = urlParams.get('tenant_dob');
+
+                try {
+                    const res = await fetch('/api/users/find', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, birth_date: dob, role: 'tenant' })
+                    });
+                    const users = await res.json();
+                    if (users.length > 0 && users[0].building_id) {
+                        const user = users[0];
+                        currentTenantId = user.id;
+                        document.getElementById('btn-delete-tenant').style.display = 'block';
+
+                        const bIdInput = document.getElementById('contract-building');
+                        const bNameInput = document.getElementById('contract-building-name');
+
+                        bIdInput.value = user.building_id;
+                        bNameInput.value = user.building_name || '';
+
+                        await loadRooms(user.room_id || user.room_number);
+                    }
+                } catch (e) {
+                    console.error('Error auto-filling room from tenant:', e);
+                }
+            }
             if (urlParams.get('deposit')) document.getElementById('contract-deposit').value = formatCurrency(urlParams.get('deposit'));
             if (urlParams.get('rent')) document.getElementById('contract-rent').value = formatCurrency(urlParams.get('rent'));
             if (urlParams.get('rent_type')) document.getElementById('contract-payment-type').value = urlParams.get('rent_type');
@@ -406,21 +562,115 @@
             document.getElementById('submit-btn').style.display = 'none';
             document.querySelectorAll('.btn-inline').forEach(el => el.style.display = 'none');
 
-            // Change cancel button to "Back"
-            document.getElementById('cancel-btn').textContent = '뒤로 가기';
+            // Hide cancel button in view mode as top navbar has one
+            document.getElementById('cancel-btn').style.display = 'none';
+
+            // Show view actions (Edit, Extend, Terminate)
+            document.getElementById('edit-btn').style.display = 'block';
+            document.getElementById('extend-btn').style.display = 'block';
+            document.getElementById('terminate-btn').style.display = 'block';
         }
 
-        async function loadBuildings() {
-            const res = await fetch(`/api/landlord/${user.id}/buildings`);
-            const buildings = await res.json();
-            const select = document.getElementById('contract-building');
-
-            buildings.forEach(b => {
-                const opt = document.createElement('option');
-                opt.value = b.name;
-                opt.textContent = b.name;
-                select.appendChild(opt);
+        function enableEditMode() {
+            // Re-enable all inputs (except readonly/pre-filled ones)
+            const inputs = document.querySelectorAll('input, select');
+            inputs.forEach(el => {
+                if (el.id === 'contract-room' && el.value) return; // Keep pre-filled room disabled if wanted
+                if (['tenant-name', 'tenant-dob', 'tenant-phone', 'contract-building-name', 'contract-room-name'].includes(el.id)) return;
+                el.disabled = false;
             });
+
+            // Toggle buttons
+            document.getElementById('submit-btn').style.display = 'block';
+            document.getElementById('cancel-btn').style.display = 'block';
+            document.getElementById('cancel-btn').textContent = '취소';
+
+            // Hide view actions
+            document.getElementById('edit-btn').style.display = 'none';
+            document.getElementById('extend-btn').style.display = 'none';
+            document.getElementById('terminate-btn').style.display = 'none';
+
+            document.querySelectorAll('.btn-inline').forEach(el => el.style.display = 'block');
+
+            // Change title
+            document.getElementById('page-title').textContent = '계약 수정';
+            window.history.replaceState({}, '', `/contract_new.html?action=change&contract_id=${contractId}`);
+        }
+
+        function enableExtendMode() {
+            enableEditMode();
+            document.getElementById('page-title').textContent = '계약 연장';
+            window.history.replaceState({}, '', `/contract_new.html?action=extend&contract_id=${contractId}`);
+        }
+
+        function openTerminateModal() {
+            document.getElementById('termination-date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('terminate-modal').style.display = 'flex';
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        document.getElementById('confirm-terminate-btn').onclick = async () => {
+            const endDate = document.getElementById('termination-date').value;
+            if (!endDate) return alert('날짜를 선택해 주세요.');
+
+            try {
+                const res = await fetch(`/api/contracts/${contractId}/terminate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ end_date: endDate })
+                });
+                if (res.ok) {
+                    alert('계약 종료 설정이 완료되었습니다.');
+                    location.href = '/tenants.html';
+                }
+            } catch (err) {
+                alert('오류가 발생했습니다.');
+            }
+        };
+
+        async function loadBuildings() {
+            // No longer populating a select, but we can use this to resolve the name if missing
+            if (action === 'new' && !urlParams.get('building_id') && !urlParams.get('building_name')) {
+                const apiPath = user.role === 'admin' ? '/api/admin/buildings' : `/api/landlord/${user.id}/buildings`;
+                const res = await fetch(apiPath);
+                const buildings = await res.json();
+                if (buildings.length > 0) {
+                    document.getElementById('contract-building').value = buildings[0].id;
+                    document.getElementById('contract-building-name').value = buildings[0].name;
+                    await loadRooms();
+                }
+            }
+        }
+
+        async function loadRooms(selectedRoomIdentifier = null) {
+            const buildingId = document.getElementById('contract-building').value;
+            const roomNameInput = document.getElementById('contract-room-name');
+            const roomIdInput = document.getElementById('contract-room');
+
+            if (!buildingId) {
+                roomNameInput.value = '건물을 먼저 선택해주세요';
+                return;
+            }
+
+            const res = await fetch(`/api/buildings/${buildingId}/rooms`);
+            const rooms = await res.json();
+
+            let matchedRoom = null;
+            if (selectedRoomIdentifier) {
+                matchedRoom = rooms.find(r => r.id == selectedRoomIdentifier || r.room_number == selectedRoomIdentifier);
+            } else if (rooms.length > 0) {
+                matchedRoom = rooms[0];
+            }
+
+            if (matchedRoom) {
+                roomIdInput.value = matchedRoom.id;
+                roomNameInput.value = matchedRoom.room_number + '호';
+            } else {
+                roomNameInput.value = '호수 정보 없음';
+            }
         }
 
         async function loadContractData(id) {
@@ -428,22 +678,25 @@
             const data = await res.json();
             const c = data.contract;
             currentTenantId = c.tenant_id;
+            if (currentTenantId) document.getElementById('btn-delete-tenant').style.display = 'block';
 
             document.getElementById('tenant-name').value = c.tenant_name;
             document.getElementById('tenant-dob').value = c.birth_date;
             document.getElementById('tenant-phone').value = formatPhone(c.phone_number);
-            document.getElementById('contract-building').value = c.building;
-            document.getElementById('contract-room').value = c.room_number;
+            document.getElementById('tenant-phone').value = formatPhone(c.phone_number);
+            document.getElementById('contract-building').value = c.building_id;
+            document.getElementById('contract-building-name').value = c.building;
+            await loadRooms(c.room_number);
             document.getElementById('contract-start').value = c.contract_start_date;
             document.getElementById('contract-end').value = c.contract_end_date;
             document.getElementById('contract-payment-type').value = c.payment_type;
             document.getElementById('contract-deposit').value = formatCurrency(c.deposit);
             document.getElementById('contract-rent').value = formatCurrency(c.monthly_rent);
-            document.getElementById('contract-fee').value = formatCurrency(c.management_fee);
+            document.getElementById('contract-fee').value = formatCurrency(c.maintenance_fee);
             document.getElementById('contract-cleaning').value = formatCurrency(c.cleaning_fee || 0);
         }
 
-        function addYears(years) {
+        function addMonths(months) {
             const startInput = document.getElementById('contract-start');
             const endInput = document.getElementById('contract-end');
 
@@ -457,13 +710,13 @@
             if (endInput.value) {
                 // Increment from current end date
                 d = new Date(endInput.value);
-                d.setFullYear(d.getFullYear() + years);
+                d.setMonth(d.getMonth() + months);
             }
 
             else {
-                // Initial: Start date + offset years - 1 day
+                // Initial: Start date + offset months - 1 day
                 d = new Date(startInput.value);
-                d.setFullYear(d.getFullYear() + years);
+                d.setMonth(d.getMonth() + months);
                 d.setDate(d.getDate() - 1);
             }
 
@@ -472,6 +725,13 @@
             const dVal = String(d.getDate()).padStart(2, '0');
 
             endInput.value = `${y}-${m}-${dVal}`;
+        }
+
+        function addAmount(id, amount) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const currentVal = unformatCurrency(el.value || '0');
+            el.value = formatCurrency(currentVal + amount);
         }
 
         function handleCancel() {
@@ -490,8 +750,8 @@
                 tenant_name: document.getElementById('tenant-name').value,
                 tenant_dob: document.getElementById('tenant-dob').value,
                 tenant_phone: document.getElementById('tenant-phone').value,
-                building_name: document.getElementById('contract-building').value,
-                room_number: document.getElementById('contract-room').value,
+                building_id: document.getElementById('contract-building').value,
+                room_id: document.getElementById('contract-room').value,
                 start_date: document.getElementById('contract-start').value,
                 end_date: document.getElementById('contract-end').value,
                 deposit: unformatCurrency(document.getElementById('contract-deposit').value),
@@ -499,11 +759,9 @@
                 management_fee: unformatCurrency(document.getElementById('contract-fee').value),
                 cleaning_fee: unformatCurrency(document.getElementById('contract-cleaning').value),
                 payment_type: document.getElementById('contract-payment-type').value
-            }
+            };
 
-                ;
-
-            if (!data.tenant_name || !data.building_name || !data.room_number) {
+            if (!data.tenant_name || !data.building_id || !data.room_id) {
                 alert('필수 정보를 모두 입력해주세요.');
                 return;
             }
@@ -530,10 +788,11 @@
                     nickname: data.tenant_name,
                     role: 'tenant',
                     birth_date: data.tenant_dob,
-                    phone_number: data.tenant_phone
-                }
+                    phone_number: data.tenant_phone,
+                    building_id: data.building_id
+                };
 
-                    ;
+                ;
 
                 const userRes = await fetch('/api/users/quick', {
 
@@ -557,8 +816,8 @@
                 let method = 'POST';
 
                 let payload = {
-                    landlord_id: data.landlord_id,
                     tenant_id: data.tenant_id,
+                    landlord_id: data.landlord_id,
                     payment_type: data.payment_type,
                     contract_start_date: data.start_date,
                     contract_end_date: data.end_date,
@@ -566,11 +825,8 @@
                     monthly_rent: data.monthly_rent,
                     management_fee: data.management_fee,
                     cleaning_fee: data.cleaning_fee,
-                    building_name: data.building_name,
-                    room_number: data.room_number
-                }
-
-                    ;
+                    room_id: data.room_id
+                };
 
                 if (action === 'change' && contractId) {
                     url = `/api/contracts/${contractId}`;
@@ -707,6 +963,28 @@
         function closeDebugModal() {
             document.getElementById('debug-view-modal').style.display = 'none';
             document.body.style.overflow = 'auto';
+        }
+
+        async function deleteTenant() {
+            if (!currentTenantId) return;
+            if (!confirm('정말로 이 세입자를 영구 삭제하시겠습니까? 관련 데이터(계약, 메시지 등)가 모두 삭제됩니다.')) return;
+
+            try {
+                const res = await fetch(`/api/users/${currentTenantId}?hard=true`, { method: 'DELETE' });
+                const data = await res.json();
+                if (res.ok) {
+                    alert('세입자가 삭제되었습니다.');
+                    if (isIframe) {
+                        window.parent.postMessage('reload_tenants', '*');
+                    }
+                    window.location.reload();
+                } else {
+                    alert('삭제 실패: ' + data.error);
+                }
+            } catch (e) {
+                console.error(e);
+                alert('오류가 발생했습니다.');
+            }
         }
 
     </script>
