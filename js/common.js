@@ -260,3 +260,18 @@ function getDueDate(billMonth, startDate, type) {
     }
 }
 
+async function initTestingMode() {
+    try {
+        const res = await fetch('/api/config/mode');
+        const data = await res.json();
+        if (data.mode === 'TEST') {
+            document.body.classList.add('test-mode');
+        }
+    } catch (err) {
+        // Silently fail if endpoint is not available or non-test mode
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initTestingMode();
+});

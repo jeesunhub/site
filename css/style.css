@@ -35,7 +35,6 @@ body {
 }
 
 #layout-header {
-    border: 2px solid red;
     width: 100%;
     z-index: 2000;
     position: sticky;
@@ -44,17 +43,28 @@ body {
 }
 
 #layout-main {
-    border: 2px solid yellow;
     flex: 1;
     width: 100%;
 }
 
 #layout-footer {
-    border: 2px solid blue;
     width: 100%;
     padding: 0.5rem 1.5rem;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     background: rgba(15, 23, 42, 0.9);
+}
+
+/* Test Mode Borders */
+body.test-mode #layout-header {
+    border: 2px solid red !important;
+}
+
+body.test-mode #layout-main {
+    border: 2px solid yellow !important;
+}
+
+body.test-mode #layout-footer {
+    border: 2px solid blue !important;
 }
 
 .footer-container {
