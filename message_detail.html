@@ -127,6 +127,36 @@
             color: #f87171;
             font-weight: 600;
         }
+
+        /* Styles from message_new */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.9rem;
+            opacity: 0.7;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-input,
+        .form-textarea {
+            width: 100%;
+            padding: 0.8rem;
+            border-radius: 0.8rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+            font-size: 1rem;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+
+        .form-textarea {
+            resize: none;
+            /* Readonly usually */
+        }
     </style>
 </head>
 
@@ -135,48 +165,73 @@
     <div id="navbar-placeholder"></div>
 
     <div class="container">
-        <div class="content-card">
-            <h3 id="msg-title" style="margin-top:0;">제목 로딩 중...</h3>
+        <div class="form-group">
+            <label class="form-label">제목</label>
+            <div id="msg-title" class="form-input" style="background: rgba(255, 255, 255, 0.05);">제목 로딩 중...</div>
+        </div>
 
-            <div id="applicant-info">
-                <div class="info-row">
-                    <div class="info-label">아이디</div>
-                    <div id="val-id" class="info-value">-</div>
-                </div>
-                <div class="info-row">
-                    <div class="info-label">이름</div>
-                    <div id="val-name" class="info-value">-</div>
-                </div>
-                <div class="info-row">
-                    <div class="info-label">생년월일</div>
-                    <div id="val-birth" class="info-value">-</div>
-                </div>
-                <div class="info-row">
-                    <div class="info-label">전화번호</div>
-                    <div id="val-phone" class="info-value">-</div>
-                </div>
-                <div class="info-row">
-                    <div class="info-label">건물명</div>
-                    <div id="val-building" class="info-value">-</div>
-                </div>
-                <div class="info-row">
-                    <div class="info-label">호수</div>
-                    <div id="val-room" class="info-value">-</div>
-                </div>
-                <div class="info-row">
-                    <div class="info-label">현재 상태</div>
-                    <div id="val-status" class="info-value">-</div>
+        <div id="applicant-info" style="display:none;">
+            <!-- Keep applicant info for 'signup' messages as is, or adapt style if needed. 
+                  For now, we keep it but maybe wrap in a form-group style container? 
+                  Let's keep the existing applicant-info structure inside a form-group for consistency if possible, 
+                  or just below title. -->
+            <div class="form-group">
+                <label class="form-label">신청 정보</label>
+                <div
+                    style="background: rgba(255, 255, 255, 0.05); border-radius: 0.8rem; border: 1px solid rgba(255, 255, 255, 0.1); padding: 1rem;">
+                    <div class="info-row">
+                        <div class="info-label">아이디</div>
+                        <div id="val-id" class="info-value">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">이름</div>
+                        <div id="val-name" class="info-value">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">생년월일</div>
+                        <div id="val-birth" class="info-value">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">전화번호</div>
+                        <div id="val-phone" class="info-value">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">건물명</div>
+                        <div id="val-building" class="info-value">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">호수</div>
+                        <div id="val-room" class="info-value">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">현재 상태</div>
+                        <div id="val-status" class="info-value">-</div>
+                    </div>
                 </div>
             </div>
+        </div>
 
-            <div class="action-group" id="action-buttons" style="display:none;">
-                <button class="btn btn-reject" onclick="handleAction('reject')">거절</button>
-                <button class="btn btn-approve" onclick="handleAction('approve')">승인</button>
+        <div class="form-group" id="content-group">
+            <label class="form-label">내용</label>
+            <div id="full-content" class="form-textarea"
+                style="height: auto; min-height: 200px; white-space: pre-wrap; background: rgba(255, 255, 255, 0.05); overflow-y: auto;">
             </div>
+        </div>
 
-            <div id="status-message" style="text-align:center; padding:1rem; opacity:0.5; display:none;">
-                이미 처리가 완료된 요청입니다.
-            </div>
+        <div class="action-group" id="action-buttons" style="display:none;">
+            <button class="btn btn-reject" onclick="handleAction('reject')">거절</button>
+            <button class="btn btn-approve" onclick="handleAction('approve')">승인</button>
+        </div>
+
+        <div id="status-message" style="text-align:center; padding:1rem; opacity:0.5; display:none;">
+            이미 처리가 완료된 요청입니다.
+        </div>
+
+        <div id="recipient-status-section" style="margin-top: 2rem; display: none;">
+            <h4
+                style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem; margin-bottom: 1rem; color: #a5b4fc;">
+                수신 확인</h4>
+            <div id="recipient-list" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
         </div>
     </div>
 
@@ -201,16 +256,27 @@
 
                 authorId = data.author_id;
 
-                // Parse content if it's formatted
-                const lines = data.content.split('\n');
-                lines.forEach(line => {
-                    if (line.includes('아이디:')) document.getElementById('val-id').textContent = line.split(':')[1].trim();
-                    if (line.includes('이름:')) document.getElementById('val-name').textContent = line.split(':')[1].trim();
-                    if (line.includes('생년월일:')) document.getElementById('val-birth').textContent = line.split(':')[1].trim();
-                    if (line.includes('전화번호:')) document.getElementById('val-phone').textContent = line.split(':')[1].trim();
-                    if (line.includes('건물명:')) document.getElementById('val-building').textContent = line.split(':')[1].trim();
-                    if (line.includes('호수:')) document.getElementById('val-room').textContent = line.split(':')[1].trim();
-                });
+                if (data.category === '가입신청' || data.category === '방있어요') {
+                    document.getElementById('applicant-info').style.display = 'block';
+                    document.getElementById('content-group').style.display = 'none'; // Hide content group for signup
+
+                    // Parse content if it's formatted
+                    if (data.content) {
+                        const lines = data.content.split('\n');
+                        lines.forEach(line => {
+                            if (line.includes('아이디:')) document.getElementById('val-id').textContent = line.split(':')[1].trim();
+                            if (line.includes('이름:')) document.getElementById('val-name').textContent = line.split(':')[1].trim();
+                            if (line.includes('생년월일:')) document.getElementById('val-birth').textContent = line.split(':')[1].trim();
+                            if (line.includes('전화번호:')) document.getElementById('val-phone').textContent = line.split(':')[1].trim();
+                            if (line.includes('건물명:')) document.getElementById('val-building').textContent = line.split(':')[1].trim();
+                            if (line.includes('호수:')) document.getElementById('val-room').textContent = line.split(':')[1].trim();
+                        });
+                    }
+                } else {
+                    document.getElementById('applicant-info').style.display = 'none';
+                    document.getElementById('content-group').style.display = 'block'; // Show content group
+                    document.getElementById('full-content').textContent = data.content || '(내용 없음)';
+                }
 
                 const statusEl = document.getElementById('val-status');
                 statusEl.textContent = data.user_status;
@@ -225,16 +291,49 @@
                 // Mark as read
                 const user = JSON.parse(localStorage.getItem('user'));
                 if (user) {
-                    await fetch(`/api/notices/${noticeId}/confirm`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ user_id: user.id })
-                    });
+                    // IF author, show recipient status
+                    if (user.id === data.author_id) {
+                        fetchRecipients(noticeId);
+                    } else {
+                        // Confirm read for recipient
+                        await fetch(`/api/notices/${noticeId}/confirm`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ user_id: user.id })
+                        });
+                    }
                 }
 
             } catch (err) {
                 console.error(err);
                 alert('데이터를 불러오는데 실패했습니다.');
+            }
+        }
+
+        async function fetchRecipients(id) {
+            try {
+                const res = await fetch(`/api/message-recipients/${id}`);
+                const recipients = await res.json();
+
+                const container = document.getElementById('recipient-list');
+                const section = document.getElementById('recipient-status-section');
+
+                if (recipients.length > 0) {
+                    section.style.display = 'block';
+                    container.innerHTML = recipients.map(r => {
+                        const statusText = r.read_at ?
+                            `<span style="color: #4ade80;">읽음 (${new Date(r.read_at).toLocaleString()})</span>` :
+                            `<span style="color: #94a3b8;">안읽음</span>`;
+                        return `
+                            <div style="display: flex; justify-content: space-between; padding: 0.5rem; background: rgba(255,255,255,0.03); border-radius: 0.5rem;">
+                                <span>${r.nickname}</span>
+                                <span style="font-size: 0.85rem;">${statusText}</span>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            } catch (err) {
+                console.error('Failed to fetch recipients', err);
             }
         }
 

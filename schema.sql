@@ -25,23 +25,35 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    content TEXT,
+    is_read INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS message_box (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     author_id INTEGER,
+    message_id INTEGER, -- Points to messages.id
     target TEXT CHECK(target IN ('direct', 'to_all', 'to_building', 'to_landlords')),
     category TEXT CHECK(category IN ('가입신청', '방있어요', '물품공유', '시스템')),
     related_id INTEGER,
     related_table TEXT,
+    title TEXT,
     confirmed INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (author_id) REFERENCES users(id)
+    FOREIGN KEY (author_id) REFERENCES users(id),
+    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS message_recipient (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    message_id INTEGER NOT NULL,
+    message_id INTEGER NOT NULL, -- This still refers to the 'box' or 'thread' in the app logic, but let's name it message_box_id for clarity? 
+                                 -- Actually, the user asked to rename messages to message_box. 
+                                 -- So I'll rename this column to message_box_id to avoid confusion.
     recipient_id INTEGER NOT NULL,
     read_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+    FOREIGN KEY (message_id) REFERENCES message_box(id) ON DELETE CASCADE,
     FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
@@ -90,9 +102,11 @@ CREATE TABLE IF NOT EXISTS items (
     description TEXT,
     status TEXT DEFAULT 'open', -- 'open', 'closed', 'completed'
     building_id INTEGER,
+    belongs_to INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (owner_id) REFERENCES users(id),
-    FOREIGN KEY (building_id) REFERENCES buildings(id)
+    FOREIGN KEY (building_id) REFERENCES buildings(id),
+    FOREIGN KEY (belongs_to) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS room_tenant (
@@ -141,7 +155,7 @@ CREATE TABLE IF NOT EXISTS contract_keywords (
 CREATE TABLE IF NOT EXISTS invoices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     contract_id INTEGER NOT NULL,
-    type INTEGER NOT NULL,
+    type TEXT NOT NULL, -- deposit, monthly_rent, maintenance_fee, cleaning_fee, extra_fee
     billing_month TEXT,
     due_date DATE,
     amount INTEGER NOT NULL,
@@ -157,7 +171,7 @@ CREATE TABLE IF NOT EXISTS payments (
     contract_id INTEGER NOT NULL,
     amount INTEGER NOT NULL,
     paid_at DATETIME NOT NULL,
-    type INTEGER NOT NULL,
+    type TEXT NOT NULL, -- deposit, monthly_rent, maintenance_fee, cleaning_fee, extra_fee
     raw_text TEXT,
     memo TEXT,
 
@@ -214,4 +228,12 @@ CREATE TABLE IF NOT EXISTS images (
     is_main INTEGER DEFAULT 0,
     related_table TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    related_table TEXT,
+    related_id INTEGER,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    memo TEXT
 );

@@ -97,13 +97,15 @@
         }
 
         .search-input {
-            padding: 0.5rem 1rem;
+            padding: 0 1rem;
+            height: 2.2rem;
             border-radius: 0.8rem;
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid rgba(255, 255, 255, 0.1);
             color: white;
             font-size: 0.9rem;
             width: 200px;
+            box-sizing: border-box;
         }
 
         .search-input:focus {
@@ -325,7 +327,7 @@
         <h1>건물 관리</h1>
     </div>
     <div class="container" id="main-content" style="margin-top: 0; padding: 0;">
-        <div id="building-toolbar" style="margin-bottom: 2rem; padding: 0 1.5rem;">
+        <div id="building-toolbar" style="margin: 1rem 0; padding: 0 1.5rem;">
             <!-- Toolbar populated by JS -->
         </div>
         <div class="building-grid" id="building-grid">
@@ -495,9 +497,9 @@
             if (toolbar) {
                 toolbar.innerHTML = `
                 <div style="display:flex; align-items:center; width:100%;">
-                    <div class="search-container" style="display: flex; gap: 0.5rem; flex:1; max-width:400px;">
+                    <div class="search-container" style="display: flex; gap: 0.5rem; flex:1; max-width:400px; align-items: center;">
                         <input type="text" id="event-search" class="search-input" placeholder="이벤트 내용 검색..." style="flex:1;" onkeyup="if(event.key === 'Enter') searchEvents()">
-                        <button class="btn btn-secondary" style="white-space: nowrap;" onclick="searchEvents()">검색</button>
+                        <button class="btn btn-secondary" style="white-space: nowrap; height: 2.2rem; padding: 0 1rem;" onclick="searchEvents()">검색</button>
                     </div>
                 </div>
                 `;

@@ -169,6 +169,9 @@
 <body>
     <div class="header">
         <h1>메시지함</h1>
+        <button class="action-btn" onclick="location.href='/message_new.html'"
+            style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.3);">메시지
+            작성</button>
     </div>
 
     <div class="container">
@@ -214,39 +217,47 @@
                 item.onclick = () => location.href = `/message_detail.html?id=${notice.id}`;
 
                 const date = new Date(notice.created_at).toLocaleDateString();
+                const isAuthor = (notice.author_id == user.id);
 
-                // Determine the status to display
-                let displayStatus = notice.related_status || notice.user_status || '-';
+                let statusHtml = '';
 
-                // Translation mapping
-                const statusMap = {
-                    'advertising': '진행중',
-                    'drawing': '추첨중',
-                    'completed': '완료',
-                    'open': '진행중',
-                    'closed': '종료',
-                    '승인': '승인',
-                    '임시': '임시',
-                    '거절': '거절',
-                    '종료': '종료'
-                };
+                // Logic: Show status only for Author
+                if (isAuthor) {
+                    const total = notice.total_cnt || 0;
+                    const read = notice.read_cnt || 0;
+                    let text = '';
+                    let cls = 'status-btn-tmp';
 
-                const statusText = statusMap[displayStatus] || displayStatus;
+                    if (read === 0) {
+                        text = '안읽음';
+                        cls = 'status-btn-reject'; // Use reject style (Redish) for Unread, or tmp (Gray)
+                    } else {
+                        // Read > 0
+                        cls = 'status-btn-approve'; // Green
+                        if (total <= 1) {
+                            text = '읽음';
+                        } else {
+                            text = `읽음(${read}/${total})`;
+                        }
+                    }
+                    statusHtml = `<button class="action-btn ${cls}">${text}</button>`;
+                } else {
+                    // Recipient gets nothing
+                    statusHtml = '';
+                }
 
-                // Style status button
-                let statusClass = 'status-btn-tmp';
-                if (['승인', 'completed', '완료'].includes(displayStatus)) statusClass = 'status-btn-approve';
-                if (['거절', '종료', 'closed'].includes(displayStatus)) statusClass = 'status-btn-reject';
-                if (['advertising', 'open', 'drawing', '진행중', '추첨중'].includes(displayStatus)) statusClass = 'status-btn-tmp'; // Blueish or default
-
+                // Exception: Admin Delete Button for Signups (Action, not Status)
                 const isAdmin = user.role === 'admin';
                 const isSignup = notice.category === '가입신청';
-                const deleteBtnHtml = (isAdmin && isSignup) ? `
-                    <button class="action-btn status-btn-reject" onclick="deleteMessage(event, ${notice.id})">삭제</button>
-                ` : '';
+                if (isAdmin && isSignup) {
+                    statusHtml += `
+                        <button class="action-btn status-btn-reject" onclick="deleteMessage(event, ${notice.id})">삭제</button>
+                    `;
+                }
 
-                // Display category in the badge (e.g. '방있어요', '물품공유')
-                const displayCategory = notice.category || '알림';
+                // Display category
+                let displayCategory = notice.category || '알림';
+                if (displayCategory === '시스템') displayCategory = '메시지';
 
                 item.innerHTML = `
                     <div class="notice-summary">
@@ -261,8 +272,7 @@
                             </div>
                         </div>
                         <div class="notice-actions" style="display: flex; align-items: center; gap: 0.2rem;">
-                            <button class="action-btn ${statusClass}">${statusText}</button>
-                            ${deleteBtnHtml}
+                            ${statusHtml}
                         </div>
                     </div>`;
 

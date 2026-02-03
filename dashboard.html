@@ -458,7 +458,13 @@
             startDate.setDate(startDate.getDate() - firstDay.getDay());
             const currentDate = new Date(startDate);
 
-            for (let i = 0; i < 42; i++) {
+            // Calculate weeks needed
+            const totalDays = 42;
+            const weeks = 6;
+
+            // Generate all days first
+            const days = [];
+            for (let i = 0; i < totalDays; i++) {
                 const day = document.createElement('div');
                 day.className = 'calendar-day';
                 if (currentDate.getMonth() !== month) day.classList.add('other-month');
@@ -484,16 +490,44 @@
                             event.className = 'day-event event-payment';
                             event.textContent = `${(data.total_amount / 10000).toFixed(0)}만`;
                             event.style.backgroundColor = data.tenant_color ? `${data.tenant_color}40` : '';
-                            /* if (user.role === 'landlord') {
-                                event.onclick = (e) => { e.stopPropagation(); showContextMenu(e, data.bill_id); };
-                            } */
                             events.appendChild(event);
                         }
                     });
                 }
-
-                grid.appendChild(day);
+                days.push(day);
                 currentDate.setDate(currentDate.getDate() + 1);
+            }
+
+            // Check if last week (row 6) is entirely other month
+            // The days array index 35 is the start of the 6th week (0-indexed 35..41)
+            const sixthWeekStart = days[35];
+            const showSixthWeek = !sixthWeekStart.classList.contains('other-month');
+
+            // Check if 5th week (row 5) is also entirely other month
+            // The days array index 28 is the start of the 5th week (0-indexed 28..34)
+            const fifthWeekStart = days[28];
+            const showFifthWeek = !fifthWeekStart.classList.contains('other-month');
+
+            // Append days to grid
+            days.forEach((day, i) => {
+                if (i >= 28 && !showFifthWeek) return; // Skip 5th & 6th weeks
+                if (i >= 35 && !showSixthWeek) return; // Skip 6th week
+                grid.appendChild(day);
+            });
+
+            // Adjust grid rows
+            if (!showFifthWeek) {
+                // 4 Weeks
+                grid.style.gridTemplateRows = 'auto repeat(4, 1fr)';
+                document.querySelector('.sticky-calendar-container').style.height = '300px';
+            } else if (!showSixthWeek) {
+                // 5 Weeks
+                grid.style.gridTemplateRows = 'auto repeat(5, 1fr)';
+                document.querySelector('.sticky-calendar-container').style.height = '360px';
+            } else {
+                // 6 Weeks
+                grid.style.gridTemplateRows = 'auto repeat(6, 1fr)';
+                document.querySelector('.sticky-calendar-container').style.height = '420px';
             }
         }
 

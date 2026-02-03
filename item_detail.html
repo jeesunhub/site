@@ -285,6 +285,10 @@
                 <div id="view-price" style="font-size:1.2rem; font-weight:600; color:#4ade80;"></div>
                 <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.3rem;">재판매 금지, 폐기 시 폐기물 스티커 부착</div>
             </div>
+            <div class="form-group">
+                <label>광고 범위</label>
+                <div id="view-target-scope" style="font-size:0.9rem; color:#94a3b8;"></div>
+            </div>
             <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 1.5rem 0;">
             <div class="form-group">
                 <label>물건 이름</label>
@@ -293,6 +297,10 @@
             <div class="form-group">
                 <label>물건 설명</label>
                 <div id="view-item-desc" style="white-space:pre-wrap; color:#cbd5e1; line-height:1.6;"></div>
+            </div>
+            <div class="form-group">
+                <label>판매자</label>
+                <div id="view-owner" style="font-size:0.9rem; color:#94a3b8;"></div>
             </div>
             <div class="form-group">
                 <label>사진</label>
@@ -390,6 +398,13 @@
             document.getElementById('view-price').textContent = currentAd.price > 0 ? currentAd.price.toLocaleString() + '원' : '무료나눔';
             document.getElementById('view-item-name').textContent = currentAd.item_name;
             document.getElementById('view-item-desc').textContent = currentAd.item_description;
+
+            const scopeText = currentAd.target_building_name ? `${currentAd.target_building_name} 전용` : '전체공고 (모두에게 보임)';
+            document.getElementById('view-target-scope').textContent = scopeText;
+
+            let ownerText = currentAd.owner_login_id || '알 수 없음';
+            if (currentAd.is_anonymous) ownerText = '익명';
+            document.getElementById('view-owner').textContent = ownerText;
 
             renderPhotos(currentAd.images, false);
 

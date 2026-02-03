@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tenant Matching - Sugar</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .matching-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+
+        .header-section {
+            padding: 1rem 0;
+            margin-bottom: 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header-section h1 {
+            font-size: 1.5rem;
+            margin: 0;
+            background: linear-gradient(to right, #6366f1, #a855f7);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .parsed-card {
+            background: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            margin-bottom: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .info-row {
+            display: flex;
+            margin-bottom: 0.8rem;
+            font-size: 1rem;
+            align-items: flex-start;
+        }
+
+        .info-row strong {
+            width: 80px;
+            flex-shrink: 0;
+            opacity: 0.7;
+            font-weight: 400;
+        }
+
+        .keyword-tag {
+            padding: 0.3rem 0.8rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 2rem;
+            font-size: 0.85rem;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.2s;
+            display: inline-block;
+            margin-bottom: 0.4rem;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .keyword-tag:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .keyword-tag.active {
+            background: rgba(99, 102, 241, 0.2);
+            border-color: #6366f1;
+            color: #a5b4fc;
+            font-weight: 600;
+        }
+
+        .list-header {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            padding-left: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .user-select-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 1rem;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .user-select-item {
+            padding: 1.2rem;
+            background: #1e293b;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-left: 4px solid transparent;
+        }
+
+        .user-select-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .user-select-item.selected {
+            background: rgba(99, 102, 241, 0.1);
+            border-left-color: #6366f1;
+        }
+
+        .footer-actions {
+            position: sticky;
+            bottom: 1rem;
+            margin-top: 2rem;
+            padding: 1rem;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 1rem;
+            display: flex;
+            justify-content: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-confirm {
+            width: 100%;
+            max-width: 400px;
+            padding: 1rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            background: var(--primary);
+            color: white;
+            border-radius: 0.8rem;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39);
+        }
+    </style>
+</head>
+
+<body class="has-back-button">
+    <!-- Navbar injected by JS -->
+
+    <div class="matching-container">
+        <div class="header-section">
+            <h1>세입자 매칭</h1>
+        </div>
+
+        <div id="parsed-card" class="parsed-card">
+            <!-- Data from JS -->
+            <div style="text-align:center; opacity:0.5;">데이터 로딩 중...</div>
+        </div>
+
+        <div class="list-header">
+            <span>추천 세입자 목록</span>
+            <span id="match-count" style="font-size:0.85rem; font-weight:400; opacity:0.6;"></span>
+        </div>
+
+        <div id="tenant-list" class="user-select-list">
+            <!-- Scored tenants go here -->
+        </div>
+
+        <div class="footer-actions">
+            <button class="btn-confirm" onclick="confirmMatch()">매칭 완료 및 저장</button>
+        </div>
+    </div>
+
+    <script src="/js/common.js"></script>
+    <script>
+        const user = JSON.parse(localStorage.getItem('user'));
+        const parsedData = JSON.parse(sessionStorage.getItem('pending_payment'));
+        let activeContracts = [];
+        let selectedContractId = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (!user) { window.location.href = '/index.html'; return; }
+            if (!parsedData) {
+                alert('잘못된 접근입니다.');
+                window.location.href = 'payments.html';
+                return;
+            }
+
+            renderNavbar();
+
+            // Override back button behavior
+            const navBack = document.querySelector('.nav-back-btn');
+            if (navBack) {
+                navBack.onclick = (e) => {
+                    e.preventDefault();
+                    // Go back to the previous page (payments or payments_monthly)
+                    window.history.back();
+                };
+            }
+
+            await loadActiveContracts();
+            renderParsedInfo();
+            renderMatchCandidates(parsedData.keyword ? [parsedData.keyword] : []);
+        });
+
+        async function loadActiveContracts() {
+            try {
+                // We need all active contracts for scoring
+                const res = await fetch(`/api/landlord/${user.id}/contracts/active`);
+                if (res.ok) activeContracts = await res.json();
+            } catch (e) {
+                console.error('Failed to load active contracts', e);
+            }
+        }
+
+        function renderParsedInfo() {
+            const card = document.getElementById('parsed-card');
+
+            const dateStr = new Date(parsedData.date).toLocaleString('ko-KR', {
+                year: 'numeric', month: 'long', day: 'numeric',
+                hour: '2-digit', minute: '2-digit', hour12: false
+            });
+
+            const tagsHtml = parsedData.tokens.map(t =>
+                `<span class="keyword-tag ${t === parsedData.keyword ? 'active' : ''}" 
+                       data-keyword="${t}" 
+                       onclick="toggleKeyword(this)">${t}</span>`
+            ).join(' ');
+
+            card.innerHTML = `
+                <div class="info-row" style="margin-bottom:1.2rem;">
+                    <strong>키워드</strong>
+                    <div style="display:flex; flex-wrap:wrap; gap:0.4rem;">${tagsHtml}</div>
+                </div>
+                <div class="info-row">
+                    <strong>입금액</strong>
+                    <span style="font-weight:600; color:#4ade80;">${parsedData.amount.toLocaleString()}원</span>
+                </div>
+                <div class="info-row">
+                    <strong>입금일</strong>
+                    <span>${dateStr}</span>
+                </div>
+            `;
+        }
+
+        function toggleKeyword(tagEl) {
+            tagEl.classList.toggle('active');
+            const activeKeywords = Array.from(document.querySelectorAll('.keyword-tag.active'))
+                .map(el => el.dataset.keyword);
+            renderMatchCandidates(activeKeywords);
+        }
+
+        function renderMatchCandidates(keywords) {
+            const listContainer = document.getElementById('tenant-list');
+            listContainer.innerHTML = '';
+
+            const scoredCandidates = activeContracts.map(c => {
+                let score = 0;
+                if (keywords.length > 0) {
+                    keywords.forEach(k => {
+                        if (c.keywords && c.keywords.includes(k)) score += 100;
+                        if (c.nickname && c.nickname.includes(k)) score += 10;
+                        if (String(c.room_number).includes(k)) score += 10;
+                    });
+                }
+                return { ...c, matchScore: score };
+            });
+
+            scoredCandidates.sort((a, b) => b.matchScore - a.matchScore);
+
+            // Auto-select the top result if it's a strong match (score >= 100) and nothing is selected yet
+            if (!selectedContractId && scoredCandidates.length > 0 && scoredCandidates[0].matchScore >= 100) {
+                selectedContractId = scoredCandidates[0].id;
+            }
+
+            scoredCandidates.forEach(c => {
+                const div = document.createElement('div');
+                div.className = 'user-select-item';
+
+                // Maintain selected state on re-render
+                if (c.id === selectedContractId) {
+                    div.classList.add('selected');
+                }
+
+                // Subtle background for any keyword match, but avoid looking like "selection"
+                if (keywords.length > 0 && c.matchScore > 0) {
+                    div.style.background = 'rgba(255, 255, 255, 0.03)';
+                }
+
+                div.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="font-weight:600; font-size:1.1rem;">${c.nickname}</span>
+                        ${c.matchScore >= 100 ? '<span style="font-size:0.65rem; color:#a5b4fc; background:rgba(99,102,241,0.2); padding:3px 8px; border-radius:4px;">키워드 매칭</span>' : ''}
+                    </div>
+                    <div style="font-size:0.9rem; opacity:0.6; margin-top:0.4rem;">
+                        ${c.building || '건물미지정'} ${c.room_number || ''}호
+                    </div>
+                `;
+                div.onclick = () => {
+                    document.querySelectorAll('.user-select-item').forEach(el => el.classList.remove('selected'));
+                    div.classList.add('selected');
+                    selectedContractId = c.id;
+                };
+                listContainer.appendChild(div);
+            });
+
+            document.getElementById('match-count').textContent = `전체 ${scoredCandidates.length}명`;
+        }
+
+        async function confirmMatch() {
+            if (!selectedContractId) return alert('세입자를 선택해주세요.');
+
+            const contract = activeContracts.find(c => c.id === selectedContractId);
+            if (!contract) return;
+
+            // Collect active keywords
+            const activeKeywords = Array.from(document.querySelectorAll('.keyword-tag.active'))
+                .map(el => el.dataset.keyword);
+
+            // Sync active keywords with the server
+            try {
+                await fetch(`/api/contracts/${selectedContractId}/keyword`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ keywords: activeKeywords })
+                });
+            } catch (e) {
+                console.error('Failed to update keywords:', e);
+            }
+
+            // Store the selected matching result and redirect to allocation page
+            parsedData.contract_id = selectedContractId;
+            parsedData.tenant_id = contract.tenant_id;
+            parsedData.nickname = contract.nickname;
+            parsedData.building = contract.building;
+            parsedData.room_number = contract.room_number;
+
+            sessionStorage.setItem('pending_payment', JSON.stringify(parsedData));
+            window.location.href = 'payments_allocation.html';
+        }
+    </script>
+</body>
+
+</html>

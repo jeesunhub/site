@@ -16,20 +16,30 @@ Table users {
   created_at datetime [default: `CURRENT_TIMESTAMP`]
 }
 
-Table messages {
+Table message_box {
   id integer [primary key, increment]
   author_id integer
+  message_id integer [note: "points to messages.id"]
   target text [note: "'direct', 'to_all', 'to_building', 'to_landlords'"]
   category text [note: "'가입신청', '방있어요', '물품공유', '시스템'"]
   related_id integer
   related_table text
+  title text
   confirmed integer [default: 0]
+  created_at datetime [default: `CURRENT_TIMESTAMP`]
+}
+
+Table messages {
+  id integer [primary key, increment]
+  content text
+  is_read integer [default: 0]
+  read_at datetime
   created_at datetime [default: `CURRENT_TIMESTAMP`]
 }
 
 Table message_recipient {
   id integer [primary key, increment]
-  message_id integer [not null]
+  message_id integer [not null, note: "refers to message_box.id"]
   recipient_id integer [not null]
   read_at datetime [note: "null if unread"]
   created_at datetime [default: `CURRENT_TIMESTAMP`]
@@ -76,6 +86,7 @@ Table items {
   description text
   status text [note: "'open', 'closed', 'completed'", default: "open"]
   building_id integer
+  belongs_to integer [note: "Initially same as owner_id, changes to selected user_id"]
   created_at datetime [default: `CURRENT_TIMESTAMP`]
 }
 
@@ -112,7 +123,7 @@ Table contract_keywords {
 Table invoices {
   id integer [primary key, increment]
   contract_id integer [not null]
-  type integer [not null, note: "Bitmask: 1=Deposit, 2=Rent, 4=Maintenance, 8=Cleaning, 16=Penalty, 32=Credit"]
+  type text [not null, note: "deposit, monthly_rent, maintenance_fee, cleaning_fee, extra_fee"]
   billing_month text [note: "YYYY-MM"]
   due_date date
   amount integer [not null]
@@ -125,7 +136,7 @@ Table payments {
   contract_id integer [not null]
   amount integer [not null]
   paid_at datetime [not null]
-  type integer [not null, note: "Bitmask: 1=Deposit, 2=Rent, 4=Maintenance, 8=Cleaning, 16=Penalty, 32=Credit"]
+  type text [not null, note: "deposit, monthly_rent, maintenance_fee, cleaning_fee, extra_fee"]
   raw_text text
   memo text
 }
@@ -173,8 +184,17 @@ Table images {
   created_at datetime [default: `CURRENT_TIMESTAMP`]
 }
 
-Ref: messages.author_id > users.id
-Ref: message_recipient.message_id > messages.id [delete: cascade]
+Table logs {
+  id integer [primary key, increment]
+  related_table text
+  related_id integer
+  timestamp datetime [default: `CURRENT_TIMESTAMP`]
+  memo text
+}
+
+Ref: message_box.author_id > users.id
+Ref: message_box.message_id > messages.id [delete: cascade]
+Ref: message_recipient.message_id > message_box.id [delete: cascade]
 Ref: message_recipient.recipient_id > users.id [delete: cascade]
 Ref: building_addresses.building_id > buildings.id
 Ref: landlord_buildings.landlord_id > users.id
@@ -195,3 +215,5 @@ Ref: room_events.room_id > rooms.id
 Ref: advertisements.created_by > users.id
 Ref: applicants.user_id > users.id
 Ref: applicants.advertisement_id > advertisements.id
+Ref: items.belongs_to > users.id
+Ref: logs.related_id > items.id [note: "Generic reference"]

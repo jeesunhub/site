@@ -29,6 +29,88 @@ body {
     font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
     line-height: 1.6;
     overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+#layout-header {
+    border: 2px solid red;
+    width: 100%;
+    z-index: 2000;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+}
+
+#layout-main {
+    border: 2px solid yellow;
+    flex: 1;
+    width: 100%;
+}
+
+#layout-footer {
+    border: 2px solid blue;
+    width: 100%;
+    padding: 0.5rem 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(15, 23, 42, 0.9);
+}
+
+.footer-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.footer-biz-name {
+    font-size: 0.75rem;
+    color: var(--text);
+    opacity: 0.9;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+}
+
+.footer-info-details {
+    display: none;
+    width: 100%;
+    padding: 1rem 0;
+    font-size: 0.75rem;
+    color: var(--text);
+    opacity: 0.6;
+    text-align: left;
+    line-height: 1.5;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    margin-top: 0.5rem;
+}
+
+.footer-info-details.show {
+    display: block;
+}
+
+.footer-links {
+    display: flex;
+    gap: 0.8rem;
+}
+
+.footer-btn {
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 0.75rem;
+    cursor: pointer;
+    padding: 0;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+}
+
+.footer-btn:hover {
+    opacity: 0.8;
 }
 
 /* Navbar styles */

@@ -135,25 +135,46 @@ if (databaseUrl) {
     });
 }
 
+// Helper to rename table if it exists
+function renameTableIfExists(oldName, newName, callback) {
+    db.get(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, [oldName], (err, row) => {
+        if (!err && row) {
+            console.log(`Renaming table '${oldName}' to '${newName}'...`);
+            db.run(`ALTER TABLE ${oldName} RENAME TO ${newName}`, (alterErr) => {
+                if (alterErr) console.error(`Failed to rename '${oldName}':`, alterErr.message);
+                else console.log(`Renamed '${oldName}' to '${newName}'.`);
+                if (callback) callback();
+            });
+        } else {
+            if (callback) callback();
+        }
+    });
+}
+
 function ensureColumns() {
-    // Columns to ensure in tables
+    // Now ensure columns in the new/existing tables
     const columns = [
         { table: 'users', name: 'noti', type: 'INTEGER DEFAULT 0' },
         { table: 'users', name: 'approved', type: 'INTEGER DEFAULT 0' },
         { table: 'users', name: 'status', type: "TEXT DEFAULT '임시'" },
         { table: 'applicants', name: 'created_at', type: "DATETIME DEFAULT CURRENT_TIMESTAMP" },
         { table: 'advertisements', name: 'target_id', type: 'INTEGER' },
+        { table: 'advertisements', name: 'category', type: 'TEXT' },
+        { table: 'message_box', name: 'title', type: 'TEXT' },
+        { table: 'message_box', name: 'message_id', type: 'INTEGER' },
+        { table: 'messages', name: 'read_at', type: 'DATETIME' },
     ];
 
     columns.forEach(col => {
         const testSql = `SELECT ${col.name} FROM ${col.table} LIMIT 1`;
         db.get(testSql, (err) => {
             if (err) {
-                console.log(`Column '${col.name}' missing in '${col.table}'. Attempting to add...`);
+                // console.log(`Column '${col.name}' missing in '${col.table}'. Attempting to add...`);
+                // Suppressed log to avoid noise, or keep it if desired
                 const alterSql = `ALTER TABLE ${col.table} ADD COLUMN ${col.name} ${col.type}`;
                 db.run(alterSql, (alterErr) => {
                     if (alterErr) {
-                        console.error(`Failed to add '${col.name}' column to '${col.table}':`, alterErr.message);
+                        // console.error(`Failed to add '${col.name}' column to '${col.table}':`, alterErr.message);
                     } else {
                         console.log(`Added '${col.name}' column to ${col.table} table.`);
                         if (col.name === 'approved' && col.table === 'users') {

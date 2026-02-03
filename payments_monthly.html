@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Payment Management - Sugar</title>
+    <title>Payment Detail - Sugar</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -197,8 +197,21 @@
             background: var(--primary);
         }
 
-        .btn-delete {
-            background: #ef4444;
+        .btn-del {
+            background: rgba(239, 68, 68, 0.1);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            padding: 0.4rem 0.8rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-del:hover {
+            background: rgba(239, 68, 68, 0.2);
         }
 
         /* Modal Styles */
@@ -262,20 +275,13 @@
         style="height: auto; min-height: 3.5rem; flex-direction: column; align-items: flex-start; padding: 0.5rem 1.5rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; height: 2.5rem;">
             <h1>납부 관리</h1>
-            <div class="action-buttons">
-                <input type="file" id="excel-upload" accept=".xlsx, .xls" style="display:none"
-                    onchange="handleExcelUpload(event)">
-                <button class="btn btn-secondary" style="padding: 0.4rem 0.4rem; font-size: 0.8rem;"
-                    onclick="document.getElementById('excel-upload').click()">엑셀 업로드</button>
-                <button class="btn btn-secondary" style="padding: 0.4rem 0.4rem; font-size: 0.8rem;"
-                    onclick="alert('준비 중입니다.')">표 추가</button>
-                <button class="btn btn-secondary" style="padding: 0.4rem 0.4rem; font-size: 0.8rem;"
-                    onclick="openPasteModal()">문자 추가</button>
+            <div id="tenant-info-header" style="font-size: 0.9rem; opacity: 0.8; text-align: right;">
+                <!-- Filled by JS -->
             </div>
         </div>
         <div id="header-filters"
-            style="display: flex; gap: 0.8rem; align-items: center; width: 100%; margin-top: 0.5rem; flex-wrap: wrap;">
-            <!-- Dropdowns injected by setupUIByRole() -->
+            style="display: flex; gap: 0.8rem; align-items: center; width: 100%; margin-top: 0.5rem; flex-wrap: wrap; height: 0; overflow: hidden;">
+            <!-- Hidden or removed dropdowns if not needed -->
         </div>
     </div>
 
@@ -305,23 +311,13 @@
     <script src="/js/common.js"></script>
     <script>
         const user = JSON.parse(localStorage.getItem('user'));
+        const urlParams = new URLSearchParams(window.location.search);
+        let targetTenantId = parseInt(urlParams.get('tenant_id')); // For Landlord/Admin
         let ledgerData = [];
         let activeContracts = [];
         let currentParsedData = null;
         let selectedContractId = null;
 
-        // View State
-        let currentMode = 'list'; // 'list' (tenant list) or 'detail' (monthly list)
-        let currentDetailTenantId = null;
-
-        // "Next Month" Logic helper
-        function getNextMonthYYMM() {
-            const d = new Date();
-            d.setMonth(d.getMonth() + 1);
-            const yy = String(d.getFullYear()).slice(2);
-            const mm = String(d.getMonth() + 1).padStart(2, '0');
-            return `${yy}-${mm}`; // YY-MM or YYYY-MM based on data fmt. DB usually YYYY-MM
-        }
         function getNextMonthYYYYMM() {
             const d = new Date();
             d.setMonth(d.getMonth() + 1);
@@ -331,75 +327,62 @@
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
-            if (!user) {
-                window.location.href = '/index.html';
-                return;
-            }
+            if (!user) { window.location.href = '/index.html'; return; }
+
             if (user.role === 'tenant') {
-                window.location.href = 'payments_monthly.html';
-                return;
+                targetTenantId = user.id;
+            } else {
+                if (!targetTenantId) {
+                    alert('잘못된 접근입니다.');
+                    window.location.href = 'payments.html';
+                    return;
+                }
+                document.body.classList.add('has-back-button');
             }
+
             renderNavbar();
+
+            if (user.role === 'landlord' || user.role === 'admin') {
+                const navBack = document.querySelector('.nav-back-btn');
+                if (navBack) {
+                    navBack.onclick = (e) => {
+                        e.preventDefault();
+                        window.location.href = 'payments.html';
+                    };
+                }
+            }
+
+            setupHeader();
             await loadTableData();
             await loadActiveContracts();
         });
 
-        function updateHeaderUI() {
+        function setupHeader() {
             const headerTitle = document.querySelector('.header-section h1');
-            const parentDiv = headerTitle.parentElement; // The flex container
-
-            let backBtn = document.getElementById('back-btn-wrapper');
-
-            // Create back button if not exists
-            if (!backBtn) {
-                backBtn = document.createElement('div');
-                backBtn.id = 'back-btn-wrapper';
-                backBtn.style.display = 'none'; // Initial state
-                backBtn.style.marginRight = '0.5rem';
-                backBtn.style.alignItems = 'center';
-                backBtn.style.cursor = 'pointer';
-                backBtn.innerHTML = `
-                    <button class="action-btn" onclick="goBackToList()" style="background:none; border:none; padding:0.2rem; display:flex; align-items:center; color:white;">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M15 19l-7-7 7-7" />
-                        </svg>
-                        <span style="font-size: 1rem; margin-left: -2px; padding-bottom: 2px;">뒤로</span>
-                    </button>
-                `;
-                // Insert before H1
-                parentDiv.insertBefore(backBtn, headerTitle);
-            }
-
-            if (currentMode === 'detail' && (user.role === 'landlord' || user.role === 'admin')) {
-                backBtn.style.display = 'flex';
-                headerTitle.textContent = '월별 납부 내역';
-            } else {
-                backBtn.style.display = 'none';
-                headerTitle.textContent = '납부 관리';
-            }
+            headerTitle.textContent = '월별 납부 내역';
         }
 
-        function goBackToList() {
-            currentMode = 'list';
-            currentDetailTenantId = null;
-            updateHeaderUI();
-            renderTenantList(ledgerData);
+        function updateTenantHeader(data) {
+            const tenantRows = data.filter(r => r.tenant_id === targetTenantId);
+            if (tenantRows.length === 0) return;
+
+            const info = tenantRows[0];
+            const headerInfo = document.getElementById('tenant-info-header');
+
+            headerInfo.innerHTML = `
+                <div style="font-weight: 600; color: #fff; font-size: 1rem;">${info.building_name} ${info.room_number || ''}호 ${info.tenant_name}</div>
+                <div style="font-size: 0.75rem; opacity: 0.6; margin-top: 2px;">
+                    보증금 ${formatUnit(info.deposit || 0)}만원 / 월세 ${formatUnit(info.monthly_rent || 0)}만원 / 관리비 ${formatUnit(info.maintenance_fee || 0)}만원
+                </div>
+            `;
         }
 
         async function loadActiveContracts() {
             if (user.role === 'landlord' || user.role === 'admin') {
                 try {
-                    if (user.role === 'landlord') {
-                        const res = await fetch(`/api/landlord/${user.id}/contracts/active`);
-                        if (res.ok) {
-                            activeContracts = await res.json();
-                        }
-                    } else if (user.role === 'admin') {
-                        // Admin fetch logic if needed
-                    }
-                } catch (e) {
-                    console.error("Failed to load contracts", e);
-                }
+                    const res = await fetch(`/api/landlord/${user.id}/contracts/active`);
+                    if (res.ok) activeContracts = await res.json();
+                } catch (e) { console.error(e); }
             }
         }
 
@@ -411,26 +394,17 @@
             try {
                 const res = await fetch(`/api/payments/ledger?${params.toString()}`);
                 if (res.status === 404) {
-                    handleDataLoaded([]);
+                    renderMonthlyList([]);
                     return;
                 }
-                if (!res.ok) throw new Error('Server error: ' + res.status);
+                if (!res.ok) throw new Error('Server error');
                 const data = await res.json();
                 ledgerData = data;
-                handleDataLoaded(data);
+                updateTenantHeader(data);
+                renderMonthlyList(data);
             } catch (err) {
-                console.error('Failed to load table data:', err);
-                const list = document.getElementById('payment-list');
-                list.innerHTML = `<div style="text-align:center; padding:2rem; color: #f87171;">데이터 로딩 실패<br><span style="font-size:0.8rem; opacity:0.7">${err.message}</span></div>`;
+                document.getElementById('payment-list').innerHTML = `<div style="text-align:center; padding:2rem; color: #f87171;">데이터 로딩 실패</div>`;
             }
-        }
-
-        function handleDataLoaded(data) {
-            if (user.role === 'tenant') {
-                window.location.href = 'payments_monthly.html';
-                return;
-            }
-            renderTenantList(data);
         }
 
         function formatYYMMDD(dateStr) {
@@ -452,88 +426,97 @@
             return amount.toLocaleString();
         }
 
-        // --- RENDER LOGIC ---
-
-        function renderTenantList(data) {
+        function renderMonthlyList(allData) {
             const list = document.getElementById('payment-list');
             list.innerHTML = '';
 
-            // Group by Tenant/Contract
-            // Key: tenant_id + building_id (to separate different contracts if any)
-            const groups = {};
+            let userRows = allData.filter(r => r.tenant_id === targetTenantId);
 
-            data.forEach(row => {
-                const key = `${row.tenant_id}_${row.building_id}`;
-                if (!groups[key]) {
-                    groups[key] = {
-                        tenant_name: row.tenant_name,
-                        tenant_id: row.tenant_id,
-                        building_name: row.building_name,
-                        building_id: row.building_id,
-                        room_number: row.room_number,
-                        total_due: 0,
-                        total_paid: 0,
-                        unpaid_amount: 0,
-                        last_paid_date: null,
-                        keywords: row.keywords
-                    };
-                }
-                const g = groups[key];
-                g.total_due += (row.due_amount || 0);
-                g.total_paid += (row.paid_amount || 0);
-            });
-
-            // Convert to array
-            const groupList = Object.values(groups);
-
-            // Calculate unpaid
-            groupList.forEach(g => {
-                g.unpaid_amount = g.total_due - g.total_paid;
-                // Clamp to 0 if negative (overpaid) - or keep generic? 
-                // Usually arrears is positive.
-            });
-
-            if (groupList.length === 0) {
-                list.innerHTML = '<div style="text-align:center; padding:3rem; opacity:0.5;">데이터가 없습니다.</div>';
+            if (userRows.length === 0) {
+                list.innerHTML = '<div style="text-align:center; padding:3rem; opacity:0.5;">납부 내역이 없습니다.</div>';
                 return;
             }
 
-            // Render
-            groupList.forEach(g => {
+            const nextMonth = getNextMonthYYYYMM();
+
+            // Sort DESCENDING (Newest first)
+            userRows.sort((a, b) => b.bill_month.localeCompare(a.bill_month));
+
+            userRows = userRows.filter(r => r.bill_month <= nextMonth);
+
+            userRows.forEach(row => {
                 const item = document.createElement('div');
                 item.className = 'mgmt-item';
-                item.onclick = () => {
-                    window.location.href = `payments_monthly.html?tenant_id=${g.tenant_id}`;
+
+                let dayPart = '01';
+                if (row.contract_start_date) {
+                    dayPart = row.contract_start_date.split('-')[2] || '01';
+                }
+                const dueDate = `${row.bill_month}-${dayPart}`;
+                const displayDueDate = dueDate.slice(5); // MM-DD
+
+                const due = row.due_amount;
+                const paid = row.paid_amount;
+
+                // Prioritize DB status, fallback to calculation if empty
+                let statusText = row.invoice_status || (paid >= due ? '완납' : '부분납부');
+                let statusColor = (statusText === '완납') ? '#4ade80' : '#fbbf24';
+
+                const monthNum = parseInt(row.bill_month.slice(5), 10);
+                let leftBoxTitle = '';
+                const typeMap = {
+                    'deposit': '보증금',
+                    'monthly_rent': `${monthNum}월 월세`,
+                    'maintenance_fee': `${monthNum}월 관리비`,
+                    'cleaning_fee': '청소비',
+                    'extra_fee': '추가납부금'
                 };
 
-                // Styling for arrears
-                let arrearsText = '';
-                let statusHtml = '';
-
-                if (g.unpaid_amount > 0) {
-                    arrearsText = `총 미납: ${formatCurrency(g.unpaid_amount)}원`;
-                    statusHtml = `<span style="color: #f87171; font-weight:600; font-size:0.9rem;">미납</span>`;
+                const buildingName = row.building_name || '미지정';
+                if (typeMap[row.invoice_type]) {
+                    leftBoxTitle = typeMap[row.invoice_type];
                 } else {
-                    arrearsText = `총 미납: 0원`;
-                    statusHtml = `<span style="color: #4ade80; font-weight:600; font-size:0.9rem;">완납</span>`;
+                    // Legacy bitmask support
+                    if (row.invoice_type & 1) leftBoxTitle = '보증금';
+                    else if (row.invoice_type & 2) leftBoxTitle = `${monthNum}월 월세`;
+                    else if (row.invoice_type & 4) leftBoxTitle = `${monthNum}월 관리비`;
+                    else if (row.invoice_type & 8) leftBoxTitle = '청소비';
+                    else leftBoxTitle = '기타';
+                }
+
+                let subLine = '';
+                if (paid > 0) {
+                    const pDate = row.last_paid_date ? new Date(row.last_paid_date).toLocaleString('ko-KR', {
+                        month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+                    }) : '-';
+                    subLine = `납부: ${formatUnit(paid)}만원 (${pDate})`;
+                } else {
+                    subLine = '납부 내역 없음';
                 }
 
                 item.innerHTML = `
-                    <div class="mgmt-summary">
-                        <div class="mgmt-left" style="background: rgba(99, 102, 241, 0.15); color: #a5b4fc;">
-                             <div class="b-name">${g.building_name}</div>
-                             <div class="r-num">${g.room_number}</div>
+                    <div class="mgmt-summary" style="cursor: default; padding: 0.8rem 1rem;">
+                         <div class="mgmt-left">
+                             <div class="r-num">${leftBoxTitle}</div>
                         </div>
                         <div class="mgmt-center">
-                            <div class="center-top" style="font-size: 1.1rem; font-weight: 500;">
-                                ${g.tenant_name} <span style="font-size:0.8rem; color:#94a3b8; font-weight:400; margin-left:0.5rem;">${g.keywords || ''}</span>
+                            <div class="center-top" style="font-size:1rem; font-weight:600; display: flex; align-items: center;">
+                                <span>${formatUnit(due)}만원</span>
+                                <span style="font-size:0.85rem; opacity:0.6; font-weight:400; margin-left:0.6rem;">~${displayDueDate}</span>
+                                <span style="font-size: 0.65rem; background: ${statusColor}26; color: ${statusColor}; padding: 1px 6px; border-radius: 4px; margin-left: 8px; border: 1px solid ${statusColor}33; font-weight: 600; white-space: nowrap;">
+                                    ${statusText}
+                                </span>
                             </div>
-                            <div class="center-bottom" style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-top: 0.3rem;">
-                                ${arrearsText}
+                            <div class="center-bottom" style="font-size: 0.75rem; color: rgba(255,255,255,0.5); margin-top: 2px;">
+                                ${subLine}
                             </div>
                         </div>
-                        <div class="mgmt-right" style="padding-right: 0.5rem;">
-                            ${statusHtml}
+                        <div class="mgmt-right" style="display: flex; align-items: center; gap: 0.8rem;">
+                            ${(user.role !== 'tenant' && row.invoice_id) ? `
+                                <button class="btn-del" onclick="event.stopPropagation(); deleteRecord(${row.invoice_id})">
+                                    삭제
+                                </button>
+                            ` : ''}
                         </div>
                     </div>
                 `;
@@ -541,7 +524,32 @@
             });
         }
 
+        async function deleteRecord(invoiceId) {
+            if (!confirm('해당 내역을 삭제하시겠습니까?\n관련 입금 데이터와 배정 내역이 모두 삭제됩니다.')) return;
 
+            try {
+                const res = await fetch(`/api/invoices/${invoiceId}`, {
+                    method: 'DELETE'
+                });
+                if (res.ok) {
+                    alert('삭제되었습니다.');
+                    loadTableData(); // Refresh list
+                } else {
+                    let errorMessage = '삭제 실패';
+                    const contentType = res.headers.get("content-type");
+                    if (contentType && contentType.indexOf("application/json") !== -1) {
+                        const err = await res.json();
+                        errorMessage += ': ' + (err.error || '알 수 없는 오류');
+                    } else {
+                        errorMessage += ' (Status: ' + res.status + ')';
+                    }
+                    alert(errorMessage);
+                }
+            } catch (e) {
+                console.error(e);
+                alert('삭제 중 오류가 발생했습니다.');
+            }
+        }
 
         function handleExcelUpload(event) {
             const file = event.target.files[0];

@@ -23,14 +23,23 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS messages (
     id SERIAL PRIMARY KEY,
-    author_id INTEGER,
+    content TEXT,
+    is_read INTEGER DEFAULT 0,
+    read_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS message_box (
+    id SERIAL PRIMARY KEY,
+    author_id INTEGER REFERENCES users(id),
+    message_id INTEGER REFERENCES messages(id) ON DELETE CASCADE,
     target TEXT CHECK(target IN ('direct', 'to_all', 'to_building', 'to_landlords')),
     category TEXT CHECK(category IN ('가입신청', '방있어요', '물품공유', '시스템')),
     related_id INTEGER,
     related_table TEXT,
+    title TEXT,
     confirmed INTEGER DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (author_id) REFERENCES users(id)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS message_recipient (
@@ -39,7 +48,7 @@ CREATE TABLE IF NOT EXISTS message_recipient (
     recipient_id INTEGER NOT NULL,
     read_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+    FOREIGN KEY (message_id) REFERENCES message_box(id) ON DELETE CASCADE,
     FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
@@ -88,9 +97,11 @@ CREATE TABLE IF NOT EXISTS items (
     description TEXT,
     status TEXT DEFAULT 'open',
     building_id INTEGER,
+    belongs_to INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (owner_id) REFERENCES users(id),
-    FOREIGN KEY (building_id) REFERENCES buildings(id)
+    FOREIGN KEY (building_id) REFERENCES buildings(id),
+    FOREIGN KEY (belongs_to) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS room_tenant (
@@ -136,7 +147,7 @@ CREATE TABLE IF NOT EXISTS contract_keywords (
 CREATE TABLE IF NOT EXISTS invoices (
     id SERIAL PRIMARY KEY,
     contract_id INTEGER NOT NULL,
-    type INTEGER NOT NULL,
+    type TEXT NOT NULL,
     billing_month TEXT,
     due_date DATE,
     amount INTEGER NOT NULL,
@@ -153,7 +164,7 @@ CREATE TABLE IF NOT EXISTS payments (
     amount INTEGER NOT NULL,
     paid_at TIMESTAMP NOT NULL,
 
-    type INTEGER NOT NULL,
+    type TEXT NOT NULL,
     raw_text TEXT,
     memo TEXT,
 
@@ -210,4 +221,12 @@ CREATE TABLE IF NOT EXISTS images (
     is_main INTEGER DEFAULT 0,
     related_table TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS logs (
+    id SERIAL PRIMARY KEY,
+    related_table TEXT,
+    related_id INTEGER,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    memo TEXT
 );

@@ -4,37 +4,127 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sugar - 멤버 서비스</title>
+    <title>안녕 - 멤버 서비스</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
         :root {
             --primary: #6366f1;
+            --primary-dark: #4f46e5;
             --secondary: #a855f7;
+            --accent: #818cf8;
             --bg: #0f172a;
             --card-bg: rgba(255, 255, 255, 0.05);
             --fg: #f8fafc;
+            --text: #f8fafc;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        input,
+        select,
+        textarea,
+        button {
+            font-family: inherit;
         }
 
         body {
             margin: 0;
             padding: 0;
-            font-family: 'Outfit', sans-serif;
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
             background: radial-gradient(circle at top left, #1e1b4b, #0f172a);
             color: var(--fg);
-            height: 100vh;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        #layout-main {
+            flex: 1;
             display: flex;
             align-items: center;
             justify-content: center;
-            overflow: hidden;
+            padding: 2rem;
+            position: relative;
+            border: 2px solid yellow;
+            /* Following user's previous style request for body area */
+        }
+
+        #layout-footer {
+            border: 2px solid blue;
+            width: 100%;
+            padding: 0.5rem 1.5rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            background: rgba(15, 23, 42, 0.9);
+            box-sizing: border-box;
+        }
+
+        .footer-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+        }
+
+        .footer-biz-name {
+            font-size: 0.75rem;
+            color: var(--text);
+            opacity: 0.9;
+            font-weight: 600;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .footer-info-details {
+            display: none;
+            width: 100%;
+            padding: 1rem 0;
+            font-size: 0.75rem;
+            color: var(--text);
+            opacity: 0.6;
+            text-align: left;
+            line-height: 1.5;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            margin-top: 0.5rem;
+        }
+
+        .footer-info-details.show {
+            display: block;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 0.8rem;
+        }
+
+        .footer-btn {
+            background: none;
+            border: none;
+            color: var(--text);
+            font-size: 0.75rem;
+            cursor: pointer;
+            padding: 0;
+            opacity: 0.4;
+            transition: opacity 0.2s;
+            white-space: nowrap;
+        }
+
+        .footer-btn:hover {
+            opacity: 0.8;
         }
 
         .login-card {
-            padding: 3rem;
+            padding: 0;
             width: 100%;
             max-width: 400px;
             text-align: center;
             position: relative;
-            transform: translateY(-8vh);
         }
 
         h1 {
@@ -99,11 +189,8 @@
         }
 
         .signup-links {
-            position: absolute;
-            bottom: 2rem;
-            left: 0;
-            right: 0;
-            padding: 0 2rem;
+            margin-top: 2rem;
+            width: 100%;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -128,26 +215,35 @@
         }
 
         .quick-actions {
-            display: flex;
-            gap: 1rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            /* 2 columns to prevent overflow */
+            gap: 0.8rem;
             margin-bottom: 2rem;
-            justify-content: center;
         }
 
         .action-chip {
             background: rgba(255, 255, 255, 0.08);
             border: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 0.6rem 1rem;
-            border-radius: 2rem;
+            padding: 0.8rem 1rem;
+            border-radius: 1rem;
             font-size: 0.85rem;
             color: var(--fg);
             display: flex;
             align-items: center;
+            justify-content: center;
+            /* Center content */
             gap: 0.6rem;
             cursor: pointer;
             transition: all 0.2s;
-            width: auto;
-            white-space: nowrap;
+            width: 100%;
+            /* Take full width of grid cell */
+            box-sizing: border-box;
+        }
+
+        .action-chip:last-child {
+            grid-column: span 2;
+            /* "Info" button spans full width at the bottom */
         }
 
         .action-chip:hover {
@@ -170,39 +266,68 @@
 </head>
 
 <body>
-    <div class="login-card">
-        <h1>Sugar</h1>
+    <main id="layout-main">
+        <div class="login-card">
+            <h1>안녕</h1>
 
-        <div class="quick-actions">
-            <div class="action-chip" onclick="location.href='/rooms_public.html'">
-                <span>방 있어요</span>
-                <span class="badge-count" id="room-count">0</span>
+            <div class="quick-actions">
+                <div class="action-chip" onclick="location.href='/rooms_public.html'">
+                    <span>방 있어요</span>
+                    <span class="badge-count" id="room-count">0</span>
+                </div>
+                <div class="action-chip" onclick="location.href='/items_public.html'">
+                    <span>물건 공유</span>
+                    <span class="badge-count" id="item-count">0</span>
+                </div>
+                <div class="action-chip" onclick="location.href='/info_public.html'">
+                    <span>정보 공유해요</span>
+                    <span class="badge-count" id="info-count">0</span>
+                </div>
             </div>
-            <div class="action-chip" onclick="location.href='/items_public.html'">
-                <span>물건 공유해요</span>
-                <span class="badge-count" id="item-count">0</span>
+
+            <div class="input-group">
+                <label>아이디</label>
+                <input type="text" id="username" placeholder="아이디를 입력하세요">
+            </div>
+            <div class="input-group">
+                <label>비밀번호</label>
+                <input type="password" id="password" placeholder="비밀번호를 입력하세요">
+            </div>
+            <button class="login-btn" onclick="login()">로그인</button>
+            <p id="error-msg" class="error">로그인에 실패했습니다.</p>
+
+            <div class="signup-links">
+                <button class="small-btn" onclick="location.href='/user_new.html?role=landlord'">임대인 가입 신청</button>
+                <button class="small-btn" onclick="location.href='/user_new.html?role=tenant'">세입자 가입 신청</button>
             </div>
         </div>
+    </main>
 
-        <div class="input-group">
-            <label>아이디</label>
-            <input type="text" id="username" placeholder="아이디를 입력하세요">
+    <footer id="layout-footer">
+        <div class="footer-container" style="flex-wrap: wrap;">
+            <div class="footer-biz-name" onclick="toggleFooterInfo()">상호명: 김지선, 김세미 부동산</div>
+            <div class="footer-links">
+                <button class="footer-btn">이용약관</button>
+                <button class="footer-btn">개인정보처리방침</button>
+            </div>
+            <div id="footer-biz-details" class="footer-info-details">
+                상호명: 김지선, 김세미 부동산<br>
+                대표자명: 김지선외 1명<br>
+                사업자등록번호: 640-31-00762<br>
+                주소: 경기도 수원시 팔달구 우만동 89-5 GS지에스타워 403호
+            </div>
         </div>
-        <div class="input-group">
-            <label>비밀번호</label>
-            <input type="password" id="password" placeholder="비밀번호를 입력하세요">
-        </div>
-        <button class="login-btn" onclick="login()">로그인</button>
-        <p id="error-msg" class="error">로그인에 실패했습니다.</p>
-    </div>
-
-    <div class="signup-links">
-        <button class="small-btn" onclick="location.href='/user_new.html?role=landlord'">임대인 가입 신청</button>
-        <button class="small-btn" onclick="location.href='/user_new.html?role=tenant'">세입자 가입 신청</button>
-    </div>
+    </footer>
 
     <script>
         document.addEventListener('DOMContentLoaded', fetchStats);
+
+        function toggleFooterInfo() {
+            const details = document.getElementById('footer-biz-details');
+            if (details) {
+                details.classList.toggle('show');
+            }
+        }
 
         async function fetchStats() {
             try {
@@ -211,6 +336,7 @@
                     const data = await res.json();
                     document.getElementById('room-count').textContent = data.roomCount;
                     document.getElementById('item-count').textContent = data.itemCount;
+                    document.getElementById('info-count').textContent = data.infoCount;
                 }
             } catch (err) {
                 console.error('Failed to fetch stats:', err);

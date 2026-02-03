@@ -385,14 +385,14 @@
             const list = document.getElementById('item-list');
             list.innerHTML = '';
 
-            if (items.length === 0) {
+            if (!Array.isArray(items) || items.length === 0) {
                 list.innerHTML = '<div style="text-align:center; opacity:0.5; padding:3rem;">내놓은 물건이 없습니다.</div>';
                 return;
             }
 
             items.forEach(item => {
                 const li = document.createElement('li');
-                const isMine = item.created_by === user.id;
+                const isMine = user && (item.created_by === user.id);
                 li.className = `notice-item ${isMine ? 'mine' : ''}`;
                 if (isMine) {
                     li.style.background = 'rgba(99, 102, 241, 0.05)';
@@ -400,8 +400,9 @@
                 li.onclick = () => window.location.href = `/item_detail.html?id=${item.id}`;
 
                 const priceValue = item.price ? (item.price / 1).toLocaleString() + '원' : '무료나눔';
-                let owner = item.owner_name || '알 수 없음';
-                if (item.is_anonymous) owner = '익명';
+                let owner = item.owner_login_id || '알 수 없음';
+                // If is_anonymous is 1 (true), mask the owner unless it's the current user's own post
+                if (item.is_anonymous && !isMine) owner = '익명';
 
                 const building = item.building_name || '건물미정';
                 const dateStr = item.created_at ? item.created_at.split(' ')[0] : '';
@@ -415,7 +416,7 @@
 
                 let actionButtons = `<button class="action-btn" style="background:${statusColor}; color:white; cursor:default;" onclick="event.stopPropagation()">${statusLabel}</button>`;
 
-                if (user.role === 'admin') {
+                if (user && user.role === 'admin') {
                     actionButtons += `<button class="action-btn" style="background:#ef4444" onclick="event.stopPropagation(); deleteAd(${item.id})">삭제</button>`;
                 }
 
@@ -473,6 +474,7 @@
             document.getElementById('modal-price').value = '';
             document.getElementById('modal-item-desc').value = '';
             document.getElementById('modal-anon').checked = false;
+            document.getElementById('modal-target-id').value = '';
             selectedFiles = [];
 
             const container = document.getElementById('photo-preview');
@@ -512,6 +514,7 @@
                 document.getElementById('modal-price').value = item.price;
                 document.getElementById('modal-item-desc').value = item.item_description || '';
                 document.getElementById('modal-anon').checked = (item.is_anonymous === 1);
+                document.getElementById('modal-target-id').value = item.target_id || '';
 
                 // Render existing photos
                 if (item.images && item.images.length > 0) {

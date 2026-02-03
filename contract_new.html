@@ -783,7 +783,6 @@
                 // ALWAYS Save/Update Tenant first
                 const userSavePayload = {
                     id: targetUserId,
-                    login_id: data.tenant_name + data.tenant_dob.replace(/-/g, '').slice(2),
                     password: '1234',
                     nickname: data.tenant_name,
                     role: 'tenant',
@@ -791,6 +790,11 @@
                     phone_number: data.tenant_phone,
                     building_id: data.building_id
                 };
+
+                // Only generate login_id for NEW users
+                if (!targetUserId && !userSavePayload.login_id) {
+                    userSavePayload.login_id = data.tenant_name + data.tenant_dob.replace(/-/g, '').slice(2);
+                }
 
                 ;
 

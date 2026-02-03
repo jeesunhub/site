@@ -26,6 +26,14 @@ function formatPhone(val) {
 }
 
 
+function toggleFooterInfo() {
+    const details = document.getElementById('footer-biz-details');
+    if (details) {
+        details.classList.toggle('show');
+    }
+}
+
+
 function renderNavbar() {
     // Inject Google Analytics
     if (!document.getElementById('ga-script')) {
@@ -49,6 +57,51 @@ function renderNavbar() {
     if (!user) {
         window.location.href = '/index.html';
         return;
+    }
+
+    // Reorganize DOM if not already structured
+    if (!document.getElementById('layout-header')) {
+        const header = document.createElement('header');
+        header.id = 'layout-header';
+
+        const main = document.createElement('main');
+        main.id = 'layout-main';
+
+        const footer = document.createElement('footer');
+        footer.id = 'layout-footer';
+        footer.innerHTML = `
+            <div class="footer-container">
+                <div class="footer-biz-name" onclick="toggleFooterInfo()">상호명: 김지선, 김세미 부동산</div>
+                <div class="footer-links">
+                    <button class="footer-btn">이용약관</button>
+                    <button class="footer-btn">개인정보처리방침</button>
+                </div>
+                <div id="footer-biz-details" class="footer-info-details">
+                    상호명: 김지선, 김세미 부동산<br>
+                    대표자명: 김지선외 1명<br>
+                    사업자등록번호: 640-31-00762<br>
+                    주소: 경기도 수원시 팔달구 우만동 89-5 GS지에스타워 403호
+                </div>
+            </div>
+        `;
+
+        // Defined toggle function globally already
+
+        // Capture all current body elements except script tags and elements we just created
+        const children = Array.from(document.body.children);
+
+        // Clear body and add structure
+        // Note: We don't use innerHTML='' to avoid losing script event listeners or states if possible, 
+        // though moving them to 'main' is still a change.
+        document.body.prepend(footer);
+        document.body.prepend(main);
+        document.body.prepend(header);
+
+        children.forEach(child => {
+            if (child.tagName !== 'SCRIPT' && child.id !== 'layout-header' && child.id !== 'layout-main' && child.id !== 'layout-footer') {
+                main.appendChild(child);
+            }
+        });
     }
 
     const nav = document.createElement('nav');
@@ -100,6 +153,7 @@ function renderNavbar() {
                         <a href="/notices.html">📢 메시지함 <span id="menu-unread-count"></span></a>
                         <hr>
                         <a href="/dashboard.html">🏠 대시보드</a>
+                        ${user.role === 'tenant' ? '<a href="/payments_monthly.html">💰 납부 내역</a>' : ''}
                         ${user.role === 'admin' ? '<a href="/landlord_management.html">👑 임대인 관리</a>' : ''}
                         ${(user.role === 'landlord' || user.role === 'admin') ? '<a href="/buildings.html">🏢 건물 관리</a>' : ''}
                         ${(user.role === 'landlord' || user.role === 'admin') ? '<a href="/tenants.html">👥 세입자 관리</a>' : ''}
@@ -107,6 +161,7 @@ function renderNavbar() {
                         <hr>
                         ${(user.role === 'landlord' || user.role === 'admin') ? '<a href="/room_adv.html">🏠 방 내놓기</a>' : ''}
                         <a href="/item_adv.html">📦 물건 공유</a>
+                        <a href="/info_adv.html">📰 정보 공유</a>
                         <hr>
                         <a href="/settings_profile.html">⚙️ 프로필 설정</a>
                         <a href="/settings_system.html">🛠️ 시스템 설정</a>
@@ -118,8 +173,12 @@ function renderNavbar() {
         </div>
     `;
     const placeholder = document.getElementById('navbar-placeholder');
+    const layoutHeader = document.getElementById('layout-header');
+
     if (placeholder) {
         placeholder.replaceWith(nav);
+    } else if (layoutHeader) {
+        layoutHeader.appendChild(nav);
     } else {
         document.body.prepend(nav);
     }

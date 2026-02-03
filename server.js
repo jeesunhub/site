@@ -151,17 +151,19 @@ app.get('/api/public/stats', (req, res) => {
     const query = `
         SELECT 
             (SELECT COUNT(*) FROM advertisements WHERE related_table = 'room' AND status = 'advertising') as "roomCount",
-            (SELECT COUNT(*) FROM advertisements WHERE related_table = 'item' AND status = 'advertising') as "itemCount"
+            (SELECT COUNT(*) FROM advertisements WHERE related_table = 'item' AND status = 'advertising') as "itemCount",
+            (SELECT COUNT(*) FROM advertisements WHERE related_table = 'info' AND status = 'advertising') as "infoCount"
     `;
     db.get(query, [], (err, row) => {
         if (err) {
             console.error('Stats Error:', err);
             return res.status(500).json({ error: err.message });
         }
-        const data = row || { roomCount: 0, itemCount: 0 };
+        const data = row || { roomCount: 0, itemCount: 0, infoCount: 0 };
         res.json({
             roomCount: data.roomCount,
-            itemCount: data.itemCount
+            itemCount: data.itemCount,
+            infoCount: data.infoCount
         });
     });
 });
@@ -170,10 +172,10 @@ app.get('/api/public/stats', (req, res) => {
 
 // 34. Get Advertisements
 app.get('/api/ads', (req, res) => {
-    const { type, role, user_id, viewer_id, viewer_role } = req.query;
+    const { type, role, user_id, viewer_id, viewer_role, category } = req.query;
     let query = `
         SELECT a.*, 
-            u.nickname as owner_name, u.id as owner_id,
+            u.nickname as owner_name, u.login_id as owner_login_id, u.id as owner_id,
             CASE 
                 WHEN a.related_table = 'room' THEN b.name 
                 WHEN a.related_table = 'item' THEN b_item.name
@@ -203,6 +205,11 @@ app.get('/api/ads', (req, res) => {
         params.push(type);
     }
 
+    if (category) {
+        whereClauses.push(`a.category = ?`);
+        params.push(category);
+    }
+
     // Manager/Self view filter (Show only MY ads)
     if (user_id && (role === 'landlord' || role === 'tenant')) {
         whereClauses.push(`a.created_by = ?`);
@@ -211,15 +218,15 @@ app.get('/api/ads', (req, res) => {
     // Browse View Visibility Logic
     else if (viewer_role !== 'admin') {
         if (!viewer_id) {
-            // Guest sees only public ads
-            whereClauses.push(`a.target_id IS NULL`);
+            // Guest sees only public ads (NULL or Empty String)
+            whereClauses.push(`(a.target_id IS NULL OR a.target_id = '')`);
         } else if (viewer_role === 'tenant') {
             // Tenant sees public + their building
-            whereClauses.push(`(a.target_id IS NULL OR a.target_id = (SELECT building_id FROM room_tenant WHERE tenant_id = ?))`);
+            whereClauses.push(`(a.target_id IS NULL OR a.target_id = '' OR a.target_id = (SELECT r.building_id FROM rooms r JOIN room_tenant rt ON r.id = rt.room_id WHERE rt.tenant_id = ? LIMIT 1))`);
             params.push(viewer_id);
         } else if (viewer_role === 'landlord') {
             // Landlord sees public + their managed buildings
-            whereClauses.push(`(a.target_id IS NULL OR a.target_id IN (SELECT building_id FROM landlord_buildings WHERE landlord_id = ?))`);
+            whereClauses.push(`(a.target_id IS NULL OR a.target_id = '' OR a.target_id IN (SELECT building_id FROM landlord_buildings WHERE landlord_id = ?))`);
             params.push(viewer_id);
         }
     }
@@ -237,15 +244,15 @@ app.get('/api/ads', (req, res) => {
 });
 
 app.post('/api/ads', upload.array('photos', 5), (req, res) => {
-    const { type, title, description, price, created_by, is_anonymous, item_name, building_id, target_id } = req.body;
+    const { type, title, description, price, created_by, is_anonymous, item_name, building_id, target_id, category } = req.body;
     let { related_id } = req.body;
 
     db.serialize(() => {
         db.run('BEGIN TRANSACTION');
 
         const finalizeAd = (finalRelatedId) => {
-            const query = `INSERT INTO advertisements (related_id, related_table, title, description, price, created_by, status, target_id) VALUES (?, ?, ?, ?, ?, ?, 'advertising', ?)`;
-            db.run(query, [finalRelatedId, type, title, description, price, created_by || null, target_id || "" === target_id ? null : target_id], function (err) {
+            const query = `INSERT INTO advertisements (related_id, related_table, title, description, price, created_by, status, target_id, category) VALUES (?, ?, ?, ?, ?, ?, 'advertising', ?, ?)`;
+            db.run(query, [finalRelatedId, type, title, description, price, created_by || null, target_id || "" === target_id ? null : target_id, category || null], function (err) {
                 if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
                 const adId = this.lastID;
 
@@ -275,6 +282,8 @@ app.post('/api/ads', upload.array('photos', 5), (req, res) => {
                     finalizeMessage('물품공유', 'to_all');
                 } else if (type === 'room') {
                     finalizeMessage('방있어요', 'to_all');
+                } else if (type === 'info') {
+                    finalizeMessage('시스템', 'to_all'); // Or a new category
                 } else {
                     db.run('COMMIT');
                     res.json({ message: 'Ad created', id: adId });
@@ -284,11 +293,19 @@ app.post('/api/ads', upload.array('photos', 5), (req, res) => {
 
         if (type === 'item') {
             // Create the item record first
-            const itemQuery = `INSERT INTO items (owner_id, title, description, status, building_id) VALUES (?, ?, ?, 'open', ?)`;
-            db.run(itemQuery, [created_by, item_name, description, building_id], function (err) {
+            const itemQuery = `INSERT INTO items (owner_id, title, description, status, building_id, belongs_to) VALUES (?, ?, ?, 'open', ?, ?)`;
+            db.run(itemQuery, [created_by, item_name, description, building_id, created_by], function (err) {
                 if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
-                finalizeAd(this.lastID);
+                const itemId = this.lastID;
+
+                // Add log entry
+                db.run(`INSERT INTO logs (related_table, related_id, memo) VALUES (?, ?, ?)`,
+                    ['items', itemId, `Item created by user ${created_by}`]);
+
+                finalizeAd(itemId);
             });
+        } else if (type === 'info') {
+            finalizeAd(building_id || null);
         } else {
             finalizeAd(related_id);
         }
@@ -297,7 +314,7 @@ app.post('/api/ads', upload.array('photos', 5), (req, res) => {
 
 app.put('/api/ads/:id', upload.array('photos', 5), (req, res) => {
     const adId = req.params.id;
-    const { title, description, price, item_name, building_id, type, target_id } = req.body;
+    const { title, description, price, item_name, building_id, type, target_id, category } = req.body;
 
     db.get("SELECT related_table, related_id FROM advertisements WHERE id = ?", [adId], (err, ad) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -307,8 +324,8 @@ app.put('/api/ads/:id', upload.array('photos', 5), (req, res) => {
             db.run('BEGIN TRANSACTION');
 
             const finalizeUpdate = () => {
-                const query = `UPDATE advertisements SET title = ?, description = ?, price = ?, target_id = ? WHERE id = ?`;
-                db.run(query, [title, description, price, target_id || "" === target_id ? null : target_id, adId], function (err) {
+                const query = `UPDATE advertisements SET title = ?, description = ?, price = ?, target_id = ?, category = ? WHERE id = ?`;
+                db.run(query, [title, description, price, target_id || "" === target_id ? null : target_id, category || null, adId], function (err) {
                     if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
 
                     if (req.files && req.files.length > 0) {
@@ -343,28 +360,39 @@ app.delete('/api/ads/:id', (req, res) => {
 
         db.serialize(() => {
             db.run('BEGIN TRANSACTION');
-            const finishAdDelete = () => {
-                db.run("DELETE FROM advertisements WHERE id = ?", [id], function (err) {
-                    if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
-                    db.run('COMMIT');
-                    res.json({ message: 'Ad deleted' });
-                });
-            };
 
-            // Delete related messages first
-            db.run("DELETE FROM messages WHERE related_id = ? AND related_table = 'advertisements'", [id]);
-            // Delete related images
-            db.run("DELETE FROM images WHERE related_id = ? AND related_table = 'advertisements'", [id], (err) => {
+            // 1. Delete Applicants
+            db.run("DELETE FROM applicants WHERE advertisement_id = ?", [id], (err) => {
                 if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
 
-                if (ad.related_table === 'item') {
-                    db.run("DELETE FROM items WHERE id = ?", [ad.related_id], (err) => {
+                // 2. Delete Messages
+                // Cascading delete handles messages and recipients
+                db.run("DELETE FROM message_box WHERE related_id = ? AND related_table = 'advertisements'", [id], (err) => {
+                    if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
+
+                    // 3. Delete Images
+                    db.run("DELETE FROM images WHERE related_id = ? AND related_table = 'advertisements'", [id], (err) => {
                         if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
-                        finishAdDelete();
+
+                        const finishAdDelete = () => {
+                            db.run("DELETE FROM advertisements WHERE id = ?", [id], function (err) {
+                                if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
+                                db.run('COMMIT');
+                                res.json({ message: 'Ad deleted' });
+                            });
+                        };
+
+                        if (ad.related_table === 'item') {
+                            // 4. Delete Item
+                            db.run("DELETE FROM items WHERE id = ?", [ad.related_id], (err) => {
+                                if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
+                                finishAdDelete();
+                            });
+                        } else {
+                            finishAdDelete();
+                        }
                     });
-                } else {
-                    finishAdDelete();
-                }
+                });
             });
         });
     });
@@ -390,16 +418,40 @@ app.post('/api/ads/:id/select-winner', (req, res) => {
 
     db.serialize(() => {
         db.run('BEGIN TRANSACTION');
-        db.run("UPDATE applicants SET status = 'won' WHERE advertisement_id = ? AND user_id = ?", [adId, user_id], (err) => {
-            if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
 
-            db.run("UPDATE applicants SET status = 'lost' WHERE advertisement_id = ? AND user_id != ?", [adId, user_id], (err) => {
+        // Find if this ad is for an item
+        db.get("SELECT related_table, related_id, title FROM advertisements WHERE id = ?", [adId], (err, ad) => {
+            if (err || !ad) {
+                db.run('ROLLBACK');
+                return res.status(500).json({ error: err ? err.message : 'Ad not found' });
+            }
+
+            db.run("UPDATE applicants SET status = 'won' WHERE advertisement_id = ? AND user_id = ?", [adId, user_id], (err) => {
                 if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
 
-                db.run("UPDATE advertisements SET status = 'completed' WHERE id = ?", [adId], (err) => {
+                db.run("UPDATE applicants SET status = 'lost' WHERE advertisement_id = ? AND user_id != ?", [adId, user_id], (err) => {
                     if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
-                    db.run('COMMIT');
-                    res.json({ message: 'Winner selected' });
+
+                    db.run("UPDATE advertisements SET status = 'completed' WHERE id = ?", [adId], (err) => {
+                        if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
+
+                        // If it's an item, update belongs_to
+                        if (ad.related_table === 'item') {
+                            db.run("UPDATE items SET belongs_to = ?, status = 'completed' WHERE id = ?", [user_id, ad.related_id], (err) => {
+                                if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
+
+                                // Add log entry for ownership transfer
+                                db.run(`INSERT INTO logs (related_table, related_id, memo) VALUES (?, ?, ?)`,
+                                    ['items', ad.related_id, `Ownership transferred to user ${user_id} via ad ${adId}`]);
+
+                                db.run('COMMIT');
+                                res.json({ message: 'Winner selected and ownership transferred' });
+                            });
+                        } else {
+                            db.run('COMMIT');
+                            res.json({ message: 'Winner selected' });
+                        }
+                    });
                 });
             });
         });
@@ -431,7 +483,7 @@ app.get('/api/ads/:id', (req, res) => {
     const id = req.params.id;
     const query = `
         SELECT a.*, 
-            u.nickname as owner_name,
+            u.nickname as owner_name, u.login_id as owner_login_id,
             CASE 
                 WHEN a.related_table = 'room' THEN b.name 
                 WHEN a.related_table = 'item' THEN b_item.name
@@ -441,13 +493,15 @@ app.get('/api/ads/:id', (req, res) => {
             r.building_id as room_building_id,
             i.title as item_name,
             i.description as item_description,
-            i.building_id as item_building_id
+            i.building_id as item_building_id,
+            target_b.name as target_building_name
         FROM advertisements a
         LEFT JOIN users u ON a.created_by = u.id
         LEFT JOIN rooms r ON a.related_id = r.id AND a.related_table = 'room'
         LEFT JOIN buildings b ON r.building_id = b.id
         LEFT JOIN items i ON a.related_id = i.id AND a.related_table = 'item'
         LEFT JOIN buildings b_item ON i.building_id = b_item.id
+        LEFT JOIN buildings target_b ON a.target_id = target_b.id
         WHERE a.id = ?
     `;
 
@@ -511,51 +565,59 @@ app.post('/api/login', (req, res) => {
 });
 
 // Helper to dispatch messages to multiple recipients based on target group
-function dispatchMessage({ author_id, category, target, related_id, related_table, recipient_id, building_id }, callback) {
-    db.run(`INSERT INTO messages (author_id, target, category, related_id, related_table) VALUES (?, ?, ?, ?, ?)`,
-        [author_id || null, target, category, related_id, related_table],
-        function (err) {
-            if (err) return callback(err);
-            const messageId = this.lastID;
+function dispatchMessage({ author_id, category, target, related_id, related_table, recipient_id, building_id, title, content }, callback) {
+    // 1. Insert content into messages table first
+    db.run(`INSERT INTO messages (content) VALUES (?)`, [content || null], function (err) {
+        if (err) return callback(err);
+        const messageId = this.lastID;
 
-            let recipientQuery = '';
-            let params = [messageId];
+        // 2. Insert into message_box referencing the messageId
+        db.run(`INSERT INTO message_box (author_id, message_id, target, category, related_id, related_table, title) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [author_id || null, messageId, target, category, related_id, related_table, title || null],
+            function (err2) {
+                if (err2) return callback(err2);
+                const boxId = this.lastID;
 
-            if (target === 'direct' && recipient_id) {
-                recipientQuery = `INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)`;
-                params.push(recipient_id);
-            } else if (target === 'to_all') {
-                recipientQuery = `INSERT INTO message_recipient (message_id, recipient_id) 
-                                 SELECT ?, id FROM users WHERE status = '승인'`;
-            } else if (target === 'to_building' && building_id) {
-                recipientQuery = `INSERT INTO message_recipient (message_id, recipient_id) 
-                                 SELECT ?, id FROM users 
-                                 WHERE status = '승인' 
-                                 AND (
-                                    id IN (SELECT tenant_id FROM room_tenant rt JOIN rooms r ON rt.room_id = r.id WHERE r.building_id = ?)
-                                    OR id IN (SELECT landlord_id FROM landlord_buildings WHERE building_id = ?)
-                                 )`;
-                params.push(building_id, building_id);
-            } else if (target === 'to_landlords') {
-                recipientQuery = `INSERT INTO message_recipient (message_id, recipient_id) 
-                                 SELECT ?, id FROM users WHERE status = '승인' AND role = 'landlord'`;
+                let recipientQuery = '';
+                let params = [boxId];
+
+                if (target === 'direct' && recipient_id) {
+                    recipientQuery = `INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)`;
+                    params.push(recipient_id);
+                } else if (target === 'to_all') {
+                    recipientQuery = `INSERT INTO message_recipient (message_id, recipient_id) 
+                                         SELECT ?, id FROM users WHERE status = '승인'`;
+                } else if (target === 'to_building' && building_id) {
+                    recipientQuery = `INSERT INTO message_recipient (message_id, recipient_id) 
+                                         SELECT ?, id FROM users 
+                                         WHERE status = '승인' 
+                                         AND (
+                                            id IN (SELECT tenant_id FROM room_tenant rt JOIN rooms r ON rt.room_id = r.id WHERE r.building_id = ?)
+                                            OR id IN (SELECT landlord_id FROM landlord_buildings WHERE building_id = ?)
+                                         )`;
+                    params.push(building_id, building_id);
+                } else if (target === 'to_landlords') {
+                    recipientQuery = `INSERT INTO message_recipient (message_id, recipient_id) 
+                                         SELECT ?, id FROM users WHERE status = '승인' AND role = 'landlord'`;
+                }
+
+                if (recipientQuery) {
+                    db.run(recipientQuery, params, (err) => {
+                        if (callback) callback(err, boxId);
+                    });
+                } else {
+                    if (callback) callback(null, boxId);
+                }
             }
-
-            if (recipientQuery) {
-                db.run(recipientQuery, params, (err) => {
-                    if (callback) callback(err, messageId);
-                });
-            } else {
-                if (callback) callback(null, messageId);
-            }
-        }
+        );
+    }
     );
 }
 
 // 34b. Generic Message Dispatch API
 app.post('/api/messages/direct', (req, res) => {
-    const { author_id, recipient_id, category, target, related_id, related_table, building_id } = req.body;
-    dispatchMessage({ author_id, recipient_id, category, target, related_id, related_table, building_id }, (err, msgId) => {
+    const { author_id, recipient_id, category, target, related_id, related_table, building_id, title, content } = req.body;
+    dispatchMessage({ author_id, recipient_id, category, target, related_id, related_table, building_id, title, content }, (err, msgId) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: 'Message sent', id: msgId });
     });
@@ -565,7 +627,7 @@ app.post('/api/messages/direct', (req, res) => {
 function distributeGlobalMessagesToUser(userId) {
     const query = `
         INSERT INTO message_recipient (message_id, recipient_id)
-        SELECT id, ? FROM messages 
+        SELECT id, ? FROM message_box 
         WHERE target = 'to_all'
         AND id NOT IN (SELECT message_id FROM message_recipient WHERE recipient_id = ?)
     `;
@@ -574,6 +636,107 @@ function distributeGlobalMessagesToUser(userId) {
         else console.log(`[GlobalMsg] Distributed global messages to user ${userId}`);
     });
 }
+
+// 34c. Get Potential Message Recipients
+app.get('/api/messages/recipients', async (req, res) => {
+    const { user_id, role } = req.query;
+
+    if (!user_id || !role) return res.status(400).json({ error: 'User ID and role required' });
+
+    try {
+        const results = [];
+
+        if (role === 'admin') {
+            // 1. All Landlords (Individual)
+            const landlords = await new Promise((resolve, reject) => {
+                db.all("SELECT id, nickname FROM users WHERE role = 'landlord' AND status = '승인' ORDER BY nickname", (err, rows) => {
+                    if (err) reject(err); else resolve(rows);
+                });
+            });
+            landlords.forEach(l => results.push({ type: 'direct', id: l.id, nickname: l.nickname, role: 'landlord' }));
+
+            // 2. Global targets
+            results.push({ type: 'global', id: 'to_landlords', nickname: '전체 임대인' });
+            results.push({ type: 'global', id: 'to_all', nickname: '전체 사용자 (공지)' });
+
+            // 3. Buildings
+            const buildings = await new Promise((resolve, reject) => {
+                db.all("SELECT id, name FROM buildings ORDER BY name", (err, rows) => {
+                    if (err) reject(err); else resolve(rows);
+                });
+            });
+            buildings.forEach(b => results.push({ type: 'building', id: b.id, nickname: `[건물] ${b.name}` }));
+
+        } else if (role === 'landlord') {
+            // 1. Specific tenants belonging to this landlord
+            const tenants = await new Promise((resolve, reject) => {
+                const query = `
+                    SELECT DISTINCT u.id, u.nickname, u.title, b.name as bname FROM users u
+                    JOIN room_tenant rt ON u.id = rt.tenant_id
+                    JOIN rooms r ON rt.room_id = r.id
+                    JOIN buildings b ON r.building_id = b.id
+                    JOIN landlord_buildings lb ON r.building_id = lb.building_id
+                    WHERE lb.landlord_id = ? AND u.status = '승인'
+                    ORDER BY u.nickname
+                `;
+                db.all(query, [user_id], (err, rows) => {
+                    if (err) reject(err); else resolve(rows);
+                });
+            });
+            tenants.forEach(t => {
+                // Priority: users.title (Building + Room) > buildings.name > '세입자'
+                const bname = t.title || t.bname || '세입자';
+                results.push({ type: 'direct', id: t.id, nickname: t.nickname, role: 'tenant', building_name: bname });
+            });
+
+            // 2. Admin
+            const admins = await new Promise((resolve, reject) => {
+                db.all("SELECT id, nickname FROM users WHERE role = 'admin' AND status = '승인' ORDER BY nickname", (err, rows) => {
+                    if (err) reject(err); else resolve(rows);
+                });
+            });
+            admins.forEach(a => results.push({ type: 'direct', id: a.id, nickname: a.nickname, role: 'admin' }));
+
+            // 3. Their Buildings
+            const buildings = await new Promise((resolve, reject) => {
+                db.all("SELECT b.id, b.name FROM buildings b JOIN landlord_buildings lb ON b.id = lb.building_id WHERE lb.landlord_id = ?", [user_id], (err, rows) => {
+                    if (err) reject(err); else resolve(rows);
+                });
+            });
+            buildings.forEach(b => results.push({ type: 'building', id: b.id, nickname: `[건물 단체] ${b.name}` }));
+
+        } else if (role === 'tenant') {
+            // 1. Their Landlords
+            const landlords = await new Promise((resolve, reject) => {
+                const query = `
+                    SELECT DISTINCT u.id, u.nickname FROM users u
+                    JOIN landlord_buildings lb ON u.id = lb.landlord_id
+                    JOIN rooms r ON lb.building_id = r.building_id
+                    JOIN room_tenant rt ON r.id = rt.room_id
+                    WHERE rt.tenant_id = ? AND u.status = '승인'
+                    ORDER BY u.nickname
+                `;
+                db.all(query, [user_id], (err, rows) => {
+                    if (err) reject(err); else resolve(rows);
+                });
+            });
+            landlords.forEach(l => results.push({ type: 'direct', id: l.id, nickname: l.nickname, role: 'landlord' }));
+
+            // 2. Admin
+            const admins = await new Promise((resolve, reject) => {
+                db.all("SELECT id, nickname FROM users WHERE role = 'admin' AND status = '승인' ORDER BY nickname", (err, rows) => {
+                    if (err) reject(err); else resolve(rows);
+                });
+            });
+            admins.forEach(a => results.push({ type: 'direct', id: a.id, nickname: a.nickname, role: 'admin' }));
+        }
+
+        res.json(results);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // Helper to sync user building/room info from relational tables to user profile (title/description)
 function syncUserBuildingInfo(userId) {
@@ -687,20 +850,23 @@ app.post('/api/signup', (req, res) => {
                         if (err) console.error('Error updating user title/description:', err.message);
 
                         // Admin Notification
-                        db.run(`INSERT INTO messages (author_id, target, category, related_id, related_table) VALUES (?, ?, ?, ?, ?)`,
-                            [newUserId, 'direct', '가입신청', newUserId, 'users'],
-                            async function (err) {
+                        db.run(`INSERT INTO message_box (author_id, target, category, related_id, related_table, title) VALUES (?, ?, ?, ?, ?, ?)`,
+                            [newUserId, 'direct', '가입신청', newUserId, 'users', title],
+                            function (err) {
                                 if (err) {
                                     console.error('Error creating admin signup message:', err.message);
                                     return res.status(500).json({ error: err.message });
                                 }
-                                const messageId = this.lastID;
+                                const boxId = this.lastID;
+
+                                // Insert initial message
+                                db.run(`INSERT INTO messages (message_box_id, sender_id, content) VALUES (?, ?, ?)`, [boxId, newUserId, content]);
 
                                 // Notify Admins
                                 db.all("SELECT id FROM users WHERE role = 'admin'", (err, admins) => {
                                     if (admins) {
                                         admins.forEach(admin => {
-                                            db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [messageId, admin.id]);
+                                            db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, admin.id]);
                                         });
                                     }
                                 });
@@ -710,7 +876,7 @@ app.post('/api/signup', (req, res) => {
                                     db.all(`SELECT landlord_id FROM landlord_buildings WHERE building_id = ?`, [building_id], (err, landlords) => {
                                         if (landlords) {
                                             landlords.forEach(l => {
-                                                db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [messageId, l.landlord_id]);
+                                                db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, l.landlord_id]);
                                             });
                                         }
                                     });
@@ -792,13 +958,20 @@ app.post('/api/apply', (req, res) => {
                     const content = `방 구하는 사람 정보\n이름: ${name}\n생년월일: ${birth}\n연락처: ${formatPhone(cleanPhone)}\n메모: ${memo}`;
 
                     db.run(`UPDATE users SET title = ?, description = ? WHERE id = ?`, [title, content, newUserId], (err) => {
-                        db.run(`INSERT INTO messages (author_id, target, category, related_id, related_table) VALUES (?, ?, ?, ?, ?)`,
-                            [newUserId, 'direct', '방있어요', newUserId, 'users'],
+                        db.run(`INSERT INTO message_box (author_id, target, category, related_id, related_table, title) VALUES (?, ?, ?, ?, ?, ?)`,
+                            [newUserId, 'direct', '방있어요', newUserId, 'users', title],
                             function (err) {
-                                if (err) console.error('Error creating apply notification:', err.message);
-                                const msgId = this.lastID;
+                                if (err) {
+                                    console.error('Error creating apply notification:', err.message);
+                                    return res.status(500).json({ error: err.message });
+                                }
+                                const boxId = this.lastID;
+
+                                // Insert initial message
+                                db.run(`INSERT INTO messages (message_box_id, sender_id, content) VALUES (?, ?, ?)`, [boxId, newUserId, content]);
+
                                 if (landlordId) {
-                                    db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [msgId, landlordId]);
+                                    db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, landlordId]);
                                 }
                                 res.json({ message: 'Application submitted', userId: newUserId });
                             }
@@ -859,6 +1032,15 @@ app.get('/api/admin/users', (req, res) => {
     db.all("SELECT id, login_id, nickname, role, color, photo_path, status FROM users ORDER BY role, nickname", [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
+    });
+});
+
+app.get('/api/users/:id', (req, res) => {
+    const userId = req.params.id;
+    db.get("SELECT * FROM users WHERE id = ?", [userId], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(404).json({ error: 'User not found' });
+        res.json(row);
     });
 });
 
@@ -1130,24 +1312,30 @@ app.get('/api/payments/ledger', (req, res) => {
             l.id as landlord_id,
             t.nickname as tenant_name,
             t.id as tenant_id,
+            (SELECT GROUP_CONCAT(keyword, ', ') FROM contract_keywords WHERE contract_id = c.id) as keywords,
             b.name as building_name,
             b.id as building_id,
             c.id as contract_id,
             c.contract_start_date,
             c.payment_type,
+            c.deposit,
+            c.monthly_rent,
+            c.maintenance_fee,
             r.room_number,
+            i.id as invoice_id,
             i.billing_month as bill_month,
             i.amount as due_amount,
             i.type as invoice_type,
+            i.status as invoice_status,
             COALESCE(SUM(pa.amount), 0) as paid_amount,
             MAX(p.paid_at) as last_paid_date
-        FROM invoices i
-        JOIN contracts c ON i.contract_id = c.id
+        FROM contracts c
         JOIN rooms r ON c.room_id = r.id
         JOIN buildings b ON r.building_id = b.id
         JOIN landlord_buildings lb ON b.id = lb.building_id
         JOIN users l ON lb.landlord_id = l.id
         JOIN users t ON c.tenant_id = t.id
+        LEFT JOIN invoices i ON c.id = i.contract_id
         LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
         LEFT JOIN payments p ON pa.payment_id = p.id
         WHERE 1=1 
@@ -1155,9 +1343,8 @@ app.get('/api/payments/ledger', (req, res) => {
 
     const params = [];
 
-    if (role !== 'admin') {
-        query += ` AND t.status != '종료'`;
-    }
+    // Filter out terminated contracts (tenants)
+    query += ` AND t.status != '종료'`;
 
     if (role === 'landlord') {
         query += ` AND lb.landlord_id = ?`;
@@ -1187,7 +1374,12 @@ app.get('/api/payments/ledger', (req, res) => {
 
     db.all(query, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
+
+        const processed = rows.map(r => ({
+            ...r,
+            keywords: r.keywords ? r.keywords.split(', ').filter(k => k) : []
+        }));
+        res.json(processed);
     });
 });
 
@@ -1227,7 +1419,8 @@ app.get('/api/landlord/:id/contracts/active', (req, res) => {
     const landlordId = req.params.id;
     const { role } = req.query;
     let query = `
-        SELECT c.*, r.room_number, b.name as building, u.nickname, u.color 
+        SELECT c.*, r.room_number, b.name as building, u.nickname, u.color,
+               (SELECT GROUP_CONCAT(keyword, ', ') FROM contract_keywords WHERE contract_id = c.id) as keywords_str
         FROM contracts c
         JOIN rooms r ON c.room_id = r.id
         JOIN buildings b ON r.building_id = b.id
@@ -1240,7 +1433,12 @@ app.get('/api/landlord/:id/contracts/active', (req, res) => {
     }
     db.all(query, [landlordId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
+
+        const processed = rows.map(r => ({
+            ...r,
+            keywords: r.keywords_str ? r.keywords_str.split(', ').filter(k => k) : []
+        }));
+        res.json(processed);
     });
 });
 
@@ -1256,7 +1454,8 @@ app.get('/api/tenants/active-list', (req, res) => {
                COALESCE(r.room_number, r_rt.room_number) as room_number, 
                COALESCE(r.id, r_rt.id) as room_id, 
                c.contract_start_date, c.contract_end_date,
-               c.deposit, c.monthly_rent as rent, c.maintenance_fee, lb.landlord_id
+               c.deposit, c.monthly_rent as rent, c.maintenance_fee, lb.landlord_id,
+               (SELECT GROUP_CONCAT(keyword, ', ') FROM contract_keywords WHERE contract_id = c.id) as keywords_str
         FROM users u
         LEFT JOIN contracts c ON u.id = c.tenant_id
         LEFT JOIN rooms r ON c.room_id = r.id
@@ -1280,43 +1479,67 @@ app.get('/api/tenants/active-list', (req, res) => {
 
     db.all(query, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
+
+        const processed = rows.map(r => ({
+            ...r,
+            keywords: r.keywords_str ? r.keywords_str.split(', ').filter(k => k) : []
+        }));
+        res.json(processed);
     });
 });
 
-// 13. Update Contract Keyword
+// 13. Sync Contract Keywords (Relational approach: multi-row)
 app.post('/api/contracts/:id/keyword', (req, res) => {
-    const contractId = req.params.id;
-    const { keyword } = req.body;
+    const contractId = parseInt(req.params.id);
+    const { keywords } = req.body;
 
-    db.get("SELECT keyword FROM contract_keywords WHERE contract_id = ?", [contractId], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
+    console.log(`[DEBUG] Received keyword update request for Contract ID ${contractId}:`, keywords);
 
-        let currentKeywords = [];
-        if (row && row.keyword) {
-            try {
-                currentKeywords = JSON.parse(row.keyword);
-            } catch (e) {
-                currentKeywords = row.keyword.split(',');
+    if (!Array.isArray(keywords)) {
+        return res.status(400).json({ error: 'Keywords must be an array' });
+    }
+
+    // Filter out invalid keywords
+    const validKeywords = keywords
+        .map(k => String(k).trim())
+        .filter(k => k && k.toLowerCase() !== 'null' && k !== 'undefined');
+
+    db.serialize(() => {
+        db.run("BEGIN TRANSACTION");
+
+        db.run("DELETE FROM contract_keywords WHERE contract_id = ?", [contractId], (err) => {
+            if (err) {
+                console.error(`[ERROR] Delete failed for contract ${contractId}:`, err.message);
+                db.run("ROLLBACK");
+                return res.status(500).json({ error: err.message });
             }
-        }
 
-        if (!currentKeywords.includes(keyword)) {
-            currentKeywords.push(keyword);
-        }
-        const newKeywordStr = JSON.stringify(currentKeywords);
+            if (validKeywords.length === 0) {
+                db.run("COMMIT");
+                return res.json({ message: 'Keywords cleared', keywords: [] });
+            }
 
-        if (row) {
-            db.run("UPDATE contract_keywords SET keyword = ? WHERE contract_id = ?", [newKeywordStr, contractId], function (err) {
-                if (err) return res.status(500).json({ error: err.message });
-                res.json({ message: 'Keyword updated', keyword: newKeywordStr });
+            let completed = 0;
+            let hasError = false;
+
+            validKeywords.forEach(k => {
+                if (hasError) return;
+                db.run("INSERT INTO contract_keywords (contract_id, keyword) VALUES (?, ?)", [contractId, k], (err) => {
+                    if (err) {
+                        hasError = true;
+                        db.run("ROLLBACK");
+                        console.error(`[ERROR] Insert failed for contract ${contractId}, keyword "${k}":`, err.message);
+                        return res.status(500).json({ error: err.message });
+                    }
+                    completed++;
+                    if (completed === validKeywords.length && !hasError) {
+                        db.run("COMMIT");
+                        console.log(`[SUCCESS] Updated ${completed} keywords for contract ${contractId}`);
+                        res.json({ message: 'Keywords updated', count: completed, keywords: validKeywords });
+                    }
+                });
             });
-        } else {
-            db.run("INSERT INTO contract_keywords (contract_id, keyword) VALUES (?, ?)", [contractId, newKeywordStr], function (err) {
-                if (err) return res.status(500).json({ error: err.message });
-                res.json({ message: 'Keyword created', keyword: newKeywordStr });
-            });
-        }
+        });
     });
 });
 
@@ -1339,6 +1562,164 @@ app.post('/api/payments/batch', (req, res) => {
     db.run(query, flatParams, function (err) {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: `${this.changes} payments imported` });
+    });
+});
+
+// 14a. Allocate Payment to Invoices (and create missing invoices)
+app.post('/api/payments/allocate', (req, res) => {
+    const { contract_id, amount, paid_at, memo, allocations } = req.body;
+
+    if (!contract_id || !amount || !allocations) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    db.serialize(() => {
+        db.run("BEGIN TRANSACTION");
+
+        // 1. Create the Payment record
+        // Determine type based on dominant allocation or generic? Let's use Rent as default
+        const mainType = allocations.length > 0 ? allocations[0].type : 'monthly_rent';
+
+        db.run(
+            `INSERT INTO payments (contract_id, amount, paid_at, memo, type) VALUES (?, ?, ?, ?, ?)`,
+            [contract_id, amount, paid_at, memo, mainType],
+            function (err) {
+                if (err) {
+                    db.run("ROLLBACK");
+                    return res.status(500).json({ error: err.message });
+                }
+
+                const paymentId = this.lastID;
+                let processedCount = 0;
+                let hasError = false;
+
+                if (allocations.length === 0) {
+                    db.run("COMMIT");
+                    return res.json({ message: 'Payment saved with no allocations', paymentId });
+                }
+
+                allocations.forEach(alloc => {
+                    if (hasError) return;
+
+                    const updateInvoiceStatus = (invId) => {
+                        // Check total amount paid for this invoice
+                        const statusQuery = `
+                            SELECT 
+                                i.amount as due,
+                                COALESCE(SUM(pa.amount), 0) as paid
+                            FROM invoices i
+                            LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
+                            WHERE i.id = ?
+                        `;
+                        db.get(statusQuery, [invId], (err, row) => {
+                            if (err || !row) return;
+                            const newStatus = (row.paid >= row.due) ? '완납' : '부분납부';
+                            db.run("UPDATE invoices SET status = ? WHERE id = ?", [newStatus, invId]);
+                        });
+                    };
+
+                    const proceedWithAllocation = (invoiceId) => {
+                        db.run(
+                            `INSERT INTO payment_allocation (payment_id, invoice_id, amount) VALUES (?, ?, ?)`,
+                            [paymentId, invoiceId, alloc.amount],
+                            (err) => {
+                                if (err) {
+                                    hasError = true;
+                                    db.run("ROLLBACK");
+                                    return res.status(500).json({ error: err.message });
+                                }
+
+                                updateInvoiceStatus(invoiceId);
+
+                                processedCount++;
+                                if (processedCount === allocations.length && !hasError) {
+                                    db.run("COMMIT");
+                                    res.json({ message: 'Payment allocated successfully', paymentId });
+                                }
+                            }
+                        );
+                    };
+
+                    if (!alloc.invoice_id) {
+                        // Create NEW invoice
+                        // For new invoices, we use due_total if provided (from frontend virtual allocation)
+                        const dueAmount = alloc.due_total || alloc.amount;
+                        const initialStatus = (alloc.amount >= dueAmount) ? '완납' : '부분납부';
+
+                        db.run(
+                            `INSERT INTO invoices (contract_id, type, billing_month, amount, status, due_date) VALUES (?, ?, ?, ?, ?, ?)`,
+                            [contract_id, alloc.type, alloc.bill_month, dueAmount, initialStatus, alloc.due_date],
+                            function (err) {
+                                if (err) {
+                                    hasError = true;
+                                    db.run("ROLLBACK");
+                                    return res.status(500).json({ error: err.message });
+                                }
+                                proceedWithAllocation(this.lastID);
+                            }
+                        );
+                    } else {
+                        proceedWithAllocation(alloc.invoice_id);
+                    }
+                });
+            }
+        );
+    });
+});
+
+// 14b. Delete Invoice and associated data (Smart Delete)
+app.delete('/api/invoices/:id', (req, res) => {
+    const invoiceId = req.params.id;
+
+    db.serialize(() => {
+        db.run("BEGIN TRANSACTION");
+
+        // 1. Find all payment IDs tied to this invoice
+        db.all("SELECT payment_id FROM payment_allocation WHERE invoice_id = ?", [invoiceId], (err, rows) => {
+            if (err) {
+                db.run("ROLLBACK");
+                return res.status(500).json({ error: err.message });
+            }
+
+            const paymentIds = rows.map(r => r.payment_id);
+
+            // 2. Delete all allocations for this invoice
+            db.run("DELETE FROM payment_allocation WHERE invoice_id = ?", [invoiceId], (err) => {
+                if (err) {
+                    db.run("ROLLBACK");
+                    return res.status(500).json({ error: err.message });
+                }
+
+                // 3. Delete the invoice itself
+                db.run("DELETE FROM invoices WHERE id = ?", [invoiceId], (err) => {
+                    if (err) {
+                        db.run("ROLLBACK");
+                        return res.status(500).json({ error: err.message });
+                    }
+
+                    // 4. Cleanup orphaned payments (payments with no remaining allocations)
+                    if (paymentIds.length === 0) {
+                        db.run("COMMIT");
+                        return res.json({ message: 'Invoice deleted (no payments were linked)' });
+                    }
+
+                    let completed = 0;
+                    paymentIds.forEach(pid => {
+                        db.get("SELECT COUNT(*) as count FROM payment_allocation WHERE payment_id = ?", [pid], (err, row) => {
+                            if (!err && row.count === 0) {
+                                // This payment is now orphaned, delete it
+                                db.run("DELETE FROM payments WHERE id = ?", [pid]);
+                            }
+                            completed++;
+                            if (completed === paymentIds.length) {
+                                db.run("COMMIT");
+                                res.json({ message: 'Invoice and associated orphaned payments deleted' });
+                            }
+                        });
+                    });
+                });
+            });
+        });
     });
 });
 
@@ -1658,6 +2039,7 @@ app.post('/api/users/find', (req, res) => {
 
 // 20. Create or Update User (Quick Add/Save)
 app.post('/api/users/quick', (req, res) => {
+    console.log('POST /api/users/quick body:', req.body);
     const { id, login_id, password, nickname, role, birth_date, phone_number, building_id } = req.body;
     const cleanPhone = phone_number ? phone_number.replace(/[^0-9]/g, '') : '';
 
@@ -1674,20 +2056,51 @@ app.post('/api/users/quick', (req, res) => {
 
         if (targetId) {
             // Update the identified target user
-            db.run(`UPDATE users SET login_id = ?, nickname = ?, birth_date = ?, phone_number = ? WHERE id = ?`,
-                [login_id, nickname, birth_date, cleanPhone, targetId],
-                function (err) {
+            const updateFields = [];
+            const updateParams = [];
+
+            if (login_id) {
+                updateFields.push('login_id = ?');
+                updateParams.push(login_id);
+            }
+            if (nickname) {
+                updateFields.push('nickname = ?');
+                updateParams.push(nickname);
+            }
+            if (birth_date) {
+                updateFields.push('birth_date = ?');
+                updateParams.push(birth_date);
+            }
+            if (phone_number) {
+                updateFields.push('phone_number = ?');
+                updateParams.push(cleanPhone);
+            }
+            if (req.body.status) {
+                updateFields.push('status = ?');
+                updateParams.push(req.body.status);
+            }
+
+            if (updateFields.length > 0) {
+                const updateQuery = `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`;
+                updateParams.push(targetId);
+
+                db.run(updateQuery, updateParams, function (err) {
                     if (err) return res.status(500).json({ error: err.message });
                     res.json({ message: 'User updated', userId: targetId });
-                }
-            );
+                });
+            } else {
+                res.json({ message: 'No changes provided', userId: targetId });
+            }
         } else {
             // Truly new - Insert
             const colors = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6'];
             const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
+            // Failsafe: Ensure login_id exists
+            const finalLoginId = login_id || (nickname + (birth_date ? birth_date.replace(/-/g, '').slice(2) : Math.floor(Math.random() * 10000)));
+
             db.run(`INSERT INTO users (login_id, password, nickname, role, color, birth_date, phone_number, approved, status) VALUES (?, ?, ?, ?, ?, ?, ?, 1, '승인')`,
-                [login_id, password || '1234', nickname, role, randomColor, birth_date, cleanPhone],
+                [finalLoginId, password || '1234', nickname, role, randomColor, birth_date, cleanPhone],
                 async function (err) {
                     if (err) return res.status(500).json({ error: err.message });
                     const newUserId = this.lastID;
@@ -1739,15 +2152,19 @@ app.post('/api/users/quick', (req, res) => {
                     }
 
                     db.run(`UPDATE users SET title = ?, description = ? WHERE id = ?`, [titleText, content, newUserId], (err) => {
-                        db.run(`INSERT INTO messages (author_id, target, category, related_id, related_table) VALUES (?, ?, ?, ?, ?)`,
-                            [newUserId, 'direct', '시스템', newUserId, 'users'],
+                        db.run(`INSERT INTO message_box (author_id, target, category, related_id, related_table, title) VALUES (?, ?, ?, ?, ?, ?)`,
+                            [newUserId, 'direct', '시스템', newUserId, 'users', titleText],
                             function (err) {
                                 if (err) {
                                     console.error('Error creating user quick notification:', err.message);
                                 } else {
-                                    const msgId = this.lastID;
+                                    const boxId = this.lastID;
+
+                                    // Insert initial message
+                                    db.run(`INSERT INTO messages (message_box_id, sender_id, content) VALUES (?, ?, ?)`, [boxId, newUserId, content]);
+
                                     // Auto-send to the user themselves
-                                    db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [msgId, newUserId]);
+                                    db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, newUserId]);
                                 }
                                 // Distribute global messages
                                 distributeGlobalMessagesToUser(newUserId);
@@ -1955,38 +2372,41 @@ app.get('/api/notices', (req, res) => {
     let params = [];
 
     const baseFields = `
-        m.*, 
-        COALESCE(a.title, i.title, u_rel.title, '알림') as title,
-        COALESCE(a.description, i.description, u_rel.description, '') as content,
+        mb.*, 
+        COALESCE(mb.title, a.title, i.title, u_rel.title, '알림') as title,
+        msg.content as content,
         COALESCE(a.status, i.status, u_rel.status, '-') as related_status,
-        u.nickname, u.status as user_status
+        u.nickname, u.status as user_status,
+        (SELECT COUNT(*) FROM message_recipient WHERE message_id = mb.id AND recipient_id != mb.author_id) as total_cnt,
+        (SELECT COUNT(*) FROM message_recipient WHERE message_id = mb.id AND read_at IS NOT NULL AND recipient_id != mb.author_id) as read_cnt
     `;
 
     const joinClause = `
-        LEFT JOIN advertisements a ON m.related_table = 'advertisements' AND m.related_id = a.id
-        LEFT JOIN items i ON m.related_table = 'items' AND m.related_id = i.id
-        LEFT JOIN users u_rel ON m.related_table = 'users' AND m.related_id = u_rel.id
-        LEFT JOIN users u ON m.author_id = u.id
-        LEFT JOIN message_recipient mr ON m.id = mr.message_id
+        LEFT JOIN messages msg ON mb.message_id = msg.id
+        LEFT JOIN advertisements a ON mb.related_table = 'advertisements' AND mb.related_id = a.id
+        LEFT JOIN items i ON mb.related_table = 'items' AND mb.related_id = i.id
+        LEFT JOIN users u_rel ON mb.related_table = 'users' AND mb.related_id = u_rel.id
+        LEFT JOIN users u ON mb.author_id = u.id
+        LEFT JOIN message_recipient mr ON mb.id = mr.message_id
     `;
 
     if (role === 'admin') {
         query = `
             SELECT DISTINCT ${baseFields}
-            FROM messages m
+            FROM message_box mb
             ${joinClause}
-            ORDER BY m.created_at DESC
+            ORDER BY mb.created_at DESC
         `;
     } else {
         query = `
             SELECT DISTINCT ${baseFields}
-            FROM messages m
+            FROM message_box mb
             ${joinClause}
             WHERE (
-                m.author_id = ? 
+                mb.author_id = ? 
                 OR mr.recipient_id = ?
             )
-            ORDER BY m.created_at DESC
+            ORDER BY mb.created_at DESC
         `;
         params = [user_id, user_id];
     }
@@ -2000,21 +2420,40 @@ app.get('/api/notices', (req, res) => {
     });
 });
 
+// 31b. Get Message Recipients Status
+// 31b. Get Message Recipients Status
+app.get('/api/message-recipients/:id', (req, res) => {
+    const messageId = req.params.id;
+    const query = `
+        SELECT u.nickname, mr.read_at, mr.recipient_id
+        FROM message_recipient mr
+        JOIN users u ON mr.recipient_id = u.id
+        JOIN message_box mb ON mr.message_id = mb.id
+        WHERE mr.message_id = ? AND mr.recipient_id != mb.author_id
+        ORDER BY mr.read_at DESC, u.nickname ASC
+    `;
+    db.all(query, [messageId], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
 // 31. Get Single Message
 app.get('/api/notices/:id', (req, res) => {
     const id = req.params.id;
     const query = `
-        SELECT m.*, 
-            COALESCE(a.title, i.title, u_rel.title, '알림') as title,
-            COALESCE(a.description, i.description, u_rel.description, '') as content,
-            COALESCE(a.status, i.status, u_rel.status, '-') as related_status,
-            u.nickname as author_name, u.login_id as author_id_str, u.birth_date, u.phone_number, u.status as user_status
-        FROM messages m
-        LEFT JOIN advertisements a ON m.related_table = 'advertisements' AND m.related_id = a.id
-        LEFT JOIN items i ON m.related_table = 'items' AND m.related_id = i.id
-        LEFT JOIN users u_rel ON m.related_table = 'users' AND m.related_id = u_rel.id
-        LEFT JOIN users u ON m.author_id = u.id
-        WHERE m.id = ?
+        SELECT mb.*, 
+        COALESCE(mb.title, a.title, i.title, u_rel.title, '알림') as title,
+        msg.content as content,
+        COALESCE(a.status, i.status, u_rel.status, '-') as related_status,
+        u.nickname as author_name, u.login_id as author_id_str, u.birth_date, u.phone_number, u.status as user_status
+        FROM message_box mb
+        LEFT JOIN messages msg ON mb.message_id = msg.id
+        LEFT JOIN advertisements a ON mb.related_table = 'advertisements' AND mb.related_id = a.id
+        LEFT JOIN items i ON mb.related_table = 'items' AND mb.related_id = i.id
+        LEFT JOIN users u_rel ON mb.related_table = 'users' AND mb.related_id = u_rel.id
+        LEFT JOIN users u ON mb.author_id = u.id
+        WHERE mb.id = ?
     `;
     db.get(query, [id], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -2027,11 +2466,44 @@ app.get('/api/notices/:id', (req, res) => {
 app.put('/api/notices/:id/confirm', (req, res) => {
     const messageId = req.params.id;
     const { user_id } = req.body;
-    db.run(`UPDATE message_recipient SET read_at = CURRENT_TIMESTAMP WHERE message_id = ? AND recipient_id = ?`,
-        [messageId, user_id], function (err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ message: 'Message confirmed' });
-        });
+
+    db.serialize(() => {
+        db.run('BEGIN TRANSACTION');
+
+        // 1. Update individual recipient status
+        db.run(`UPDATE message_recipient SET read_at = CURRENT_TIMESTAMP WHERE message_id = ? AND recipient_id = ?`,
+            [messageId, user_id], function (err) {
+                if (err) {
+                    db.run('ROLLBACK');
+                    return res.status(500).json({ error: err.message });
+                }
+
+                // 2. Find the content message_id and update messages table
+                db.get(`SELECT message_id FROM message_box WHERE id = ?`, [messageId], (err, row) => {
+                    if (err) {
+                        db.run('ROLLBACK');
+                        return res.status(500).json({ error: err.message });
+                    }
+                    if (row && row.message_id) {
+                        // Update messages table: Only update if it hasn't been marked read yet (is_read=0)
+                        // This captures the time of the *first* read.
+                        db.run(`UPDATE messages SET is_read = 1, read_at = CURRENT_TIMESTAMP WHERE id = ? AND is_read = 0`,
+                            [row.message_id], (err) => {
+                                if (err) {
+                                    db.run('ROLLBACK');
+                                    return res.status(500).json({ error: err.message });
+                                }
+                                db.run('COMMIT');
+                                res.json({ message: 'Message confirmed' });
+                            });
+                    } else {
+                        // Should not happen, but commit anyway
+                        db.run('COMMIT');
+                        res.json({ message: 'Message confirmed' });
+                    }
+                });
+            });
+    });
 });
 
 // 31a. Delete Message
@@ -2040,7 +2512,7 @@ app.delete('/api/notices/:id', (req, res) => {
     console.log(`[API] DELETE /api/notices/${messageId}`);
 
     // Get message details first to check if it's a signup and get author_id
-    db.get("SELECT category, author_id FROM messages WHERE id = ?", [messageId], (err, msg) => {
+    db.get("SELECT category, author_id FROM message_box WHERE id = ?", [messageId], (err, msg) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!msg) return res.status(404).json({ error: 'Message not found' });
 
@@ -2051,27 +2523,31 @@ app.delete('/api/notices/:id', (req, res) => {
             db.run(`DELETE FROM message_recipient WHERE message_id = ?`, [messageId], (err) => {
                 if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
 
-                // 2. Delete the message itself (Child of user)
-                db.run(`DELETE FROM messages WHERE id = ?`, [messageId], function (err) {
-                    if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
+                // 2. Delete the box and then the message content
+                db.get("SELECT message_id FROM message_box WHERE id = ?", [messageId], (err, row) => {
+                    const contentId = row ? row.message_id : null;
+                    db.run(`DELETE FROM message_box WHERE id = ?`, [messageId], (err) => {
+                        if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
 
-                    // 3. Delete the user if it's a signup (Parent)
-                    if (msg.category === '가입신청' && msg.author_id) {
-                        db.run("DELETE FROM users WHERE id = ?", [msg.author_id], (err) => {
-                            if (err) {
-                                // If deleting user fails (e.g. they have other messages or contracts), we just rollback
-                                db.run('ROLLBACK');
-                                return res.status(500).json({ error: `User deletion failed: ${err.message}` });
-                            }
+                        if (contentId) {
+                            db.run(`DELETE FROM messages WHERE id = ?`, [contentId]);
+                        }
+
+                        // 3. Delete the user if it's a signup (Parent)
+                        if (msg.category === '가입신청' && msg.author_id) {
+                            db.run("DELETE FROM users WHERE id = ?", [msg.author_id], (err) => {
+                                if (err) {
+                                    db.run('ROLLBACK');
+                                    return res.status(500).json({ error: `User deletion failed: ${err.message}` });
+                                }
+                                db.run('COMMIT');
+                                res.json({ message: 'Message and user deleted' });
+                            });
+                        } else {
                             db.run('COMMIT');
-                            console.log(`[API] Deleted message ${messageId} and applicant ${msg.author_id}`);
-                            res.json({ message: 'Message and user deleted' });
-                        });
-                    } else {
-                        db.run('COMMIT');
-                        console.log(`[API] Successfully deleted message ${messageId}`);
-                        res.json({ message: 'Message deleted' });
-                    }
+                            res.json({ message: 'Message deleted' });
+                        }
+                    });
                 });
             });
         });
@@ -2086,7 +2562,7 @@ app.post('/api/users/:id/approve', (req, res) => {
         db.run(`UPDATE users SET approved = 1, status = '승인' WHERE id = ?`, [targetUserId], function (err) {
             if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
 
-            db.run(`UPDATE messages SET confirmed = 1 WHERE author_id = ? AND category = '가입신청'`, [targetUserId], function (err) {
+            db.run(`UPDATE message_box SET confirmed = 1 WHERE author_id = ? AND category = '가입신청'`, [targetUserId], function (err) {
                 if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
 
                 // Distribute global messages upon approval
@@ -2104,7 +2580,7 @@ app.post('/api/users/:id/reject', (req, res) => {
     const targetUserId = req.params.id;
     db.run(`UPDATE users SET approved = 2, status = '거절' WHERE id = ?`, [targetUserId], function (err) {
         if (err) return res.status(500).json({ error: err.message });
-        db.run(`UPDATE messages SET confirmed = 1 WHERE author_id = ? AND category = '가입신청'`, [targetUserId], function (err) {
+        db.run(`UPDATE message_box SET confirmed = 1 WHERE author_id = ? AND category = '가입신청'`, [targetUserId], function (err) {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ message: 'User rejected' });
         });
@@ -2132,7 +2608,7 @@ app.delete('/api/users/:id', (req, res) => {
                 { name: 'payments', sql: `DELETE FROM payments WHERE contract_id IN (SELECT id FROM contracts WHERE tenant_id = ?)` },
                 { name: 'contract_keywords', sql: `DELETE FROM contract_keywords WHERE contract_id IN (SELECT id FROM contracts WHERE tenant_id = ?)` },
                 { name: 'contracts', sql: `DELETE FROM contracts WHERE tenant_id = ?` },
-                { name: 'messages', sql: `DELETE FROM messages WHERE author_id = ?` },
+                { name: 'messages', sql: `DELETE FROM message_box WHERE author_id = ?` },
                 { name: 'advertisements', sql: `DELETE FROM advertisements WHERE created_by = ?` },
                 { name: 'items', sql: `DELETE FROM items WHERE owner_id = ?` },
                 { name: 'room_tenant', sql: `DELETE FROM room_tenant WHERE tenant_id = ?` },
