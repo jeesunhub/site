@@ -2682,6 +2682,13 @@ app.get('/api/messages/unread-count/:userId', (req, res) => {
     });
 });
 
+app.post('/api/admin/reset-db', (req, res) => {
+    db.resetDatabase((err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Database reset successfully' });
+    });
+});
+
 const server = app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 }).on('error', (err) => {

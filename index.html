@@ -265,7 +265,7 @@
 <body>
     <main id="layout-main">
         <div class="login-card">
-            <h1>안녕</h1>
+            <h1 onclick="resetDatabase()" style="cursor: pointer;" title="클릭하여 DB 초기화">안녕</h1>
 
             <div class="quick-actions">
                 <div class="action-chip" onclick="location.href='/rooms_public.html'">
@@ -369,6 +369,23 @@
                 console.error(err);
                 errorMsg.style.display = 'block';
                 errorMsg.innerText = '서버 연결 오류';
+            }
+        }
+        async function resetDatabase() {
+            if (!confirm('경고: 모든 데이터가 삭제되고 데이터베이스가 초기화됩니다.\n계속하시겠습니까?')) return;
+
+            try {
+                const res = await fetch('/api/admin/reset-db', { method: 'POST' });
+                const data = await res.json();
+                if (res.ok) {
+                    alert('데이터베이스가 성공적으로 초기화되었습니다.\n관리자 계정(admin/admin)으로 다시 로그인해 주세요.');
+                    location.reload();
+                } else {
+                    alert('초기화 실패: ' + data.error);
+                }
+            } catch (err) {
+                console.error(err);
+                alert('서버 오류 발생');
             }
         }
     </script>

@@ -188,29 +188,88 @@ function ensureColumns() {
     });
 }
 
-function seedAdmin() {
+function seedAdmin(cb) {
     // Check if admin exists
     const checkSql = "SELECT id FROM users WHERE login_id = ?";
     db.get(checkSql, ['admin'], (err, row) => {
         if (err) {
             console.error('Error checking admin user:', err.message);
+            if (cb) cb(err);
             return;
         }
         if (!row) {
             console.log('Creating default admin user...');
-            const insertSql = "INSERT INTO users (login_id, password, nickname, role, approved) VALUES (?, ?, ?, ?, 1)";
+            const insertSql = "INSERT INTO users (login_id, password, nickname, role, approved, status) VALUES (?, ?, ?, ?, 1, '승인')";
             db.run(insertSql, ['admin', 'admin', 'admin', 'admin'], (err) => {
                 if (err) console.error('Error creating admin user:', err.message);
                 else {
                     console.log('Default admin user created.');
                     ensureColumns();
                 }
+                if (cb) cb(err);
             });
         } else {
             ensureColumns();
+            if (cb) cb(null);
         }
     });
 }
+
+db.resetDatabase = function (cb) {
+    console.log('Resetting database...');
+    if (databaseUrl) {
+        // PG Reset
+        const dropQuery = `
+            DO $$ DECLARE
+                r RECORD;
+            BEGIN
+                FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+                    EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
+                END LOOP;
+            END $$;
+        `;
+        db.pool.query(dropQuery, (err) => {
+            if (err) return cb && cb(err);
+            const SCHEMA_PG_PATH = path.join(__dirname, 'schema_pg.sql');
+            const schema = fs.readFileSync(SCHEMA_PG_PATH, 'utf8');
+            db.pool.query(schema, (err2) => {
+                if (err2) return cb && cb(err2);
+                seedAdmin(cb);
+            });
+        });
+    } else {
+        // SQLite Reset
+        db.serialize(() => {
+            db.run("PRAGMA foreign_keys = OFF;");
+            db.all("SELECT name FROM sqlite_master WHERE type='table'", (err, rows) => {
+                if (err) return cb && cb(err);
+                let dropCount = 0;
+                const tablesToDrop = rows.filter(r => r.name !== 'sqlite_sequence');
+                if (tablesToDrop.length === 0) {
+                    const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
+                    const schema = fs.readFileSync(SCHEMA_PATH, 'utf8');
+                    db.exec(schema, (err) => {
+                        seedAdmin(cb);
+                    });
+                    return;
+                }
+                tablesToDrop.forEach(row => {
+                    db.run(`DROP TABLE IF EXISTS ${row.name}`, () => {
+                        dropCount++;
+                        if (dropCount === tablesToDrop.length) {
+                            const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
+                            const schema = fs.readFileSync(SCHEMA_PATH, 'utf8');
+                            db.exec(schema, (err) => {
+                                db.run("PRAGMA foreign_keys = ON;");
+                                seedAdmin(cb);
+                            });
+                        }
+                    });
+                });
+            });
+        });
+    }
+};
 
 module.exports = db;
 
