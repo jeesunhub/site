@@ -150,9 +150,9 @@ app.get('/api/buildings/search-by-address', (req, res) => {
 app.get('/api/public/stats', (req, res) => {
     const query = `
         SELECT 
-            (SELECT COUNT(*) FROM advertisements WHERE related_table = 'room' AND status = 'advertising') as "roomCount",
+            (SELECT COUNT(*) FROM advertisements WHERE (related_table = 'room' OR related_table = 'contract') AND status = 'advertising') as "roomCount",
             (SELECT COUNT(*) FROM advertisements WHERE related_table = 'item' AND status = 'advertising') as "itemCount",
-            (SELECT COUNT(*) FROM advertisements WHERE related_table = 'info' AND status = 'advertising') as "infoCount"
+            (SELECT COUNT(*) FROM advertisements WHERE (related_table = 'info') AND status = 'advertising') as "infoCount"
     `;
     db.get(query, [], (err, row) => {
         if (err) {
@@ -168,7 +168,24 @@ app.get('/api/public/stats', (req, res) => {
     });
 });
 
-// ... (Lines 153-1349 remain unchanged)
+app.get('/api/info/stats', (req, res) => {
+    const query = `
+        SELECT category, COUNT(*) as count 
+        FROM advertisements 
+        WHERE related_table = 'info' AND status = 'advertising'
+        GROUP BY category
+    `;
+    db.all(query, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        const stats = {};
+        rows.forEach(r => {
+            if (r.category) stats[r.category] = r.count;
+        });
+        res.json(stats);
+    });
+});
+
+
 
 // 34. Get Advertisements
 app.get('/api/ads', (req, res) => {
@@ -178,21 +195,31 @@ app.get('/api/ads', (req, res) => {
             u.nickname as owner_name, u.login_id as owner_login_id, u.id as owner_id,
             CASE 
                 WHEN a.related_table = 'room' THEN b.name 
+                WHEN a.related_table = 'contract' THEN bc.name
                 WHEN a.related_table = 'item' THEN b_item.name
                 ELSE NULL 
             END as building,
             CASE 
                 WHEN a.related_table = 'room' THEN b.name 
+                WHEN a.related_table = 'contract' THEN bc.name
                 WHEN a.related_table = 'item' THEN b_item.name
                 ELSE NULL 
             END as building_name,
-            r.room_number, r.deposit, r.rent, r.management_fee, r.available_date,
-            r.building_id,
+            COALESCE(r.room_number, rc.room_number) as room_number,
+            COALESCE(r.deposit, c.deposit) as deposit,
+            COALESCE(r.rent, c.monthly_rent) as rent,
+            COALESCE(r.management_fee, c.maintenance_fee) as management_fee,
+            c.cleaning_fee as cleaning_fee,
+            COALESCE(r.available_date, c.contract_start_date) as available_date,
+            COALESCE(r.building_id, rc.building_id) as building_id,
             (SELECT image_url FROM images WHERE related_id = a.id AND related_table = 'advertisements' LIMIT 1) as main_image
         FROM advertisements a
         LEFT JOIN users u ON a.created_by = u.id
         LEFT JOIN rooms r ON a.related_id = r.id AND a.related_table = 'room'
         LEFT JOIN buildings b ON r.building_id = b.id
+        LEFT JOIN contracts c ON a.related_id = c.id AND a.related_table = 'contract'
+        LEFT JOIN rooms rc ON c.room_id = rc.id
+        LEFT JOIN buildings bc ON rc.building_id = bc.id
         LEFT JOIN items i ON a.related_id = i.id AND a.related_table = 'item'
         LEFT JOIN buildings b_item ON i.building_id = b_item.id
     `;
@@ -201,33 +228,40 @@ app.get('/api/ads', (req, res) => {
     let whereClauses = [];
 
     if (type) {
-        whereClauses.push(`a.related_table = ?`);
-        params.push(type);
+        if (type === 'room') {
+            whereClauses.push(`(a.related_table = 'room' OR a.related_table = 'contract')`);
+        } else {
+            whereClauses.push(`a.related_table = ? `);
+            params.push(type);
+        }
     }
 
     if (category) {
-        whereClauses.push(`a.category = ?`);
+        whereClauses.push(`a.category = ? `);
         params.push(category);
     }
 
     // Manager/Self view filter (Show only MY ads)
-    if (user_id && (role === 'landlord' || role === 'tenant')) {
-        whereClauses.push(`a.created_by = ?`);
+    if (user_id && (role === 'landlord' || role === 'tenant' || role === 'admin')) {
+        whereClauses.push(`a.created_by = ? `);
         params.push(user_id);
     }
     // Browse View Visibility Logic
-    else if (viewer_role !== 'admin') {
-        if (!viewer_id) {
+    else if ((viewer_role || role) !== 'admin') {
+        const v_id = viewer_id || user_id;
+        const v_role = viewer_role || role;
+
+        if (!v_id) {
             // Guest sees only public ads (NULL or Empty String)
             whereClauses.push(`(a.target_id IS NULL OR a.target_id = '')`);
-        } else if (viewer_role === 'tenant') {
+        } else if (v_role === 'tenant') {
             // Tenant sees public + their building
             whereClauses.push(`(a.target_id IS NULL OR a.target_id = '' OR a.target_id = (SELECT r.building_id FROM rooms r JOIN room_tenant rt ON r.id = rt.room_id WHERE rt.tenant_id = ? LIMIT 1))`);
-            params.push(viewer_id);
-        } else if (viewer_role === 'landlord') {
+            params.push(v_id);
+        } else if (v_role === 'landlord') {
             // Landlord sees public + their managed buildings
-            whereClauses.push(`(a.target_id IS NULL OR a.target_id = '' OR a.target_id IN (SELECT building_id FROM landlord_buildings WHERE landlord_id = ?))`);
-            params.push(viewer_id);
+            whereClauses.push(`(a.target_id IS NULL OR a.target_id = '' OR a.target_id IN(SELECT building_id FROM landlord_buildings WHERE landlord_id = ?))`);
+            params.push(v_id);
         }
     }
 
@@ -244,29 +278,41 @@ app.get('/api/ads', (req, res) => {
 });
 
 app.post('/api/ads', upload.array('photos', 5), (req, res) => {
-    const { type, title, description, price, created_by, is_anonymous, item_name, building_id, target_id, category } = req.body;
+    const { type, title, description, created_by, is_anonymous, item_name, building_id, target_id, category } = req.body;
+    let { price } = req.body;
     let { related_id } = req.body;
+
+    // Convert types
+    const finalPrice = parseInt(price) || 0;
+    const finalCreatedBy = parseInt(created_by) || null;
+    const finalBuildingId = building_id ? parseInt(building_id) : null;
+    const finalTargetId = (target_id && target_id !== "" && target_id !== "null") ? parseInt(target_id) : null;
 
     db.serialize(() => {
         db.run('BEGIN TRANSACTION');
 
-        const finalizeAd = (finalRelatedId) => {
-            const query = `INSERT INTO advertisements (related_id, related_table, title, description, price, created_by, status, target_id, category) VALUES (?, ?, ?, ?, ?, ?, 'advertising', ?, ?)`;
-            db.run(query, [finalRelatedId, type, title, description, price, created_by || null, target_id || "" === target_id ? null : target_id, category || null], function (err) {
-                if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
+        const finalizeAd = (finalRelId, targetTable = type) => {
+            const query = `INSERT INTO advertisements(related_id, related_table, title, description, price, created_by, status, target_id, category) VALUES(?, ?, ?, ?, ?, ?, 'advertising', ?, ?)`;
+            db.run(query, [finalRelId, targetTable, title, description, finalPrice, finalCreatedBy, finalTargetId, category || null], function (err) {
+                if (err) {
+                    console.error('[API] Error inserting advertisement:', err.message);
+                    db.run('ROLLBACK');
+                    return res.status(500).json({ error: err.message });
+                }
                 const adId = this.lastID;
 
                 // Handle photos
                 if (req.files && req.files.length > 0) {
                     req.files.forEach((file, index) => {
-                        db.run(`INSERT INTO images (related_id, image_url, is_main, related_table) VALUES (?, ?, ?, ?)`,
-                            [adId, `/uploads/${file.filename}`, index === 0 ? 1 : 0, 'advertisements']);
+                        db.run(`INSERT INTO images(related_id, image_url, is_main, related_table) VALUES(?, ?, ?, ?)`,
+                            [adId, `/ uploads / ${file.filename} `, index === 0 ? 1 : 0, 'advertisements']);
                     });
                 }
+
                 // --- Create Message Notification ---
                 const finalizeMessage = (msgCategory, msgTarget = 'to_all') => {
                     dispatchMessage({
-                        author_id: created_by,
+                        author_id: finalCreatedBy,
                         category: msgCategory,
                         target: msgTarget,
                         related_id: adId,
@@ -283,7 +329,7 @@ app.post('/api/ads', upload.array('photos', 5), (req, res) => {
                 } else if (type === 'room') {
                     finalizeMessage('방있어요', 'to_all');
                 } else if (type === 'info') {
-                    finalizeMessage('시스템', 'to_all'); // Or a new category
+                    finalizeMessage('시스템', 'to_all');
                 } else {
                     db.run('COMMIT');
                     res.json({ message: 'Ad created', id: adId });
@@ -293,19 +339,62 @@ app.post('/api/ads', upload.array('photos', 5), (req, res) => {
 
         if (type === 'item') {
             // Create the item record first
-            const itemQuery = `INSERT INTO items (owner_id, title, description, status, building_id, belongs_to) VALUES (?, ?, ?, 'open', ?, ?)`;
-            db.run(itemQuery, [created_by, item_name, description, building_id, created_by], function (err) {
-                if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
+            const itemQuery = `INSERT INTO items(owner_id, title, description, status, building_id, belongs_to) VALUES(?, ?, ?, 'open', ?, ?)`;
+            db.run(itemQuery, [finalCreatedBy, item_name, description, finalBuildingId, finalCreatedBy], function (err) {
+                if (err) {
+                    console.error('[API] Error inserting item:', err.message);
+                    db.run('ROLLBACK');
+                    return res.status(500).json({ error: err.message });
+                }
                 const itemId = this.lastID;
 
                 // Add log entry
-                db.run(`INSERT INTO logs (related_table, related_id, memo) VALUES (?, ?, ?)`,
-                    ['items', itemId, `Item created by user ${created_by}`]);
+                db.run(`INSERT INTO logs(related_table, related_id, memo) VALUES(?, ?, ?)`,
+                    ['items', itemId, `Item created by user ${finalCreatedBy} `]);
 
                 finalizeAd(itemId);
             });
+        } else if (type === 'room') {
+            const { deposit, rent, management_fee, cleaning_fee, available_date } = req.body;
+            // Get building/landlord info for the room
+            db.get(`
+                SELECT b.id as building_id, lb.landlord_id 
+                FROM rooms r 
+                JOIN buildings b ON r.building_id = b.id 
+                LEFT JOIN landlord_buildings lb ON b.id = lb.building_id 
+                WHERE r.id = ?
+    `, [related_id], (err, roomInfo) => {
+                if (err || !roomInfo) {
+                    console.error('[API] Error finding room info:', err?.message || 'Room not found');
+                    db.run('ROLLBACK');
+                    return res.status(500).json({ error: 'Room or Building info not found' });
+                }
+
+                const finalLandlordId = roomInfo.landlord_id || finalCreatedBy;
+                const finalTenantId = finalCreatedBy; // Using creator as placeholder tenant
+
+                const contractQuery = `
+                    INSERT INTO contracts(
+        room_id, tenant_id, payment_type, contract_start_date,
+        deposit, monthly_rent, maintenance_fee, cleaning_fee, landlord_id
+    ) VALUES(?, ?, 'postpaid', ?, ?, ?, ?, ?, ?)
+                `;
+                db.run(contractQuery, [
+                    related_id, finalTenantId, available_date || null,
+                    parseInt(deposit) || 0, parseInt(rent) || 0, parseInt(management_fee) || 0,
+                    parseInt(cleaning_fee) || 0, finalLandlordId
+                ], function (err) {
+                    if (err) {
+                        console.error('[API] Error creating contract for ad:', err.message);
+                        db.run('ROLLBACK');
+                        return res.status(500).json({ error: err.message });
+                    }
+                    const contractId = this.lastID;
+                    finalizeAd(contractId, 'contract');
+                });
+            });
         } else if (type === 'info') {
-            finalizeAd(building_id || null);
+            finalizeAd(finalBuildingId);
         } else {
             finalizeAd(related_id);
         }
@@ -314,7 +403,12 @@ app.post('/api/ads', upload.array('photos', 5), (req, res) => {
 
 app.put('/api/ads/:id', upload.array('photos', 5), (req, res) => {
     const adId = req.params.id;
-    const { title, description, price, item_name, building_id, type, target_id, category } = req.body;
+    const { title, description, price, item_name, building_id, type, target_id, category, deposit, rent, management_fee, cleaning_fee, available_date } = req.body;
+
+    // Convert types
+    const finalPrice = parseInt(price) || 0;
+    const finalBuildingId = building_id ? parseInt(building_id) : null;
+    const finalTargetId = (target_id && target_id !== "" && target_id !== "null") ? parseInt(target_id) : null;
 
     db.get("SELECT related_table, related_id FROM advertisements WHERE id = ?", [adId], (err, ad) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -324,14 +418,18 @@ app.put('/api/ads/:id', upload.array('photos', 5), (req, res) => {
             db.run('BEGIN TRANSACTION');
 
             const finalizeUpdate = () => {
-                const query = `UPDATE advertisements SET title = ?, description = ?, price = ?, target_id = ?, category = ? WHERE id = ?`;
-                db.run(query, [title, description, price, target_id || "" === target_id ? null : target_id, category || null, adId], function (err) {
-                    if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
+                const query = `UPDATE advertisements SET title = ?, description = ?, price = ?, target_id = ?, category = ? WHERE id = ? `;
+                db.run(query, [title, description, finalPrice, finalTargetId, category || null, adId], function (err) {
+                    if (err) {
+                        console.error('[API] Update Error:', err.message);
+                        db.run('ROLLBACK');
+                        return res.status(500).json({ error: err.message });
+                    }
 
                     if (req.files && req.files.length > 0) {
                         req.files.forEach((file) => {
-                            db.run(`INSERT INTO images (related_id, image_url, is_main, related_table) VALUES (?, ?, ?, ?)`,
-                                [adId, `/uploads/${file.filename}`, 0, 'advertisements']);
+                            db.run(`INSERT INTO images(related_id, image_url, is_main, related_table) VALUES(?, ?, ?, ?)`,
+                                [adId, `/ uploads / ${file.filename} `, 0, 'advertisements']);
                         });
                     }
                     db.run('COMMIT');
@@ -340,9 +438,26 @@ app.put('/api/ads/:id', upload.array('photos', 5), (req, res) => {
             };
 
             if (ad.related_table === 'item' && ad.related_id) {
-                const itemQuery = `UPDATE items SET title = ?, description = ?, building_id = ? WHERE id = ?`;
-                db.run(itemQuery, [item_name, description, building_id, ad.related_id], function (err) {
-                    if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
+                const itemQuery = `UPDATE items SET title = ?, description = ?, building_id = ? WHERE id = ? `;
+                db.run(itemQuery, [item_name, description, finalBuildingId, ad.related_id], function (err) {
+                    if (err) {
+                        console.error('[API] Item Update Error:', err.message);
+                        db.run('ROLLBACK');
+                        return res.status(500).json({ error: err.message });
+                    }
+                    finalizeUpdate();
+                });
+            } else if (ad.related_table === 'contract' && ad.related_id) {
+                const contractQuery = `UPDATE contracts SET deposit = ?, monthly_rent = ?, maintenance_fee = ?, cleaning_fee = ?, contract_start_date = ? WHERE id = ? `;
+                db.run(contractQuery, [
+                    parseInt(deposit) || 0, parseInt(rent) || 0, parseInt(management_fee) || 0,
+                    parseInt(cleaning_fee) || 0, available_date || null, ad.related_id
+                ], function (err) {
+                    if (err) {
+                        console.error('[API] Contract Update Error:', err.message);
+                        db.run('ROLLBACK');
+                        return res.status(500).json({ error: err.message });
+                    }
                     finalizeUpdate();
                 });
             } else {
@@ -385,6 +500,12 @@ app.delete('/api/ads/:id', (req, res) => {
                         if (ad.related_table === 'item') {
                             // 4. Delete Item
                             db.run("DELETE FROM items WHERE id = ?", [ad.related_id], (err) => {
+                                if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
+                                finishAdDelete();
+                            });
+                        } else if (ad.related_table === 'contract') {
+                            // 4. Delete Contract
+                            db.run("DELETE FROM contracts WHERE id = ?", [ad.related_id], (err) => {
                                 if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
                                 finishAdDelete();
                             });
@@ -441,8 +562,8 @@ app.post('/api/ads/:id/select-winner', (req, res) => {
                                 if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
 
                                 // Add log entry for ownership transfer
-                                db.run(`INSERT INTO logs (related_table, related_id, memo) VALUES (?, ?, ?)`,
-                                    ['items', ad.related_id, `Ownership transferred to user ${user_id} via ad ${adId}`]);
+                                db.run(`INSERT INTO logs(related_table, related_id, memo) VALUES(?, ?, ?)`,
+                                    ['items', ad.related_id, `Ownership transferred to user ${user_id} via ad ${adId} `]);
 
                                 db.run('COMMIT');
                                 res.json({ message: 'Winner selected and ownership transferred' });
@@ -482,23 +603,32 @@ app.post('/api/ads/:id/apply', (req, res) => {
 app.get('/api/ads/:id', (req, res) => {
     const id = req.params.id;
     const query = `
-        SELECT a.*, 
-            u.nickname as owner_name, u.login_id as owner_login_id,
-            CASE 
+        SELECT a.*,
+    u.nickname as owner_name, u.login_id as owner_login_id,
+    CASE 
                 WHEN a.related_table = 'room' THEN b.name 
+                WHEN a.related_table = 'contract' THEN bc.name
                 WHEN a.related_table = 'item' THEN b_item.name
-                ELSE NULL 
-            END as building_name,
-            r.room_number, r.deposit, r.rent, r.management_fee, r.available_date,
-            r.building_id as room_building_id,
-            i.title as item_name,
-            i.description as item_description,
-            i.building_id as item_building_id,
-            target_b.name as target_building_name
+                ELSE NULL
+END as building_name,
+    COALESCE(r.room_number, rc.room_number) as room_number,
+    COALESCE(r.deposit, c.deposit) as deposit,
+    COALESCE(r.rent, c.monthly_rent) as rent,
+    COALESCE(r.management_fee, c.maintenance_fee) as management_fee,
+    c.cleaning_fee as cleaning_fee,
+    COALESCE(r.available_date, c.contract_start_date) as available_date,
+    COALESCE(r.building_id, rc.building_id) as room_building_id,
+    i.title as item_name,
+    i.description as item_description,
+    i.building_id as item_building_id,
+    target_b.name as target_building_name
         FROM advertisements a
         LEFT JOIN users u ON a.created_by = u.id
         LEFT JOIN rooms r ON a.related_id = r.id AND a.related_table = 'room'
         LEFT JOIN buildings b ON r.building_id = b.id
+        LEFT JOIN contracts c ON a.related_id = c.id AND a.related_table = 'contract'
+        LEFT JOIN rooms rc ON c.room_id = rc.id
+        LEFT JOIN buildings bc ON rc.building_id = bc.id
         LEFT JOIN items i ON a.related_id = i.id AND a.related_table = 'item'
         LEFT JOIN buildings b_item ON i.building_id = b_item.id
         LEFT JOIN buildings target_b ON a.target_id = target_b.id
@@ -510,7 +640,7 @@ app.get('/api/ads/:id', (req, res) => {
         if (!ad) return res.status(404).json({ error: 'Ad not found' });
 
         if (ad.related_table === 'item') ad.building_id = ad.item_building_id;
-        else if (ad.related_table === 'room') ad.building_id = ad.room_building_id;
+        else if (ad.related_table === 'room' || ad.related_table === 'contract') ad.building_id = ad.room_building_id;
 
         db.all("SELECT * FROM images WHERE related_id = ? AND related_table = 'advertisements'", [id], (err, images) => {
             ad.images = images || [];
@@ -530,7 +660,7 @@ app.get('/api/config/mode', (req, res) => {
 // 1. Login API
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
-    console.log(`[Login Attempt] ID: ${username}`);
+    console.log(`[Login Attempt]ID: ${username} `);
 
     // First check if user exists by login_id (Case-insensitive check for better UX)
     db.get('SELECT * FROM users WHERE LOWER(login_id) = LOWER(?)', [username], (err, user) => {
@@ -567,12 +697,12 @@ app.post('/api/login', (req, res) => {
 // Helper to dispatch messages to multiple recipients based on target group
 function dispatchMessage({ author_id, category, target, related_id, related_table, recipient_id, building_id, title, content }, callback) {
     // 1. Insert content into messages table first
-    db.run(`INSERT INTO messages (content) VALUES (?)`, [content || null], function (err) {
+    db.run(`INSERT INTO messages(content) VALUES(?)`, [content || null], function (err) {
         if (err) return callback(err);
         const messageId = this.lastID;
 
         // 2. Insert into message_box referencing the messageId
-        db.run(`INSERT INTO message_box (author_id, message_id, target, category, related_id, related_table, title) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        db.run(`INSERT INTO message_box(author_id, message_id, target, category, related_id, related_table, title) VALUES(?, ?, ?, ?, ?, ?, ?)`,
             [author_id || null, messageId, target, category, related_id, related_table, title || null],
             function (err2) {
                 if (err2) return callback(err2);
@@ -582,23 +712,23 @@ function dispatchMessage({ author_id, category, target, related_id, related_tabl
                 let params = [boxId];
 
                 if (target === 'direct' && recipient_id) {
-                    recipientQuery = `INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)`;
+                    recipientQuery = `INSERT INTO message_recipient(message_id, recipient_id) VALUES(?, ?)`;
                     params.push(recipient_id);
                 } else if (target === 'to_all') {
-                    recipientQuery = `INSERT INTO message_recipient (message_id, recipient_id) 
-                                         SELECT ?, id FROM users WHERE status = '승인'`;
+                    recipientQuery = `INSERT INTO message_recipient(message_id, recipient_id)
+SELECT ?, id FROM users WHERE status = '승인'`;
                 } else if (target === 'to_building' && building_id) {
-                    recipientQuery = `INSERT INTO message_recipient (message_id, recipient_id) 
-                                         SELECT ?, id FROM users 
-                                         WHERE status = '승인' 
-                                         AND (
-                                            id IN (SELECT tenant_id FROM room_tenant rt JOIN rooms r ON rt.room_id = r.id WHERE r.building_id = ?)
-                                            OR id IN (SELECT landlord_id FROM landlord_buildings WHERE building_id = ?)
-                                         )`;
+                    recipientQuery = `INSERT INTO message_recipient(message_id, recipient_id)
+SELECT ?, id FROM users 
+                                         WHERE status = '승인'
+AND(
+    id IN(SELECT tenant_id FROM room_tenant rt JOIN rooms r ON rt.room_id = r.id WHERE r.building_id = ?)
+                                            OR id IN(SELECT landlord_id FROM landlord_buildings WHERE building_id = ?)
+)`;
                     params.push(building_id, building_id);
                 } else if (target === 'to_landlords') {
-                    recipientQuery = `INSERT INTO message_recipient (message_id, recipient_id) 
-                                         SELECT ?, id FROM users WHERE status = '승인' AND role = 'landlord'`;
+                    recipientQuery = `INSERT INTO message_recipient(message_id, recipient_id)
+SELECT ?, id FROM users WHERE status = '승인' AND role = 'landlord'`;
                 }
 
                 if (recipientQuery) {
@@ -626,14 +756,14 @@ app.post('/api/messages/direct', (req, res) => {
 // Helper to distribute all existing "to_all" messages to a new/approved user
 function distributeGlobalMessagesToUser(userId) {
     const query = `
-        INSERT INTO message_recipient (message_id, recipient_id)
+        INSERT INTO message_recipient(message_id, recipient_id)
         SELECT id, ? FROM message_box 
         WHERE target = 'to_all'
-        AND id NOT IN (SELECT message_id FROM message_recipient WHERE recipient_id = ?)
+        AND id NOT IN(SELECT message_id FROM message_recipient WHERE recipient_id = ?)
     `;
     db.run(query, [userId, userId], (err) => {
-        if (err) console.error(`[GlobalMsg] Failed to distribute to user ${userId}:`, err.message);
-        else console.log(`[GlobalMsg] Distributed global messages to user ${userId}`);
+        if (err) console.error(`[GlobalMsg] Failed to distribute to user ${userId}: `, err.message);
+        else console.log(`[GlobalMsg] Distributed global messages to user ${userId} `);
     });
 }
 
@@ -665,7 +795,7 @@ app.get('/api/messages/recipients', async (req, res) => {
                     if (err) reject(err); else resolve(rows);
                 });
             });
-            buildings.forEach(b => results.push({ type: 'building', id: b.id, nickname: `[건물] ${b.name}` }));
+            buildings.forEach(b => results.push({ type: 'building', id: b.id, nickname: `[건물] ${b.name} ` }));
 
         } else if (role === 'landlord') {
             // 1. Specific tenants belonging to this landlord
@@ -678,7 +808,7 @@ app.get('/api/messages/recipients', async (req, res) => {
                     JOIN landlord_buildings lb ON r.building_id = lb.building_id
                     WHERE lb.landlord_id = ? AND u.status = '승인'
                     ORDER BY u.nickname
-                `;
+    `;
                 db.all(query, [user_id], (err, rows) => {
                     if (err) reject(err); else resolve(rows);
                 });
@@ -703,7 +833,7 @@ app.get('/api/messages/recipients', async (req, res) => {
                     if (err) reject(err); else resolve(rows);
                 });
             });
-            buildings.forEach(b => results.push({ type: 'building', id: b.id, nickname: `[건물 단체] ${b.name}` }));
+            buildings.forEach(b => results.push({ type: 'building', id: b.id, nickname: `[건물 단체] ${b.name} ` }));
 
         } else if (role === 'tenant') {
             // 1. Their Landlords
@@ -715,7 +845,7 @@ app.get('/api/messages/recipients', async (req, res) => {
                     JOIN room_tenant rt ON r.id = rt.room_id
                     WHERE rt.tenant_id = ? AND u.status = '승인'
                     ORDER BY u.nickname
-                `;
+    `;
                 db.all(query, [user_id], (err, rows) => {
                     if (err) reject(err); else resolve(rows);
                 });
@@ -742,10 +872,10 @@ app.get('/api/messages/recipients', async (req, res) => {
 function syncUserBuildingInfo(userId) {
     const query = `
         SELECT u.id, u.login_id, u.nickname, u.role, u.birth_date, u.phone_number,
-               b.name as building_name,
-               COALESCE(
-                   (SELECT r.room_number FROM contracts c JOIN rooms r ON c.room_id = r.id WHERE c.tenant_id = u.id ORDER BY c.id DESC LIMIT 1),
-                   r_rt.room_number
+    b.name as building_name,
+    COALESCE(
+        (SELECT r.room_number FROM contracts c JOIN rooms r ON c.room_id = r.id WHERE c.tenant_id = u.id ORDER BY c.id DESC LIMIT 1),
+    r_rt.room_number
                ) as room_number
         FROM users u
         LEFT JOIN room_tenant rt ON u.id = rt.tenant_id
@@ -760,8 +890,8 @@ function syncUserBuildingInfo(userId) {
         let description = user.description;
 
         if (user.role === 'tenant' && user.building_name) {
-            title = `${user.building_name} ${user.room_number || ''}`.trim();
-            description = `아이디: ${user.login_id}\n이름: ${user.nickname}\n생년월일: ${user.birth_date || '-'}\n전화번호: ${formatPhone(user.phone_number) || '-'}\n건물명: ${user.building_name}\n호수: ${user.room_number || '-'}`;
+            title = `${user.building_name} ${user.room_number || ''} `.trim();
+            description = `아이디: ${user.login_id} \n이름: ${user.nickname} \n생년월일: ${user.birth_date || '-'} \n전화번호: ${formatPhone(user.phone_number) || '-'} \n건물명: ${user.building_name} \n호수: ${user.room_number || '-'} `;
 
             db.run("UPDATE users SET title = ?, description = ? WHERE id = ?", [title, description, userId]);
         }
@@ -779,7 +909,7 @@ function formatPhone(val) {
     const part3 = num.slice(-4);
     const part2 = num.slice(-8, -4);
     const part1 = num.slice(0, -8);
-    return `${part1}-${part2}-${part3}`;
+    return `${part1} -${part2} -${part3} `;
 }
 
 // 1a. Signup API
@@ -798,7 +928,7 @@ app.post('/api/signup', (req, res) => {
             if (row) return res.status(400).json({ error: 'USER_EXISTS' });
 
             // Insert new user with '임시' status
-            db.run(`INSERT INTO users (login_id, password, nickname, birth_date, phone_number, role, approved, status) VALUES (?, ?, ?, ?, ?, ?, 0, '임시')`,
+            db.run(`INSERT INTO users(login_id, password, nickname, birth_date, phone_number, role, approved, status) VALUES(?, ?, ?, ?, ?, ?, 0, '임시')`,
                 [login_id, password, nickname, birth_date, cleanPhone, role],
                 async function (err) {
                     if (err) return res.status(500).json({ error: err.message });
@@ -806,7 +936,7 @@ app.post('/api/signup', (req, res) => {
 
                     // Save relationship to room if provided
                     if (role === 'tenant' && room_number) {
-                        db.run(`INSERT INTO room_tenant (room_id, tenant_id, start_date) VALUES (?, ?, date('now'))`,
+                        db.run(`INSERT INTO room_tenant(room_id, tenant_id, start_date) VALUES(?, ?, date('now'))`,
                             [room_number, newUserId], // room_number here actually contains room_id from frontend
                             (err) => {
                                 if (err) console.error('Error saving room relationship:', err.message);
@@ -838,19 +968,19 @@ app.post('/api/signup', (req, res) => {
                         if (roomRow) displayRoom = roomRow.room_number;
                     }
 
-                    const title = (role === 'tenant' && buildingName) ? `${buildingName} ${displayRoom}`.trim() : (role === 'landlord' ? '임대인 가입 신청' : '세입자 가입 신청');
-                    let content = `아이디: ${login_id}\n이름: ${nickname}\n생년월일: ${birth_date}\n전화번호: ${formatPhone(cleanPhone)}`;
+                    const title = (role === 'tenant' && buildingName) ? `${buildingName} ${displayRoom} `.trim() : (role === 'landlord' ? '임대인 가입 신청' : '세입자 가입 신청');
+                    let content = `아이디: ${login_id} \n이름: ${nickname} \n생년월일: ${birth_date} \n전화번호: ${formatPhone(cleanPhone)} `;
 
                     if (role === 'tenant' && building_id) {
-                        content += `\n건물명: ${buildingName}\n호수: ${displayRoom}`;
+                        content += `\n건물명: ${buildingName} \n호수: ${displayRoom} `;
                     }
 
                     // Update user with title and description
-                    db.run(`UPDATE users SET title = ?, description = ? WHERE id = ?`, [title, content, newUserId], (err) => {
+                    db.run(`UPDATE users SET title = ?, description = ? WHERE id = ? `, [title, content, newUserId], (err) => {
                         if (err) console.error('Error updating user title/description:', err.message);
 
                         // Admin Notification
-                        db.run(`INSERT INTO message_box (author_id, target, category, related_id, related_table, title) VALUES (?, ?, ?, ?, ?, ?)`,
+                        db.run(`INSERT INTO message_box(author_id, target, category, related_id, related_table, title) VALUES(?, ?, ?, ?, ?, ?)`,
                             [newUserId, 'direct', '가입신청', newUserId, 'users', title],
                             function (err) {
                                 if (err) {
@@ -860,7 +990,7 @@ app.post('/api/signup', (req, res) => {
                                 const boxId = this.lastID;
 
                                 // Insert initial message
-                                db.run(`INSERT INTO messages (message_box_id, sender_id, content) VALUES (?, ?, ?)`, [boxId, newUserId, content]);
+                                db.run(`INSERT INTO messages(message_box_id, sender_id, content) VALUES(?, ?, ?)`, [boxId, newUserId, content]);
 
                                 // Notify Admins
                                 db.all("SELECT id FROM users WHERE role = 'admin'", (err, admins) => {
@@ -873,7 +1003,7 @@ app.post('/api/signup', (req, res) => {
 
                                 // If tenant, also notify the landlord
                                 if (role === 'tenant' && building_id) {
-                                    db.all(`SELECT landlord_id FROM landlord_buildings WHERE building_id = ?`, [building_id], (err, landlords) => {
+                                    db.all(`SELECT landlord_id FROM landlord_buildings WHERE building_id = ? `, [building_id], (err, landlords) => {
                                         if (landlords) {
                                             landlords.forEach(l => {
                                                 db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, l.landlord_id]);
@@ -914,7 +1044,7 @@ app.post('/api/apply', (req, res) => {
         const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
         const proceedWithInsert = (finalId) => {
-            db.run(`INSERT INTO users (login_id, password, nickname, role, birth_date, phone_number, color, approved, status) VALUES (?, ?, ?, ?, ?, ?, ?, 0, '임시')`,
+            db.run(`INSERT INTO users(login_id, password, nickname, role, birth_date, phone_number, color, approved, status) VALUES(?, ?, ?, ?, ?, ?, ?, 0, '임시')`,
                 [finalId, password, name, 'tenant', birth, cleanPhone, randomColor],
                 function (err) {
                     if (err) {
@@ -932,7 +1062,7 @@ app.post('/api/apply', (req, res) => {
                             // Find first room in this building
                             db.get("SELECT id FROM rooms WHERE building_id = ? LIMIT 1", [bid], (err, r) => {
                                 if (r) {
-                                    db.run(`INSERT INTO room_tenant (room_id, tenant_id, start_date) VALUES (?, ?, date('now'))`,
+                                    db.run(`INSERT INTO room_tenant(room_id, tenant_id, start_date) VALUES(?, ?, date('now'))`,
                                         [r.id, newUserId],
                                         (err) => {
                                             if (err) console.error('Error saving relationship:', err.message);
@@ -955,10 +1085,10 @@ app.post('/api/apply', (req, res) => {
 
                     // Create Notification
                     const title = '방구해요 신청';
-                    const content = `방 구하는 사람 정보\n이름: ${name}\n생년월일: ${birth}\n연락처: ${formatPhone(cleanPhone)}\n메모: ${memo}`;
+                    const content = `방 구하는 사람 정보\n이름: ${name} \n생년월일: ${birth} \n연락처: ${formatPhone(cleanPhone)} \n메모: ${memo} `;
 
-                    db.run(`UPDATE users SET title = ?, description = ? WHERE id = ?`, [title, content, newUserId], (err) => {
-                        db.run(`INSERT INTO message_box (author_id, target, category, related_id, related_table, title) VALUES (?, ?, ?, ?, ?, ?)`,
+                    db.run(`UPDATE users SET title = ?, description = ? WHERE id = ? `, [title, content, newUserId], (err) => {
+                        db.run(`INSERT INTO message_box(author_id, target, category, related_id, related_table, title) VALUES(?, ?, ?, ?, ?, ?)`,
                             [newUserId, 'direct', '방있어요', newUserId, 'users', title],
                             function (err) {
                                 if (err) {
@@ -968,7 +1098,7 @@ app.post('/api/apply', (req, res) => {
                                 const boxId = this.lastID;
 
                                 // Insert initial message
-                                db.run(`INSERT INTO messages (message_box_id, sender_id, content) VALUES (?, ?, ?)`, [boxId, newUserId, content]);
+                                db.run(`INSERT INTO messages(message_box_id, sender_id, content) VALUES(?, ?, ?)`, [boxId, newUserId, content]);
 
                                 if (landlordId) {
                                     db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, landlordId]);
@@ -992,7 +1122,7 @@ app.post('/api/apply', (req, res) => {
 // 2. Profile API
 app.put('/api/profile/:id', upload.single('photo'), (req, res) => {
     const { login_id, password, nickname, color } = req.body;
-    const photo_path = req.file ? `/uploads/${req.file.filename}` : null;
+    const photo_path = req.file ? `/ uploads / ${req.file.filename} ` : null;
     const userId = req.params.id;
 
     // First check if login_id is changing and if it is available
@@ -1000,19 +1130,19 @@ app.put('/api/profile/:id', upload.single('photo'), (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         if (row) return res.status(400).json({ error: 'Login ID already taken' });
 
-        let query = `UPDATE users SET login_id = ?, nickname = ?, color = ?`;
+        let query = `UPDATE users SET login_id = ?, nickname = ?, color = ? `;
         let params = [login_id, nickname, color];
 
         if (password) {
-            query += `, password = ?`;
+            query += `, password = ? `;
             params.push(password);
         }
 
         if (photo_path) {
-            query += `, photo_path = ?`;
+            query += `, photo_path = ? `;
             params.push(photo_path);
         }
-        query += ` WHERE id = ?`;
+        query += ` WHERE id = ? `;
         params.push(userId);
 
         db.run(query, params, function (err) {
@@ -1098,24 +1228,24 @@ app.get('/api/landlord/:id/tenants', (req, res) => {
 app.get('/api/tenant/:id/billing', (req, res) => {
     const tenantId = req.params.id;
     const query = `
-        SELECT 
-            i.id as bill_id,
-            i.billing_month as bill_month,
-            i.amount as total_amount,
-            i.type as invoice_type,
-            c.contract_start_date,
-            c.payment_type,
-            p.id as payment_id,
-            p.amount as payment_amount,
-            p.paid_at,
-            p.memo,
-            pa.amount as matched_amount
+SELECT
+i.id as bill_id,
+    i.billing_month as bill_month,
+    i.amount as total_amount,
+    i.type as invoice_type,
+    c.contract_start_date,
+    c.payment_type,
+    p.id as payment_id,
+    p.amount as payment_amount,
+    p.paid_at,
+    p.memo,
+    pa.amount as matched_amount
         FROM invoices i
         JOIN contracts c ON i.contract_id = c.id
         LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
         LEFT JOIN payments p ON pa.payment_id = p.id
         WHERE c.tenant_id = ?
-        ORDER BY i.billing_month DESC, p.paid_at ASC
+    ORDER BY i.billing_month DESC, p.paid_at ASC
     `;
 
     db.all(query, [tenantId], (err, rows) => {
@@ -1155,7 +1285,7 @@ app.post('/api/payments', (req, res) => {
     const paidAt = paid_at || new Date().toISOString();
     const paymentType = type || 2; // Default to Rent(2)
 
-    db.run(`INSERT INTO payments (contract_id, amount, paid_at, memo, type) VALUES (?, ?, ?, ?, ?)`,
+    db.run(`INSERT INTO payments(contract_id, amount, paid_at, memo, type) VALUES(?, ?, ?, ?, ?)`,
         [contract_id, amount, paidAt, memo, paymentType],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -1168,7 +1298,7 @@ app.post('/api/payments', (req, res) => {
 app.post('/api/match-payment', (req, res) => {
     const { invoice_id, payment_id, matched_amount } = req.body;
 
-    db.run(`INSERT INTO payment_allocation (invoice_id, payment_id, amount) VALUES (?, ?, ?)`,
+    db.run(`INSERT INTO payment_allocation(invoice_id, payment_id, amount) VALUES(?, ?, ?)`,
         [invoice_id, payment_id, matched_amount],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -1181,13 +1311,13 @@ app.post('/api/match-payment', (req, res) => {
 app.get('/api/contract/:id/unmatched-payments', (req, res) => {
     const contractId = req.params.id;
     const query = `
-        SELECT p.*, 
-            COALESCE(SUM(pa.amount), 0) as total_matched,
-            (p.amount - COALESCE(SUM(pa.amount), 0)) as remaining_amount
+        SELECT p.*,
+    COALESCE(SUM(pa.amount), 0) as total_matched,
+    (p.amount - COALESCE(SUM(pa.amount), 0)) as remaining_amount
         FROM payments p
         LEFT JOIN payment_allocation pa ON p.id = pa.payment_id
         WHERE p.contract_id = ?
-        GROUP BY p.id
+    GROUP BY p.id
         HAVING remaining_amount > 0
         ORDER BY p.paid_at ASC
     `;
@@ -1203,8 +1333,8 @@ app.get('/api/contracts/:id', (req, res) => {
     const contractId = req.params.id;
     const query = `
         SELECT c.*, r.room_number, b.name as building, b.id as building_id,
-            u1.nickname as tenant_nickname, u1.color as tenant_color, u1.phone_number as tenant_phone, u1.birth_date as tenant_dob,
-            u2.nickname as landlord_nickname, lb.landlord_id
+    u1.nickname as tenant_nickname, u1.color as tenant_color, u1.phone_number as tenant_phone, u1.birth_date as tenant_dob,
+    u2.nickname as landlord_nickname, lb.landlord_id
         FROM contracts c
         JOIN rooms r ON c.room_id = r.id
         JOIN buildings b ON r.building_id = b.id
@@ -1226,7 +1356,7 @@ app.get('/api/contract/:id/full-details', (req, res) => {
     const contractId = req.params.id;
     const query = `
         SELECT c.*, r.room_number, b.name as building, b.id as building_id,
-            u1.nickname as tenant_name, u1.birth_date, u1.phone_number, u1.id as tenant_id
+    u1.nickname as tenant_name, u1.birth_date, u1.phone_number, u1.id as tenant_id
         FROM contracts c
         JOIN rooms r ON c.room_id = r.id
         JOIN buildings b ON r.building_id = b.id
@@ -1243,21 +1373,21 @@ app.get('/api/contract/:id/full-details', (req, res) => {
 app.get('/api/tenant/:id/calendar-data', (req, res) => {
     const tenantId = req.params.id;
     const query = `
-        SELECT 
-            c.id as contract_id,
-            c.contract_start_date,
-            c.contract_end_date,
-            c.payment_type,
-            i.id as bill_id,
-            i.billing_month as bill_month,
-            i.amount as total_amount,
-            i.type as invoice_type,
-            COALESCE(SUM(pa.amount), 0) as paid_amount
+        SELECT
+c.id as contract_id,
+    c.contract_start_date,
+    c.contract_end_date,
+    c.payment_type,
+    i.id as bill_id,
+    i.billing_month as bill_month,
+    i.amount as total_amount,
+    i.type as invoice_type,
+    COALESCE(SUM(pa.amount), 0) as paid_amount
         FROM contracts c
         LEFT JOIN invoices i ON c.id = i.contract_id
         LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
         WHERE c.tenant_id = ?
-        GROUP BY c.id, i.id
+    GROUP BY c.id, i.id
         ORDER BY i.billing_month ASC
     `;
 
@@ -1271,19 +1401,19 @@ app.get('/api/tenant/:id/calendar-data', (req, res) => {
 app.get('/api/landlord/:id/calendar-data', (req, res) => {
     const landlordId = req.params.id;
     const query = `
-        SELECT 
-            c.id as contract_id,
-            c.tenant_id,
-            c.contract_start_date,
-            c.contract_end_date,
-            c.payment_type,
-            u.nickname as tenant_nickname,
-            u.color as tenant_color,
-            i.id as bill_id,
-            i.billing_month as bill_month,
-            i.amount as total_amount,
-            i.type as invoice_type,
-            COALESCE(SUM(pa.amount), 0) as paid_amount
+SELECT
+c.id as contract_id,
+    c.tenant_id,
+    c.contract_start_date,
+    c.contract_end_date,
+    c.payment_type,
+    u.nickname as tenant_nickname,
+    u.color as tenant_color,
+    i.id as bill_id,
+    i.billing_month as bill_month,
+    i.amount as total_amount,
+    i.type as invoice_type,
+    COALESCE(SUM(pa.amount), 0) as paid_amount
         FROM contracts c
         JOIN rooms r ON c.room_id = r.id
         JOIN buildings b ON r.building_id = b.id
@@ -1292,7 +1422,7 @@ app.get('/api/landlord/:id/calendar-data', (req, res) => {
         LEFT JOIN invoices i ON c.id = i.contract_id
         LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
         WHERE lb.landlord_id = ?
-        GROUP BY c.id, u.id, i.id
+    GROUP BY c.id, u.id, i.id
         ORDER BY i.billing_month ASC
     `;
 
@@ -1307,28 +1437,28 @@ app.get('/api/payments/ledger', (req, res) => {
     const { landlord_id, building_id, tenant_id, role, user_id } = req.query;
 
     let query = `
-        SELECT 
-            l.nickname as landlord_name,
-            l.id as landlord_id,
-            t.nickname as tenant_name,
-            t.id as tenant_id,
-            (SELECT GROUP_CONCAT(keyword, ', ') FROM contract_keywords WHERE contract_id = c.id) as keywords,
-            b.name as building_name,
-            b.id as building_id,
-            c.id as contract_id,
-            c.contract_start_date,
-            c.payment_type,
-            c.deposit,
-            c.monthly_rent,
-            c.maintenance_fee,
-            r.room_number,
-            i.id as invoice_id,
-            i.billing_month as bill_month,
-            i.amount as due_amount,
-            i.type as invoice_type,
-            i.status as invoice_status,
-            COALESCE(SUM(pa.amount), 0) as paid_amount,
-            MAX(p.paid_at) as last_paid_date
+SELECT
+l.nickname as landlord_name,
+    l.id as landlord_id,
+    t.nickname as tenant_name,
+    t.id as tenant_id,
+    (SELECT GROUP_CONCAT(keyword, ', ') FROM contract_keywords WHERE contract_id = c.id) as keywords,
+        b.name as building_name,
+        b.id as building_id,
+        c.id as contract_id,
+        c.contract_start_date,
+        c.payment_type,
+        c.deposit,
+        c.monthly_rent,
+        c.maintenance_fee,
+        r.room_number,
+        i.id as invoice_id,
+        i.billing_month as bill_month,
+        i.amount as due_amount,
+        i.type as invoice_type,
+        i.status as invoice_status,
+        COALESCE(SUM(pa.amount), 0) as paid_amount,
+        MAX(p.paid_at) as last_paid_date
         FROM contracts c
         JOIN rooms r ON c.room_id = r.id
         JOIN buildings b ON r.building_id = b.id
@@ -1338,7 +1468,7 @@ app.get('/api/payments/ledger', (req, res) => {
         LEFT JOIN invoices i ON c.id = i.contract_id
         LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
         LEFT JOIN payments p ON pa.payment_id = p.id
-        WHERE 1=1 
+        WHERE 1 = 1
     `;
 
     const params = [];
@@ -1347,29 +1477,29 @@ app.get('/api/payments/ledger', (req, res) => {
     query += ` AND t.status != '종료'`;
 
     if (role === 'landlord') {
-        query += ` AND lb.landlord_id = ?`;
+        query += ` AND lb.landlord_id = ? `;
         params.push(user_id);
     } else if (role === 'tenant') {
-        query += ` AND c.tenant_id = ?`;
+        query += ` AND c.tenant_id = ? `;
         params.push(user_id);
     }
 
     if (landlord_id && landlord_id !== 'all') {
-        query += ` AND lb.landlord_id = ?`;
+        query += ` AND lb.landlord_id = ? `;
         params.push(landlord_id);
     }
     if (building_id && building_id !== 'all') {
-        query += ` AND b.id = ?`;
+        query += ` AND b.id = ? `;
         params.push(building_id);
     }
     if (tenant_id && tenant_id !== 'all') {
-        query += ` AND c.tenant_id = ?`;
+        query += ` AND c.tenant_id = ? `;
         params.push(tenant_id);
     }
 
     query += ` 
-        GROUP BY 
-            l.id, t.id, b.id, c.id, i.id
+        GROUP BY
+l.id, t.id, b.id, c.id, i.id
         ORDER BY i.billing_month DESC`;
 
     db.all(query, params, (err, rows) => {
@@ -1388,7 +1518,7 @@ app.post('/api/invoices/adjust-date', (req, res) => {
     const { invoice_id, new_month, adjustment_type } = req.body;
 
     if (adjustment_type === 'single') {
-        db.run(`UPDATE invoices SET billing_month = ? WHERE id = ?`,
+        db.run(`UPDATE invoices SET billing_month = ? WHERE id = ? `,
             [new_month, invoice_id],
             function (err) {
                 if (err) return res.status(500).json({ error: err.message });
@@ -1396,7 +1526,7 @@ app.post('/api/invoices/adjust-date', (req, res) => {
             }
         );
     } else {
-        db.get(`SELECT contract_id, billing_month FROM invoices WHERE id = ?`, [invoice_id], (err, inv) => {
+        db.get(`SELECT contract_id, billing_month FROM invoices WHERE id = ? `, [invoice_id], (err, inv) => {
             if (err) return res.status(500).json({ error: err.message });
 
             const direction = adjustment_type === 'shift_forward' ? -1 : 1;
@@ -1404,7 +1534,7 @@ app.post('/api/invoices/adjust-date', (req, res) => {
                 UPDATE invoices 
                 SET billing_month = date(billing_month || '-01', '${direction} month')
                 WHERE contract_id = ? AND billing_month >= ?
-            `;
+    `;
 
             db.run(query, [inv.contract_id, inv.billing_month], function (err) {
                 if (err) return res.status(500).json({ error: err.message });
@@ -1420,7 +1550,7 @@ app.get('/api/landlord/:id/contracts/active', (req, res) => {
     const { role } = req.query;
     let query = `
         SELECT c.*, r.room_number, b.name as building, u.nickname, u.color,
-               (SELECT GROUP_CONCAT(keyword, ', ') FROM contract_keywords WHERE contract_id = c.id) as keywords_str
+    (SELECT GROUP_CONCAT(keyword, ', ') FROM contract_keywords WHERE contract_id = c.id) as keywords_str
         FROM contracts c
         JOIN rooms r ON c.room_id = r.id
         JOIN buildings b ON r.building_id = b.id
@@ -1448,14 +1578,14 @@ app.get('/api/tenants/active-list', (req, res) => {
 
     let query = `
         SELECT u.id as user_id, u.nickname, u.color, u.phone_number, u.birth_date, u.status,
-               c.id as contract_id, 
-               COALESCE(b.name, b_bt.name) as building, 
-               COALESCE(b.id, b_bt.id) as building_id, 
-               COALESCE(r.room_number, r_rt.room_number) as room_number, 
-               COALESCE(r.id, r_rt.id) as room_id, 
-               c.contract_start_date, c.contract_end_date,
-               c.deposit, c.monthly_rent as rent, c.maintenance_fee, lb.landlord_id,
-               (SELECT GROUP_CONCAT(keyword, ', ') FROM contract_keywords WHERE contract_id = c.id) as keywords_str
+    c.id as contract_id,
+    COALESCE(b.name, b_bt.name) as building,
+    COALESCE(b.id, b_bt.id) as building_id,
+    COALESCE(r.room_number, r_rt.room_number) as room_number,
+    COALESCE(r.id, r_rt.id) as room_id,
+    c.contract_start_date, c.contract_end_date,
+    c.deposit, c.monthly_rent as rent, c.maintenance_fee, lb.landlord_id,
+    (SELECT GROUP_CONCAT(keyword, ', ') FROM contract_keywords WHERE contract_id = c.id) as keywords_str
         FROM users u
         LEFT JOIN contracts c ON u.id = c.tenant_id
         LEFT JOIN rooms r ON c.room_id = r.id
@@ -1473,7 +1603,7 @@ app.get('/api/tenants/active-list', (req, res) => {
     }
 
     if (role === 'landlord') {
-        query += ` AND (lb.landlord_id = ? OR EXISTS (SELECT 1 FROM room_tenant rt JOIN rooms r ON rt.room_id = r.id JOIN landlord_buildings elb ON r.building_id = elb.building_id WHERE elb.landlord_id = ? AND rt.tenant_id = u.id))`;
+        query += ` AND(lb.landlord_id = ? OR EXISTS(SELECT 1 FROM room_tenant rt JOIN rooms r ON rt.room_id = r.id JOIN landlord_buildings elb ON r.building_id = elb.building_id WHERE elb.landlord_id = ? AND rt.tenant_id = u.id))`;
         params.push(user_id, user_id);
     }
 
@@ -1493,7 +1623,7 @@ app.post('/api/contracts/:id/keyword', (req, res) => {
     const contractId = parseInt(req.params.id);
     const { keywords } = req.body;
 
-    console.log(`[DEBUG] Received keyword update request for Contract ID ${contractId}:`, keywords);
+    console.log(`[DEBUG] Received keyword update request for Contract ID ${contractId}: `, keywords);
 
     if (!Array.isArray(keywords)) {
         return res.status(400).json({ error: 'Keywords must be an array' });
@@ -1509,7 +1639,7 @@ app.post('/api/contracts/:id/keyword', (req, res) => {
 
         db.run("DELETE FROM contract_keywords WHERE contract_id = ?", [contractId], (err) => {
             if (err) {
-                console.error(`[ERROR] Delete failed for contract ${contractId}:`, err.message);
+                console.error(`[ERROR] Delete failed for contract ${contractId}: `, err.message);
                 db.run("ROLLBACK");
                 return res.status(500).json({ error: err.message });
             }
@@ -1528,7 +1658,7 @@ app.post('/api/contracts/:id/keyword', (req, res) => {
                     if (err) {
                         hasError = true;
                         db.run("ROLLBACK");
-                        console.error(`[ERROR] Insert failed for contract ${contractId}, keyword "${k}":`, err.message);
+                        console.error(`[ERROR] Insert failed for contract ${contractId}, keyword "${k}": `, err.message);
                         return res.status(500).json({ error: err.message });
                     }
                     completed++;
@@ -1557,7 +1687,7 @@ app.post('/api/payments/batch', (req, res) => {
         flatParams.push(p.contract_id, p.amount, p.paid_at, p.memo, p.type || 2);
     });
 
-    const query = `INSERT INTO payments (contract_id, amount, paid_at, memo, type) VALUES ${placeholder}`;
+    const query = `INSERT INTO payments(contract_id, amount, paid_at, memo, type) VALUES ${placeholder} `;
 
     db.run(query, flatParams, function (err) {
         if (err) return res.status(500).json({ error: err.message });
@@ -1581,7 +1711,7 @@ app.post('/api/payments/allocate', (req, res) => {
         const mainType = allocations.length > 0 ? allocations[0].type : 'monthly_rent';
 
         db.run(
-            `INSERT INTO payments (contract_id, amount, paid_at, memo, type) VALUES (?, ?, ?, ?, ?)`,
+            `INSERT INTO payments(contract_id, amount, paid_at, memo, type) VALUES(?, ?, ?, ?, ?)`,
             [contract_id, amount, paid_at, memo, mainType],
             function (err) {
                 if (err) {
@@ -1604,13 +1734,13 @@ app.post('/api/payments/allocate', (req, res) => {
                     const updateInvoiceStatus = (invId) => {
                         // Check total amount paid for this invoice
                         const statusQuery = `
-                            SELECT 
-                                i.amount as due,
-                                COALESCE(SUM(pa.amount), 0) as paid
+SELECT
+i.amount as due,
+    COALESCE(SUM(pa.amount), 0) as paid
                             FROM invoices i
                             LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
                             WHERE i.id = ?
-                        `;
+    `;
                         db.get(statusQuery, [invId], (err, row) => {
                             if (err || !row) return;
                             const newStatus = (row.paid >= row.due) ? '완납' : '부분납부';
@@ -1620,7 +1750,7 @@ app.post('/api/payments/allocate', (req, res) => {
 
                     const proceedWithAllocation = (invoiceId) => {
                         db.run(
-                            `INSERT INTO payment_allocation (payment_id, invoice_id, amount) VALUES (?, ?, ?)`,
+                            `INSERT INTO payment_allocation(payment_id, invoice_id, amount) VALUES(?, ?, ?)`,
                             [paymentId, invoiceId, alloc.amount],
                             (err) => {
                                 if (err) {
@@ -1647,7 +1777,7 @@ app.post('/api/payments/allocate', (req, res) => {
                         const initialStatus = (alloc.amount >= dueAmount) ? '완납' : '부분납부';
 
                         db.run(
-                            `INSERT INTO invoices (contract_id, type, billing_month, amount, status, due_date) VALUES (?, ?, ?, ?, ?, ?)`,
+                            `INSERT INTO invoices(contract_id, type, billing_month, amount, status, due_date) VALUES(?, ?, ?, ?, ?, ?)`,
                             [contract_id, alloc.type, alloc.bill_month, dueAmount, initialStatus, alloc.due_date],
                             function (err) {
                                 if (err) {
@@ -1732,8 +1862,8 @@ app.get('/api/landlord/:id/buildings', (req, res) => {
         JOIN landlord_buildings lb ON b.id = lb.building_id
         LEFT JOIN building_addresses ba ON b.id = ba.building_id
         WHERE lb.landlord_id = ?
-        GROUP BY b.id
-    `;
+    GROUP BY b.id
+        `;
     db.all(query, [landlordId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         rows.forEach(row => {
@@ -1758,11 +1888,11 @@ app.get('/api/tenant/:id/buildings', (req, res) => {
         SELECT b.*, GROUP_CONCAT(ba.address, '|||') as addresses
         FROM buildings b
         LEFT JOIN building_addresses ba ON b.id = ba.building_id
-        WHERE b.id IN (
+        WHERE b.id IN(
             SELECT r.building_id FROM rooms r JOIN room_tenant rt ON r.id = rt.room_id WHERE rt.tenant_id = ?
-            UNION
+                UNION
             SELECT r.building_id FROM rooms r JOIN contracts c ON r.id = c.room_id 
-            WHERE c.tenant_id = ? AND (c.contract_end_date IS NULL OR c.contract_end_date >= date('now'))
+            WHERE c.tenant_id = ? AND(c.contract_end_date IS NULL OR c.contract_end_date >= date('now'))
         )
         GROUP BY b.id
     `;
@@ -1793,7 +1923,7 @@ app.post('/api/buildings', (req, res) => {
         db.run('BEGIN TRANSACTION');
 
         // Removed address1, address2
-        const insertQuery = `INSERT INTO buildings (name, memo) VALUES (?, ?)`;
+        const insertQuery = `INSERT INTO buildings(name, memo) VALUES(?, ?)`;
         db.run(insertQuery, [name, memo || ''], function (err) {
             if (err) {
                 db.run('ROLLBACK');
@@ -1817,7 +1947,7 @@ app.post('/api/buildings', (req, res) => {
 
             Promise.all(addressPromises)
                 .then(() => {
-                    db.run(`INSERT INTO landlord_buildings (landlord_id, building_id) VALUES (?, ?)`,
+                    db.run(`INSERT INTO landlord_buildings(landlord_id, building_id) VALUES(?, ?)`,
                         [landlord_id, buildingId],
                         function (err) {
                             if (err) {
@@ -1847,7 +1977,7 @@ app.put('/api/buildings/:id', (req, res) => {
         db.run('BEGIN TRANSACTION');
 
         db.run(
-            `UPDATE buildings SET name = ?, memo = ? WHERE id = ?`,
+            `UPDATE buildings SET name = ?, memo = ? WHERE id = ? `,
             [name, memo, buildingId],
             function (err) {
                 if (err) {
@@ -1927,8 +2057,8 @@ app.delete('/api/buildings/:id', (req, res) => {
 app.get('/api/buildings/:id/rooms', (req, res) => {
     const buildingId = req.params.id;
     const query = `
-        SELECT r.*, 
-        (SELECT u.nickname 
+        SELECT r.*,
+    (SELECT u.nickname 
          FROM contracts c 
          JOIN users u ON c.tenant_id = u.id 
          WHERE c.room_id = r.id
@@ -1945,7 +2075,7 @@ app.get('/api/buildings/:id/rooms', (req, res) => {
 // 17a. Get Building's Addresses
 app.get('/api/buildings/:id/addresses', (req, res) => {
     const buildingId = req.params.id;
-    db.all(`SELECT * FROM building_addresses WHERE building_id = ?`, [buildingId], (err, rows) => {
+    db.all(`SELECT * FROM building_addresses WHERE building_id = ? `, [buildingId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
     });
@@ -1957,7 +2087,7 @@ app.get('/api/buildings/:id/addresses', (req, res) => {
 app.post('/api/buildings/:id/addresses', (req, res) => {
     const buildingId = req.params.id;
     const { address } = req.body;
-    db.run(`INSERT INTO building_addresses (building_id, address) VALUES (?, ?)`,
+    db.run(`INSERT INTO building_addresses(building_id, address) VALUES(?, ?)`,
         [buildingId, address],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -1969,7 +2099,7 @@ app.post('/api/buildings/:id/addresses', (req, res) => {
 // 17c. Delete Building Address
 app.delete('/api/addresses/:id', (req, res) => {
     const addressId = req.params.id;
-    db.run(`DELETE FROM building_addresses WHERE id = ?`, [addressId], function (err) {
+    db.run(`DELETE FROM building_addresses WHERE id = ? `, [addressId], function (err) {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: 'Address deleted' });
     });
@@ -1978,7 +2108,7 @@ app.delete('/api/addresses/:id', (req, res) => {
 // 17d. Delete All Addresses for Building
 app.delete('/api/buildings/:id/addresses', (req, res) => {
     const buildingId = req.params.id;
-    db.run(`DELETE FROM building_addresses WHERE building_id = ?`, [buildingId], function (err) {
+    db.run(`DELETE FROM building_addresses WHERE building_id = ? `, [buildingId], function (err) {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: 'All addresses deleted for building' });
     });
@@ -1987,7 +2117,7 @@ app.delete('/api/buildings/:id/addresses', (req, res) => {
 // 18. Create Room
 app.post('/api/rooms', (req, res) => {
     const { building_id, room_number, memo, building, floor, unit } = req.body;
-    db.run(`INSERT INTO rooms (building_id, room_number, memo, building, floor, unit) VALUES (?, ?, ?, ?, ?, ?)`,
+    db.run(`INSERT INTO rooms(building_id, room_number, memo, building, floor, unit) VALUES(?, ?, ?, ?, ?, ?)`,
         [building_id, room_number, memo, building, floor, unit],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -1999,10 +2129,10 @@ app.post('/api/rooms', (req, res) => {
 // 18a. Update Room
 // 18a. Update Room
 app.put('/api/rooms/:id', (req, res) => {
-    console.log(`PUT /api/rooms/${req.params.id} called with body:`, req.body);
+    console.log(`PUT / api / rooms / ${req.params.id} called with body: `, req.body);
     const roomId = req.params.id;
     const { room_number, memo, building, floor, unit } = req.body;
-    db.run(`UPDATE rooms SET room_number = ?, memo = ?, building = ?, floor = ?, unit = ? WHERE id = ?`,
+    db.run(`UPDATE rooms SET room_number = ?, memo = ?, building = ?, floor = ?, unit = ? WHERE id = ? `,
         [room_number, memo, building, floor, unit, roomId],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -2016,11 +2146,11 @@ app.put('/api/rooms/:id', (req, res) => {
 app.post('/api/users/find', (req, res) => {
     const { birth_date, name, role } = req.body;
     let query = `
-        SELECT u.*, 
-               COALESCE(r.id, r_c.id) as room_id, 
-               COALESCE(r.room_number, r_c.room_number) as room_number, 
-               COALESCE(r.building_id, r_c.building_id) as building_id, 
-               COALESCE(b.name, b_c.name) as building_name
+        SELECT u.*,
+    COALESCE(r.id, r_c.id) as room_id,
+    COALESCE(r.room_number, r_c.room_number) as room_number,
+    COALESCE(r.building_id, r_c.building_id) as building_id,
+    COALESCE(b.name, b_c.name) as building_name
         FROM users u
         LEFT JOIN room_tenant rt ON u.id = rt.tenant_id
         LEFT JOIN rooms r ON rt.room_id = r.id
@@ -2081,7 +2211,7 @@ app.post('/api/users/quick', (req, res) => {
             }
 
             if (updateFields.length > 0) {
-                const updateQuery = `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`;
+                const updateQuery = `UPDATE users SET ${updateFields.join(', ')} WHERE id = ? `;
                 updateParams.push(targetId);
 
                 db.run(updateQuery, updateParams, function (err) {
@@ -2099,7 +2229,7 @@ app.post('/api/users/quick', (req, res) => {
             // Failsafe: Ensure login_id exists
             const finalLoginId = login_id || (nickname + (birth_date ? birth_date.replace(/-/g, '').slice(2) : Math.floor(Math.random() * 10000)));
 
-            db.run(`INSERT INTO users (login_id, password, nickname, role, color, birth_date, phone_number, approved, status) VALUES (?, ?, ?, ?, ?, ?, ?, 1, '승인')`,
+            db.run(`INSERT INTO users(login_id, password, nickname, role, color, birth_date, phone_number, approved, status) VALUES(?, ?, ?, ?, ?, ?, ?, 1, '승인')`,
                 [finalLoginId, password || '1234', nickname, role, randomColor, birth_date, cleanPhone],
                 async function (err) {
                     if (err) return res.status(500).json({ error: err.message });
@@ -2110,7 +2240,7 @@ app.post('/api/users/quick', (req, res) => {
                         // Find first room in building
                         db.get("SELECT id FROM rooms WHERE building_id = ? LIMIT 1", [building_id], (err, r) => {
                             if (r) {
-                                db.run(`INSERT INTO room_tenant (room_id, tenant_id, start_date) VALUES (?, ?, date('now'))`,
+                                db.run(`INSERT INTO room_tenant(room_id, tenant_id, start_date) VALUES(?, ?, date('now'))`,
                                     [r.id, newUserId],
                                     (err) => {
                                         if (err) console.error('Error saving quick user room relationship:', err.message);
@@ -2144,15 +2274,15 @@ app.post('/api/users/quick', (req, res) => {
 
                     await getBuildingInfo();
 
-                    const titleText = (role === 'tenant' && buildingName) ? `${buildingName} ${roomNumber || ''}`.trim() : (role === 'landlord' ? '임대인 등록 완료' : '세입자 등록 완료');
-                    let content = `아이디: ${login_id}\n이름: ${nickname}\n생년월일: ${birth_date}\n전화번호: ${formatPhone(cleanPhone)}`;
+                    const titleText = (role === 'tenant' && buildingName) ? `${buildingName} ${roomNumber || ''} `.trim() : (role === 'landlord' ? '임대인 등록 완료' : '세입자 등록 완료');
+                    let content = `아이디: ${login_id} \n이름: ${nickname} \n생년월일: ${birth_date} \n전화번호: ${formatPhone(cleanPhone)} `;
 
                     if (role === 'tenant' && buildingName) {
-                        content += `\n건물명: ${buildingName}\n호수: ${roomNumber || '-'}`;
+                        content += `\n건물명: ${buildingName} \n호수: ${roomNumber || '-'} `;
                     }
 
-                    db.run(`UPDATE users SET title = ?, description = ? WHERE id = ?`, [titleText, content, newUserId], (err) => {
-                        db.run(`INSERT INTO message_box (author_id, target, category, related_id, related_table, title) VALUES (?, ?, ?, ?, ?, ?)`,
+                    db.run(`UPDATE users SET title = ?, description = ? WHERE id = ? `, [titleText, content, newUserId], (err) => {
+                        db.run(`INSERT INTO message_box(author_id, target, category, related_id, related_table, title) VALUES(?, ?, ?, ?, ?, ?)`,
                             [newUserId, 'direct', '시스템', newUserId, 'users', titleText],
                             function (err) {
                                 if (err) {
@@ -2161,7 +2291,7 @@ app.post('/api/users/quick', (req, res) => {
                                     const boxId = this.lastID;
 
                                     // Insert initial message
-                                    db.run(`INSERT INTO messages (message_box_id, sender_id, content) VALUES (?, ?, ?)`, [boxId, newUserId, content]);
+                                    db.run(`INSERT INTO messages(message_box_id, sender_id, content) VALUES(?, ?, ?)`, [boxId, newUserId, content]);
 
                                     // Auto-send to the user themselves
                                     db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, newUserId]);
@@ -2203,13 +2333,13 @@ app.get('/api/tenants/search', (req, res) => {
     const params = [];
 
     if (landlord_id) {
-        query += ` AND lb.landlord_id = ?`;
+        query += ` AND lb.landlord_id = ? `;
         params.push(landlord_id);
     }
 
     if (keyword) {
-        query += ` AND (u.nickname LIKE ? OR c.keyword LIKE ?)`;
-        const likeKey = `%${keyword}%`;
+        query += ` AND(u.nickname LIKE ? OR c.keyword LIKE ?)`;
+        const likeKey = `% ${keyword}% `;
         params.push(likeKey, likeKey);
     }
 
@@ -2228,7 +2358,7 @@ app.post('/api/contracts/:id/terminate', (req, res) => {
 
     db.serialize(() => {
         db.run('BEGIN TRANSACTION');
-        db.run(`UPDATE contracts SET move_out_date = ?, contract_end_date = ? WHERE id = ?`, [end_date, end_date, contractId], function (err) {
+        db.run(`UPDATE contracts SET move_out_date = ?, contract_end_date = ? WHERE id = ? `, [end_date, end_date, contractId], function (err) {
             if (err) {
                 db.run('ROLLBACK');
                 return res.status(500).json({ error: err.message });
@@ -2254,11 +2384,11 @@ app.post('/api/contracts/full', (req, res) => {
     } = req.body;
 
     const query = `
-        INSERT INTO contracts (
-            tenant_id, payment_type, contract_start_date, contract_end_date,
-            deposit, monthly_rent, maintenance_fee, cleaning_fee, room_id, landlord_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
+        INSERT INTO contracts(
+        tenant_id, payment_type, contract_start_date, contract_end_date,
+        deposit, monthly_rent, maintenance_fee, cleaning_fee, room_id, landlord_id
+    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
 
     db.run(query, [
         tenant_id, payment_type, contract_start_date, contract_end_date,
@@ -2282,11 +2412,11 @@ app.put('/api/contracts/:id', (req, res) => {
     } = req.body;
 
     const query = `
-        UPDATE contracts SET 
-            tenant_id = ?, payment_type = ?, contract_start_date = ?, contract_end_date = ?,
-            deposit = ?, monthly_rent = ?, maintenance_fee = ?, cleaning_fee = ?, room_id = ?
+        UPDATE contracts SET
+tenant_id = ?, payment_type = ?, contract_start_date = ?, contract_end_date = ?,
+    deposit = ?, monthly_rent = ?, maintenance_fee = ?, cleaning_fee = ?, room_id = ?
         WHERE id = ?
-    `;
+            `;
 
     db.run(query, [
         tenant_id, payment_type, contract_start_date, contract_end_date,
@@ -2304,22 +2434,22 @@ app.get('/api/buildings/:id/rooms-with-events', (req, res) => {
     const search = req.query.q || '';
 
     let query = `
-        SELECT r.*, 
-        (SELECT re.memo 
+        SELECT r.*,
+    (SELECT re.memo 
          FROM room_events re 
-         WHERE re.room_id = r.id 
-         AND (re.memo LIKE ? OR ? = '')
+         WHERE re.room_id = r.id
+AND(re.memo LIKE ? OR ? = '')
          ORDER BY re.event_date DESC, re.id DESC LIMIT 1) as latest_event,
-        (SELECT re.event_date 
+    (SELECT re.event_date 
          FROM room_events re 
-         WHERE re.room_id = r.id 
-         AND (re.memo LIKE ? OR ? = '')
+         WHERE re.room_id = r.id
+AND(re.memo LIKE ? OR ? = '')
          ORDER BY re.event_date DESC, re.id DESC LIMIT 1) as latest_event_date
         FROM rooms r
         WHERE r.building_id = ?
     `;
 
-    const searchQuery = `%${search}%`;
+    const searchQuery = `% ${search}% `;
     db.all(query, [searchQuery, search, searchQuery, search, buildingId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
@@ -2330,9 +2460,9 @@ app.get('/api/buildings/:id/rooms-with-events', (req, res) => {
 app.get('/api/rooms/:id/events', (req, res) => {
     const roomId = req.params.id;
     const query = `
-        SELECT * FROM room_events 
-        WHERE room_id = ? 
-        ORDER BY event_date DESC, id DESC
+SELECT * FROM room_events 
+        WHERE room_id = ?
+    ORDER BY event_date DESC, id DESC
     `;
     db.all(query, [roomId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -2343,7 +2473,7 @@ app.get('/api/rooms/:id/events', (req, res) => {
 app.post('/api/rooms/:id/events', (req, res) => {
     const roomId = req.params.id;
     const { event_date, memo } = req.body;
-    db.run(`INSERT INTO room_events (room_id, event_date, memo) VALUES (?, ?, ?)`,
+    db.run(`INSERT INTO room_events(room_id, event_date, memo) VALUES(?, ?, ?)`,
         [roomId, event_date, memo],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -2356,7 +2486,7 @@ app.post('/api/rooms/:id/events', (req, res) => {
 app.put('/api/room-events/:id', (req, res) => {
     const eventId = req.params.id;
     const { event_date, memo } = req.body;
-    db.run(`UPDATE room_events SET event_date = ?, memo = ? WHERE id = ?`,
+    db.run(`UPDATE room_events SET event_date = ?, memo = ? WHERE id = ? `,
         [event_date, memo, eventId],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -2372,14 +2502,14 @@ app.get('/api/notices', (req, res) => {
     let params = [];
 
     const baseFields = `
-        mb.*, 
-        COALESCE(mb.title, a.title, i.title, u_rel.title, '알림') as title,
-        msg.content as content,
-        COALESCE(a.status, i.status, u_rel.status, '-') as related_status,
-        u.nickname, u.status as user_status,
-        (SELECT COUNT(*) FROM message_recipient WHERE message_id = mb.id AND recipient_id != mb.author_id) as total_cnt,
+        mb.*,
+    COALESCE(mb.title, a.title, i.title, u_rel.title, '알림') as title,
+    msg.content as content,
+    COALESCE(a.status, i.status, u_rel.status, '-') as related_status,
+    u.nickname, u.status as user_status,
+    (SELECT COUNT(*) FROM message_recipient WHERE message_id = mb.id AND recipient_id != mb.author_id) as total_cnt,
         (SELECT COUNT(*) FROM message_recipient WHERE message_id = mb.id AND read_at IS NOT NULL AND recipient_id != mb.author_id) as read_cnt
-    `;
+            `;
 
     const joinClause = `
         LEFT JOIN messages msg ON mb.message_id = msg.id
@@ -2396,18 +2526,18 @@ app.get('/api/notices', (req, res) => {
             FROM message_box mb
             ${joinClause}
             ORDER BY mb.created_at DESC
-        `;
+    `;
     } else {
         query = `
             SELECT DISTINCT ${baseFields}
             FROM message_box mb
             ${joinClause}
-            WHERE (
-                mb.author_id = ? 
-                OR mr.recipient_id = ?
+WHERE(
+    mb.author_id = ?
+        OR mr.recipient_id = ?
             )
             ORDER BY mb.created_at DESC
-        `;
+    `;
         params = [user_id, user_id];
     }
 
@@ -2442,11 +2572,11 @@ app.get('/api/message-recipients/:id', (req, res) => {
 app.get('/api/notices/:id', (req, res) => {
     const id = req.params.id;
     const query = `
-        SELECT mb.*, 
-        COALESCE(mb.title, a.title, i.title, u_rel.title, '알림') as title,
-        msg.content as content,
-        COALESCE(a.status, i.status, u_rel.status, '-') as related_status,
-        u.nickname as author_name, u.login_id as author_id_str, u.birth_date, u.phone_number, u.status as user_status
+        SELECT mb.*,
+    COALESCE(mb.title, a.title, i.title, u_rel.title, '알림') as title,
+    msg.content as content,
+    COALESCE(a.status, i.status, u_rel.status, '-') as related_status,
+    u.nickname as author_name, u.login_id as author_id_str, u.birth_date, u.phone_number, u.status as user_status
         FROM message_box mb
         LEFT JOIN messages msg ON mb.message_id = msg.id
         LEFT JOIN advertisements a ON mb.related_table = 'advertisements' AND mb.related_id = a.id
@@ -2471,7 +2601,7 @@ app.put('/api/notices/:id/confirm', (req, res) => {
         db.run('BEGIN TRANSACTION');
 
         // 1. Update individual recipient status
-        db.run(`UPDATE message_recipient SET read_at = CURRENT_TIMESTAMP WHERE message_id = ? AND recipient_id = ?`,
+        db.run(`UPDATE message_recipient SET read_at = CURRENT_TIMESTAMP WHERE message_id = ? AND recipient_id = ? `,
             [messageId, user_id], function (err) {
                 if (err) {
                     db.run('ROLLBACK');
@@ -2479,7 +2609,7 @@ app.put('/api/notices/:id/confirm', (req, res) => {
                 }
 
                 // 2. Find the content message_id and update messages table
-                db.get(`SELECT message_id FROM message_box WHERE id = ?`, [messageId], (err, row) => {
+                db.get(`SELECT message_id FROM message_box WHERE id = ? `, [messageId], (err, row) => {
                     if (err) {
                         db.run('ROLLBACK');
                         return res.status(500).json({ error: err.message });
@@ -2509,7 +2639,7 @@ app.put('/api/notices/:id/confirm', (req, res) => {
 // 31a. Delete Message
 app.delete('/api/notices/:id', (req, res) => {
     const messageId = req.params.id;
-    console.log(`[API] DELETE /api/notices/${messageId}`);
+    console.log(`[API] DELETE / api / notices / ${messageId} `);
 
     // Get message details first to check if it's a signup and get author_id
     db.get("SELECT category, author_id FROM message_box WHERE id = ?", [messageId], (err, msg) => {
@@ -2520,17 +2650,17 @@ app.delete('/api/notices/:id', (req, res) => {
             db.run('BEGIN TRANSACTION');
 
             // 1. Delete Recipients (Child of message)
-            db.run(`DELETE FROM message_recipient WHERE message_id = ?`, [messageId], (err) => {
+            db.run(`DELETE FROM message_recipient WHERE message_id = ? `, [messageId], (err) => {
                 if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
 
                 // 2. Delete the box and then the message content
                 db.get("SELECT message_id FROM message_box WHERE id = ?", [messageId], (err, row) => {
                     const contentId = row ? row.message_id : null;
-                    db.run(`DELETE FROM message_box WHERE id = ?`, [messageId], (err) => {
+                    db.run(`DELETE FROM message_box WHERE id = ? `, [messageId], (err) => {
                         if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
 
                         if (contentId) {
-                            db.run(`DELETE FROM messages WHERE id = ?`, [contentId]);
+                            db.run(`DELETE FROM messages WHERE id = ? `, [contentId]);
                         }
 
                         // 3. Delete the user if it's a signup (Parent)
@@ -2538,7 +2668,7 @@ app.delete('/api/notices/:id', (req, res) => {
                             db.run("DELETE FROM users WHERE id = ?", [msg.author_id], (err) => {
                                 if (err) {
                                     db.run('ROLLBACK');
-                                    return res.status(500).json({ error: `User deletion failed: ${err.message}` });
+                                    return res.status(500).json({ error: `User deletion failed: ${err.message} ` });
                                 }
                                 db.run('COMMIT');
                                 res.json({ message: 'Message and user deleted' });
@@ -2559,7 +2689,7 @@ app.post('/api/users/:id/approve', (req, res) => {
     const targetUserId = req.params.id;
     db.serialize(() => {
         db.run('BEGIN TRANSACTION');
-        db.run(`UPDATE users SET approved = 1, status = '승인' WHERE id = ?`, [targetUserId], function (err) {
+        db.run(`UPDATE users SET approved = 1, status = '승인' WHERE id = ? `, [targetUserId], function (err) {
             if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
 
             db.run(`UPDATE message_box SET confirmed = 1 WHERE author_id = ? AND category = '가입신청'`, [targetUserId], function (err) {
@@ -2578,7 +2708,7 @@ app.post('/api/users/:id/approve', (req, res) => {
 // 33. Reject User (Signup)
 app.post('/api/users/:id/reject', (req, res) => {
     const targetUserId = req.params.id;
-    db.run(`UPDATE users SET approved = 2, status = '거절' WHERE id = ?`, [targetUserId], function (err) {
+    db.run(`UPDATE users SET approved = 2, status = '거절' WHERE id = ? `, [targetUserId], function (err) {
         if (err) return res.status(500).json({ error: err.message });
         db.run(`UPDATE message_box SET confirmed = 1 WHERE author_id = ? AND category = '가입신청'`, [targetUserId], function (err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -2600,20 +2730,20 @@ app.delete('/api/users/:id', (req, res) => {
             // We must delete payments and keywords (children of contracts) before contracts.
             // Also payment_allocation -> invoices -> contracts
             const deleteOps = [
-                { name: 'applicants_user', sql: `DELETE FROM applicants WHERE user_id = ?` },
-                { name: 'applicants_adv', sql: `DELETE FROM applicants WHERE advertisement_id IN (SELECT id FROM advertisements WHERE created_by = ?)` },
-                { name: 'payment_allocation_inv', sql: `DELETE FROM payment_allocation WHERE invoice_id IN (SELECT id FROM invoices WHERE contract_id IN (SELECT id FROM contracts WHERE tenant_id = ?))` },
-                { name: 'payment_allocation_pay', sql: `DELETE FROM payment_allocation WHERE payment_id IN (SELECT id FROM payments WHERE contract_id IN (SELECT id FROM contracts WHERE tenant_id = ?))` },
-                { name: 'invoices', sql: `DELETE FROM invoices WHERE contract_id IN (SELECT id FROM contracts WHERE tenant_id = ?)` },
-                { name: 'payments', sql: `DELETE FROM payments WHERE contract_id IN (SELECT id FROM contracts WHERE tenant_id = ?)` },
-                { name: 'contract_keywords', sql: `DELETE FROM contract_keywords WHERE contract_id IN (SELECT id FROM contracts WHERE tenant_id = ?)` },
-                { name: 'contracts', sql: `DELETE FROM contracts WHERE tenant_id = ?` },
-                { name: 'messages', sql: `DELETE FROM message_box WHERE author_id = ?` },
-                { name: 'advertisements', sql: `DELETE FROM advertisements WHERE created_by = ?` },
-                { name: 'items', sql: `DELETE FROM items WHERE owner_id = ?` },
-                { name: 'room_tenant', sql: `DELETE FROM room_tenant WHERE tenant_id = ?` },
-                { name: 'message_recipient', sql: `DELETE FROM message_recipient WHERE recipient_id = ?` },
-                { name: 'landlord_buildings', sql: `DELETE FROM landlord_buildings WHERE landlord_id = ?` }
+                { name: 'applicants_user', sql: `DELETE FROM applicants WHERE user_id = ? ` },
+                { name: 'applicants_adv', sql: `DELETE FROM applicants WHERE advertisement_id IN(SELECT id FROM advertisements WHERE created_by = ?)` },
+                { name: 'payment_allocation_inv', sql: `DELETE FROM payment_allocation WHERE invoice_id IN(SELECT id FROM invoices WHERE contract_id IN(SELECT id FROM contracts WHERE tenant_id = ?))` },
+                { name: 'payment_allocation_pay', sql: `DELETE FROM payment_allocation WHERE payment_id IN(SELECT id FROM payments WHERE contract_id IN(SELECT id FROM contracts WHERE tenant_id = ?))` },
+                { name: 'invoices', sql: `DELETE FROM invoices WHERE contract_id IN(SELECT id FROM contracts WHERE tenant_id = ?)` },
+                { name: 'payments', sql: `DELETE FROM payments WHERE contract_id IN(SELECT id FROM contracts WHERE tenant_id = ?)` },
+                { name: 'contract_keywords', sql: `DELETE FROM contract_keywords WHERE contract_id IN(SELECT id FROM contracts WHERE tenant_id = ?)` },
+                { name: 'contracts', sql: `DELETE FROM contracts WHERE tenant_id = ? ` },
+                { name: 'messages', sql: `DELETE FROM message_box WHERE author_id = ? ` },
+                { name: 'advertisements', sql: `DELETE FROM advertisements WHERE created_by = ? ` },
+                { name: 'items', sql: `DELETE FROM items WHERE owner_id = ? ` },
+                { name: 'room_tenant', sql: `DELETE FROM room_tenant WHERE tenant_id = ? ` },
+                { name: 'message_recipient', sql: `DELETE FROM message_recipient WHERE recipient_id = ? ` },
+                { name: 'landlord_buildings', sql: `DELETE FROM landlord_buildings WHERE landlord_id = ? ` }
             ];
 
             let completed = 0;
@@ -2625,7 +2755,7 @@ app.delete('/api/users/:id', (req, res) => {
                         db.run('ROLLBACK');
                         return res.status(500).json({ error: 'One or more cascade delete operations failed. Check server logs.' });
                     }
-                    db.run(`DELETE FROM users WHERE id = ?`, [userId], function (err) {
+                    db.run(`DELETE FROM users WHERE id = ? `, [userId], function (err) {
                         if (err) {
                             console.error('Final user delete error:', err);
                             db.run('ROLLBACK');
@@ -2640,7 +2770,7 @@ app.delete('/api/users/:id', (req, res) => {
             deleteOps.forEach(op => {
                 db.run(op.sql, [userId], (err) => {
                     if (err) {
-                        console.error(`Cascade delete error in ${op.name}:`, err);
+                        console.error(`Cascade delete error in ${op.name}: `, err);
                         hasError = true;
                     }
                     checkDone();
@@ -2648,7 +2778,7 @@ app.delete('/api/users/:id', (req, res) => {
             });
         });
     } else {
-        db.run(`UPDATE users SET status = '종료' WHERE id = ?`, [userId], function (err) {
+        db.run(`UPDATE users SET status = '종료' WHERE id = ? `, [userId], function (err) {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ message: 'User withdrawn' });
         });
@@ -2662,7 +2792,7 @@ app.delete('/api/users/:id', (req, res) => {
 app.post('/api/rooms/:id/status', (req, res) => {
     const { status } = req.body;
     const roomId = req.params.id;
-    db.run(`UPDATE rooms SET status = ? WHERE id = ?`, [status, roomId], function (err) {
+    db.run(`UPDATE rooms SET status = ? WHERE id = ? `, [status, roomId], function (err) {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: 'Room status updated' });
     });

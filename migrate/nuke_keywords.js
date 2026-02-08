@@ -1,4 +1,4 @@
-const db = require('./db');
+﻿const db = require('../db');
 
 db.run("DELETE FROM contract_keywords", [], (err) => {
     if (err) console.error(err);

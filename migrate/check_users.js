@@ -1,4 +1,4 @@
-const db = require('./db');
+﻿const db = require('../db');
 
 db.all("SELECT id, login_id, role, status FROM users", [], (err, rows) => {
     if (err) {

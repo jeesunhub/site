@@ -101,80 +101,52 @@
 </head>
 
 <body>
-    <main id="layout-main">
-        <div class="header">
-            <button class="back-btn" onclick="location.href='/dashboard.html'">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M19 12H5M12 19l-7-7 7-7" />
-                </svg>
-            </button>
-            <h1>프로필 설정</h1>
-            <div style="width: 24px;"></div>
-        </div>
+    <div class="container" id="main-content">
+        <div class="settings-container">
 
-        <div class="container" id="main-content">
-            <div class="settings-container">
-
-                <!-- Section 1: My Profile -->
-                <div style="margin-bottom: 2rem;">
-                    <h2 class="section-title">내 프로필</h2>
-                    <div class="form-group">
-                        <label>아이디 (Login ID)</label>
-                        <input type="text" id="my-login-id" class="form-input">
-                    </div>
-                    <!-- Password Row (Hidden Value + Change Button) -->
-                    <div class="form-group">
-                        <label>비밀번호</label>
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <span style="opacity: 0.5;">********</span>
-                            <button class="btn btn-secondary" style="padding: 0.3rem 0.8rem; font-size: 0.8rem;"
-                                onclick="openChangePasswordModal()">변경</button>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>닉네임</label>
-                        <input type="text" id="my-nickname" class="form-input">
-                    </div>
-                    <div class="form-group">
-                        <label>프로필 색상</label>
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <input type="color" id="my-color-picker"
-                                style="width: 50px; height: 40px; border: none; padding: 0; background: none; cursor: pointer;">
-                            <input type="text" id="my-color-text" class="form-input" style="width: 120px;"
-                                placeholder="#RRGGBB">
-                        </div>
-                    </div>
-                    <button class="btn-save" onclick="saveMyProfile()">저장</button>
+            <!-- Section 1: My Profile -->
+            <div style="margin-bottom: 2rem;">
+                <h2 class="section-title">내 프로필</h2>
+                <div class="form-group">
+                    <label>아이디 (Login ID)</label>
+                    <input type="text" id="my-login-id" class="form-input">
                 </div>
-
-                <!-- Section 2: Managed Profiles (Admin/Landlord only) -->
-                <div id="managed-profiles-section" style="display: none;">
-                    <h2 class="section-title">관리 프로필 목록</h2>
-                    <div id="managed-profiles-list" class="settings-list">
-                        <!-- Profiles will be rendered here -->
+                <!-- Password Row (Hidden Value + Change Button) -->
+                <div class="form-group">
+                    <label>비밀번호</label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <span style="opacity: 0.5;">********</span>
+                        <button class="btn btn-secondary" style="padding: 0.3rem 0.8rem; font-size: 0.8rem;"
+                            onclick="openChangePasswordModal()">변경</button>
                     </div>
                 </div>
-
-
+                <div class="form-group">
+                    <label>닉네임</label>
+                    <input type="text" id="my-nickname" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>프로필 색상</label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="color" id="my-color-picker"
+                            style="width: 50px; height: 40px; border: none; padding: 0; background: none; cursor: pointer;">
+                        <input type="text" id="my-color-text" class="form-input" style="width: 120px;"
+                            placeholder="#RRGGBB">
+                    </div>
+                </div>
+                <button class="btn-save" onclick="saveMyProfile()">저장</button>
             </div>
+
+            <!-- Section 2: Managed Profiles (Admin/Landlord only) -->
+            <div id="managed-profiles-section" style="display: none;">
+                <h2 class="section-title">관리 프로필 목록</h2>
+                <div id="managed-profiles-list" class="settings-list">
+                    <!-- Profiles will be rendered here -->
+                </div>
+            </div>
+
+
         </div>
-    </main>
-
-    <footer id="layout-footer">
-        <div class="footer-container" style="flex-wrap: wrap;">
-            <div class="footer-biz-name" onclick="toggleFooterInfo()">상호명: 김지선, 김세미 부동산</div>
-            <div class="footer-links">
-                <button class="footer-btn">이용약관</button>
-                <button class="footer-btn">개인정보처리방침</button>
-            </div>
-            <div id="footer-biz-details" class="footer-info-details">
-                상호명: 김지선, 김세미 부동산<br>
-                대표자명: 김지선외 1명<br>
-                사업자등록번호: 640-31-00762<br>
-                주소: 경기도 수원시 팔달구 우만동 89-5 GS지에스타워 403호
-            </div>
-        </div>
-    </footer>
+    </div>
 
     <!-- Modal: Change Password (Self) -->
     <div id="change-password-modal" class="modal">
@@ -224,6 +196,7 @@
     <script src="/js/common.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            renderNavbar();
             loadMyProfile();
             loadManagedProfiles();
         });

@@ -98,12 +98,26 @@
 
         .btn-add {
             padding: 0.5rem 1rem;
-            background: var(--primary);
+            background: rgba(99, 102, 241, 0.3);
             border-radius: 0.5rem;
             font-size: 0.85rem;
             font-weight: 600;
             color: white;
             text-decoration: none;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(99, 102, 241, 0.4);
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-add:hover {
+            background: rgba(99, 102, 241, 0.45);
+            border-color: rgba(99, 102, 241, 0.6);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
         }
 
         .notice-right {
@@ -115,12 +129,53 @@
             height: 2rem;
             padding: 0 0.8rem;
             border-radius: 0.4rem;
-            border: none;
+            border: 1px solid rgba(255, 255, 255, 0.1);
             font-size: 0.75rem;
             font-weight: 600;
             cursor: pointer;
             color: white;
             background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .action-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .status-advertising {
+            background: rgba(99, 102, 241, 0.2);
+            color: #a5b4fc;
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+
+        .status-completed {
+            background: rgba(34, 197, 94, 0.2);
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .status-drawing {
+            background: rgba(245, 158, 11, 0.2);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .status-default {
+            background: rgba(148, 163, 184, 0.2);
+            color: #94a3b8;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
+
+        .btn-delete {
+            background: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
         }
 
         .building-badge {
@@ -274,7 +329,7 @@
     <!-- Navbar -->
     <div class="header">
         <h1>물건 공유</h1>
-        <a href="#" class="btn-add" onclick="openAddModal()">물건 추가</a>
+        <a href="#" class="btn-add" onclick="openAddModal()">내놓기</a>
     </div>
 
     <div class="container">
@@ -349,8 +404,7 @@
 
 
             <div class="modal-actions">
-                <button class="action-btn" style="background:var(--surface); color:var(--text-secondary)"
-                    onclick="closeModal()">취소</button>
+                <button class="action-btn" onclick="closeModal()">취소</button>
                 <button class="action-btn btn-add" onclick="submitItemAdv()">저장</button>
             </div>
         </div>
@@ -399,7 +453,7 @@
                 }
                 li.onclick = () => window.location.href = `/item_detail.html?id=${item.id}`;
 
-                const priceValue = item.price ? (item.price / 1).toLocaleString() + '원' : '무료나눔';
+                const priceValue = item.price ? (item.price / 1).toLocaleString() + '원' : '';
                 let owner = item.owner_login_id || '알 수 없음';
                 // If is_anonymous is 1 (true), mask the owner unless it's the current user's own post
                 if (item.is_anonymous && !isMine) owner = '익명';
@@ -407,17 +461,17 @@
                 const building = item.building_name || '건물미정';
                 const dateStr = item.created_at ? item.created_at.split(' ')[0] : '';
 
-                // Badge color based on status
-                let statusColor = '#94a3b8';
+                // Badge style based on status
+                let statusClass = 'status-default';
                 let statusLabel = '대기';
-                if (item.status === 'advertising') { statusColor = '#6366f1'; statusLabel = '진행중'; }
-                else if (item.status === 'completed') { statusColor = '#22c55e'; statusLabel = '완료'; }
-                else if (item.status === 'drawing') { statusColor = '#f59e0b'; statusLabel = '추첨중'; }
+                if (item.status === 'advertising') { statusClass = 'status-advertising'; statusLabel = '진행중'; }
+                else if (item.status === 'completed') { statusClass = 'status-completed'; statusLabel = '완료'; }
+                else if (item.status === 'drawing') { statusClass = 'status-drawing'; statusLabel = '추첨중'; }
 
-                let actionButtons = `<button class="action-btn" style="background:${statusColor}; color:white; cursor:default;" onclick="event.stopPropagation()">${statusLabel}</button>`;
+                let actionButtons = `<button class="action-btn ${statusClass}" style="cursor:default;" onclick="event.stopPropagation()">${statusLabel}</button>`;
 
                 if (user && user.role === 'admin') {
-                    actionButtons += `<button class="action-btn" style="background:#ef4444" onclick="event.stopPropagation(); deleteAd(${item.id})">삭제</button>`;
+                    actionButtons += `<button class="action-btn btn-delete" onclick="event.stopPropagation(); deleteAd(${item.id})">삭제</button>`;
                 }
 
                 const myBadge = isMine ? `<span style="background:var(--primary); color:white; font-size:0.65rem; padding:1px 4px; border-radius:3px; margin-right:4px; font-weight:600;">내 글</span>` : '';

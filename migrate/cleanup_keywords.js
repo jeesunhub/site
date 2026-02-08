@@ -1,4 +1,4 @@
-const db = require('./db');
+﻿const db = require('../db');
 
 db.serialize(() => {
     // Delete rows where keyword looks like junk or is null

@@ -260,6 +260,16 @@
             font-size: 0.85rem;
             color: #94a3b8;
         }
+
+        .count-badge {
+            font-size: 0.75rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 1rem;
+            background: rgba(99, 102, 241, 0.2);
+            color: #818cf8;
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            margin-right: 0.5rem;
+        }
     </style>
 </head>
 
@@ -282,7 +292,10 @@
                     <div class="notice-summary">
                         <span class="notice-type">🏠 부동산</span>
                         <div class="notice-text-group">
-                            <span class="notice-title">친절한 부동산</span>
+                            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                                <span class="notice-title">친절한 부동산</span>
+                                <span id="count-immobilien" class="count-badge">0</span>
+                            </div>
                             <div class="notice-meta">우리 동네 믿을만한 부동산 정보</div>
                         </div>
                     </div>
@@ -291,7 +304,10 @@
                     <div class="notice-summary">
                         <span class="notice-type">🍱 맛집</span>
                         <div class="notice-text-group">
-                            <span class="notice-title">직접 가본 맛집</span>
+                            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                                <span class="notice-title">직접 가본 맛집</span>
+                                <span id="count-food" class="count-badge">0</span>
+                            </div>
                             <div class="notice-meta">리얼 후기! 추천 맛집 공유</div>
                         </div>
                     </div>
@@ -300,7 +316,10 @@
                     <div class="notice-summary">
                         <span class="notice-type">📍 장소</span>
                         <div class="notice-text-group">
-                            <span class="notice-title">추천할 장소</span>
+                            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                                <span class="notice-title">추천할 장소</span>
+                                <span id="count-place" class="count-badge">0</span>
+                            </div>
                             <div class="notice-meta">산책로, 운동시설 등 추천 장소</div>
                         </div>
                     </div>
@@ -309,7 +328,10 @@
                     <div class="notice-summary">
                         <span class="notice-type">💸 할인</span>
                         <div class="notice-text-group">
-                            <span class="notice-title">공유 할 할인 정보</span>
+                            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                                <span class="notice-title">공유 할 할인 정보</span>
+                                <span id="count-discount" class="count-badge">0</span>
+                            </div>
                             <div class="notice-meta">놓치면 아쉬운 동네 할인 소식</div>
                         </div>
                     </div>
@@ -380,13 +402,37 @@
                 showInfoList(category);
             } else {
                 showCategoryMenu();
+                fetchCategoryStats();
             }
         });
+
+        async function fetchCategoryStats() {
+            try {
+                const res = await fetch('/api/info/stats');
+                const stats = await res.json();
+
+                const categories = [
+                    { name: '친절한 부동산', id: 'count-immobilien' },
+                    { name: '직접 가본 맛집', id: 'count-food' },
+                    { name: '추천할 장소', id: 'count-place' },
+                    { name: '공유 할 할인 정보', id: 'count-discount' }
+                ];
+
+                categories.forEach(cat => {
+                    const count = stats[cat.name] || 0;
+                    const el = document.getElementById(cat.id);
+                    if (el) el.textContent = count;
+                });
+            } catch (err) {
+                console.error('Failed to fetch stats:', err);
+            }
+        }
 
         function showCategoryMenu() {
             document.getElementById('category-menu').style.display = 'block';
             document.getElementById('info-list-container').style.display = 'none';
             document.querySelector('.header h1').textContent = '정보 공유해요';
+            fetchCategoryStats(); // Refresh stats when returning to menu
         }
 
         function selectCategory(category) {

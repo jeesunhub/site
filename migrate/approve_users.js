@@ -1,4 +1,4 @@
-const db = require('./db');
+﻿const db = require('../db');
 
 const userIdToApprove = 't1';
 // Or I could update all '임시' users to '승인' for convenience.

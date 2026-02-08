@@ -1,4 +1,4 @@
-const db = require('./db');
+﻿const db = require('../db');
 
 db.all("SELECT * FROM contract_keywords", [], (err, rows) => {
     if (err) {

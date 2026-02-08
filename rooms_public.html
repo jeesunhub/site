@@ -70,47 +70,61 @@
             width: 100%;
         }
 
-        .notice-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
+        .mgmt-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
         }
 
-        .notice-item {
+        .mgmt-item {
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
             background: rgba(255, 255, 255, 0.02);
             transition: background 0.2s;
             cursor: pointer;
         }
 
-        .notice-item:hover {
+        .mgmt-item:hover {
             background: rgba(255, 255, 255, 0.05);
         }
 
-        .notice-summary {
+        .mgmt-summary {
             display: flex;
             align-items: center;
             padding: 0.8rem 1rem;
-            gap: 1.2rem;
+            gap: 0.6rem;
             min-height: 5rem;
-            cursor: pointer;
         }
 
-        .notice-type {
-            font-size: 0.8rem;
-            padding: 0.3rem 0.6rem;
-            border-radius: 0.4rem;
-            background: rgba(99, 102, 241, 0.2);
+        .mgmt-left {
+            width: 4.5rem;
+            padding: 0.4rem 0.2rem;
+            background: rgba(99, 102, 241, 0.15);
             color: #a5b4fc;
-            white-space: nowrap;
+            border-radius: 0.4rem;
+            text-align: center;
             flex-shrink: 0;
             display: flex;
-            align-items: center;
-            height: auto;
-            max-height: 2rem;
+            flex-direction: column;
+            gap: 1px;
+            min-height: 3.2rem;
+            justify-content: center;
         }
 
-        .notice-text-group {
+        .mgmt-left .b-name {
+            font-size: 0.65rem;
+            opacity: 0.7;
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .mgmt-left .r-num {
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        .mgmt-center {
             flex: 1;
             display: flex;
             flex-direction: column;
@@ -118,9 +132,8 @@
             min-width: 0;
         }
 
-        .notice-title {
+        .center-top {
             font-size: 1rem;
-            font-weight: 500;
             color: #f8fafc;
             margin-bottom: 2px;
             white-space: nowrap;
@@ -128,9 +141,48 @@
             text-overflow: ellipsis;
         }
 
-        .notice-meta {
+        .center-bottom {
             font-size: 0.75rem;
             color: rgba(255, 255, 255, 0.5);
+        }
+
+        .mgmt-right {
+            display: flex;
+            gap: 0.5rem;
+            flex-shrink: 0;
+            align-items: center;
+        }
+
+        .status-badge {
+            height: 2rem;
+            padding: 0 0.8rem;
+            border-radius: 0.4rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 3.5rem;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+        .status-advertising {
+            background: rgba(34, 197, 94, 0.2);
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .status-completed {
+            background: rgba(148, 163, 184, 0.2);
+            color: #94a3b8;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
+
+        .status-drawing {
+            background: rgba(99, 102, 241, 0.2);
+            color: #818cf8;
+            border: 1px solid rgba(99, 102, 241, 0.3);
         }
 
         /* Modal Styles */
@@ -267,9 +319,10 @@
             height: 3rem;
             padding: 0 1.5rem;
             border-radius: 0.8rem;
-            /* matched to main style */
-            border: none;
-            background: var(--primary);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(99, 102, 241, 0.3);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             color: white;
             font-weight: 600;
             cursor: pointer;
@@ -278,6 +331,14 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .action-btn:hover {
+            background: rgba(99, 102, 241, 0.45);
+            border-color: rgba(99, 102, 241, 0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.2);
         }
 
         .form-group label {
@@ -310,7 +371,7 @@
         </div>
 
         <div class="container">
-            <div id="room-list" class="notice-list">
+            <div id="room-list" class="mgmt-list">
                 <div style="text-align:center; opacity:0.5; padding:3rem;">로딩 중...</div>
             </div>
         </div>
@@ -332,17 +393,17 @@
         </div>
     </footer>
 
-    <!-- Detail Room Advertisement Modal -->
-    <div id="detail-modal" class="modal-overlay">
+    <!-- Detail Room Modal -->
+    <div id="room-detail-modal" class="modal-overlay" onclick="if(event.target === this) closeDetailModal()">
         <div class="modal-content-full">
             <div class="modal-header-custom">
-                <span class="back-btn-custom" onclick="closeDetailModal()">
+                <a href="javascript:void(0)" class="back-btn-custom" onclick="closeDetailModal()">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                         stroke-linecap="round" stroke-linejoin="round">
                         <path d="m15 18-6-6 6-6" />
                     </svg>
-                </span>
-                <h3 id="detail-title"></h3>
+                </a>
+                <h3 id="detail-building-room">방 상세정보</h3>
             </div>
 
             <div style="padding: 1.5rem;">
@@ -350,32 +411,24 @@
 
                 <div class="detail-info">
                     <div class="detail-row">
-                        <span class="label">건물명</span>
-                        <span class="value" id="detail-building"></span>
-                    </div>
-                    <div class="detail-row" style="flex-direction: column; gap: 4px; align-items: flex-start;">
-                        <span class="label">주소</span>
-                        <span class="value" id="detail-address" style="font-size: 0.85rem; opacity: 0.9;"></span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">호수</span>
-                        <span class="value" id="detail-room"></span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">입실 가능</span>
-                        <span class="value" id="detail-available"></span>
-                    </div>
-                    <div class="detail-row">
                         <span class="label">보증금</span>
-                        <span class="value" id="detail-deposit"></span>
+                        <span class="value" id="detail-deposit" style="color:#4ade80;"></span>
                     </div>
                     <div class="detail-row">
                         <span class="label">월세</span>
-                        <span class="value" id="detail-rent"></span>
+                        <span class="value" id="detail-rent" style="color:#4ade80;"></span>
                     </div>
                     <div class="detail-row">
                         <span class="label">관리비</span>
-                        <span class="value" id="detail-mgmt"></span>
+                        <span class="value" id="detail-mgmt" style="color:#4ade80;"></span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">청소비</span>
+                        <span class="value" id="detail-cleaning"></span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">입실 가능일</span>
+                        <span class="value" id="detail-date"></span>
                     </div>
                 </div>
 
@@ -384,153 +437,14 @@
                     <div id="detail-memo" class="detail-memo-box"></div>
                 </div>
 
-                <button class="action-btn" onclick="openRequestModal()">방구해요</button>
+                <button class="action-btn" onclick="closeDetailModal()">닫기</button>
             </div>
         </div>
     </div>
 
-    <!-- Contact Request Modal -->
-    <div id="request-modal" class="modal" onclick="if(event.target === this) closeRequestModal()">
-        <div class="modal-content">
-            <div class="modal-header" style="margin-bottom: 1.5rem;">
-                <h2 style="font-size: 1.25rem;">방구해요 신청</h2>
-            </div>
-
-            <div style="margin-bottom: 1.5rem; text-align: center;">
-                <button onclick="loginWithKakao()"
-                    style="background:#FEE500; color:#000000; border:none; border-radius:12px; display:flex; align-items:center; justify-content:center; gap:10px; width:100%; height:3rem; font-weight:600; cursor:pointer; font-size: 0.95rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-                    <img src="https://developers.kakao.com/assets/img/about/logos/kakaotalksharing/kakaotalk_sharing_btn_small.png"
-                        width="24" height="24" alt="" />
-                    카카오로 인증
-                </button>
-                <p style="font-size: 0.8rem; opacity: 0.6; margin-top: 0.8rem;">인증 시 이름과 연락처가 자동 입력됩니다.</p>
-            </div>
-
-            <div class="form-group">
-                <label>이름</label>
-                <input type="text" id="req-name" class="form-input" placeholder="이름을 입력하세요 (카카오 인증 시 자동 입력)">
-            </div>
-            <div class="form-group">
-                <label>생년월일</label>
-                <input type="text" id="req-birth" class="form-input" placeholder="YYYY-MM-DD (카카오 인증 시 자동 입력)">
-            </div>
-            <div class="form-group">
-                <label>연락처</label>
-                <input type="tel" id="req-phone" class="form-input" placeholder="연락처를 입력하세요 (카카오 인증 시 자동 입력)">
-            </div>
-            <div class="form-group">
-                <label>메모</label>
-                <textarea id="req-memo" class="form-input" rows="4" placeholder="희망 입주 시기, 조건 등을 적어주세요"></textarea>
-            </div>
-
-            <div class="modal-footer" style="margin-top: 1.5rem;">
-                <button class="btn btn-secondary" onclick="closeRequestModal()">취소</button>
-                <button class="btn" onclick="submitRequest()">연락주세요</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Common JS -->
     <script src="/js/common.js"></script>
 
-    <!-- Kakao SDK (v1 for stable Auth.login) -->
-    <script src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
-
     <script>
-        async function initKakao() {
-            let retries = 0;
-            while (!window.Kakao && retries < 20) {
-                await new Promise(r => setTimeout(r, 100));
-                retries++;
-            }
-
-            if (!window.Kakao) {
-                console.error('Kakao SDK failed to load');
-                return;
-            }
-
-            try {
-                const res = await fetch('/api/config/kakao');
-                if (!res.ok) throw new Error('Failed to fetch config');
-                const data = await res.json();
-
-                if (data.kakaoKey) {
-                    if (!Kakao.isInitialized()) {
-                        Kakao.init(data.kakaoKey);
-                        console.log('Kakao SDK Initialized with:', data.kakaoKey);
-                    }
-                } else {
-                    console.error('No Kakao Key found in server response');
-                }
-            } catch (err) {
-                console.error('Kakao Init Error:', err);
-                // alert('카카오 초기화 실패: ' + err.message);
-            }
-        }
-        initKakao();
-
-        function loginWithKakao() {
-            if (!window.Kakao) {
-                alert('카카오 SDK 로딩 중입니다. 잠시 후 다시 시도해주세요.');
-                return;
-            }
-            if (!Kakao.isInitialized()) {
-                alert('카카오 SDK가 초기화되지 않았습니다. 잠시 후 다시 시도해주시거나 관리자에게 문의하세요.');
-                return;
-            }
-
-            Kakao.Auth.login({
-                success: function (authObj) {
-                    Kakao.API.request({
-                        url: '/v2/user/me',
-                        success: function (res) {
-                            const kakaoAccount = res.kakao_account;
-                            console.log('Kakao Account Data:', kakaoAccount);
-                            if (kakaoAccount) {
-                                // Prefer real name if available (requires permission), fallback to nickname
-                                const userName = kakaoAccount.name || (kakaoAccount.profile ? kakaoAccount.profile.nickname : '');
-                                if (userName) {
-                                    document.getElementById('req-name').value = userName;
-                                }
-
-                                if (kakaoAccount.phone_number) {
-                                    // Robust phone number cleaning: +82 10-1234-5678 -> 01012345678
-                                    let phoneValue = kakaoAccount.phone_number.replace('+82 ', '0').replace(/[^0-9]/g, '');
-
-                                    // Case where it might stay as 8210... if replacement failed or format differed
-                                    if (phoneValue.startsWith('82')) {
-                                        phoneValue = '0' + phoneValue.substring(2);
-                                    }
-
-                                    document.getElementById('req-phone').value = formatPhone(phoneValue);
-                                }
-
-                                // Handle Birth Date (YYYY-MM-DD)
-                                if (kakaoAccount.birthyear && kakaoAccount.birthday) {
-                                    const y = kakaoAccount.birthyear;
-                                    const m = kakaoAccount.birthday.substring(0, 2);
-                                    const d = kakaoAccount.birthday.substring(2, 4);
-                                    document.getElementById('req-birth').value = `${y}-${m}-${d}`;
-                                } else if (kakaoAccount.birthyear) {
-                                    document.getElementById('req-birth').value = kakaoAccount.birthyear;
-                                }
-
-                                alert('카카오 인증 성공! 정보가 입력되었습니다.\n부족한 정보는 직접 입력해주세요.');
-                            }
-                        },
-                        fail: function (error) {
-                            console.error(error);
-                            alert('사용자 정보를 가져오는데 실패했습니다.');
-                        }
-                    });
-                },
-                fail: function (err) {
-                    console.error(err);
-                    alert('카카오 로그인에 실패했습니다.');
-                }
-            });
-        }
-
         document.addEventListener('DOMContentLoaded', fetchRooms);
 
         async function fetchRooms() {
@@ -545,7 +459,8 @@
 
         function formatVal(v) {
             if (!v) return '0';
-            return (v / 10000).toLocaleString();
+            const val = v / 10000;
+            return val.toLocaleString(undefined, { maximumFractionDigits: 1 });
         }
 
         function renderRooms(rooms) {
@@ -559,24 +474,35 @@
 
             rooms.forEach(room => {
                 const item = document.createElement('div');
-                item.className = 'notice-item';
+                item.className = 'mgmt-item';
 
                 const deposit = formatVal(room.deposit);
                 const rent = formatVal(room.rent);
                 const mgmt = formatVal(room.management_fee);
                 const available = room.available_date || '-';
 
+                const statusMap = {
+                    'advertising': { label: '광고중', class: 'status-advertising' },
+                    'completed': { label: '완료', class: 'status-completed' },
+                    'drawing': { label: '추첨중', class: 'status-drawing' }
+                };
+                const statusInfo = statusMap[room.status] || { label: room.status || '대기', class: '' };
+
                 item.innerHTML = `
-            <div class="notice-summary" onclick="openDetailModal(${room.id})">
-                <span class="notice-type">임대</span>
-                <div class="notice-text-group">
-                    <span class="notice-title">${room.building || ''} ${room.room_number}호</span>
-                    <div class="notice-meta">
-                        <span>${deposit} / ${rent} / ${mgmt} | 입실가능: ${available}</span>
+                <div class="mgmt-summary" onclick="openDetailModal(${room.id})">
+                    <div class="mgmt-left">
+                        <div class="b-name">${room.building || '미지정'}</div>
+                        <div class="r-num">${room.room_number}</div>
+                    </div>
+                    <div class="mgmt-center">
+                        <div class="center-top">${room.title || '제목 없음'}</div>
+                        <div class="center-bottom">${deposit} / ${rent} / ${mgmt}<br>입실 가능: ${available}</div>
+                    </div>
+                    <div class="mgmt-right">
+                        <span class="status-badge ${statusInfo.class}">${statusInfo.label}</span>
                     </div>
                 </div>
-            </div>
-            `;
+                `;
                 list.appendChild(item);
             });
         }
@@ -584,108 +510,42 @@
         async function openDetailModal(id) {
             try {
                 const res = await fetch(`/api/ads/${id}`);
-                const adv = await res.json();
+                const room = await res.json();
 
-                // Fetch building info for address
-                let address = '주소 정보 없음';
-                try {
-                    const bRes = await fetch(`/api/admin/buildings`);
-                    const buildings = await bRes.json();
-                    const b = buildings.find(b => b.id === adv.building_id);
-                    if (b) address = (b.address1 || '') + ' ' + (b.address2 || '');
-                } catch (err) { }
+                document.getElementById('detail-building-room').textContent = `${room.building_name || ''} ${room.room_number}호`;
 
-                document.getElementById('detail-title').textContent = adv.title || '제목 없음';
-                document.getElementById('detail-building').textContent = adv.building_name || '미지정';
-                document.getElementById('detail-address').textContent = address;
-                document.getElementById('detail-room').textContent = adv.room_number + '호';
-                document.getElementById('detail-available').textContent = adv.available_date || '-';
+                const formatFull = (v) => v ? v.toLocaleString() + '원' : '0원';
 
-                document.getElementById('detail-deposit').textContent = (adv.deposit || 0).toLocaleString() + '원';
-                document.getElementById('detail-rent').textContent = (adv.rent || 0).toLocaleString() + '원';
-                document.getElementById('detail-mgmt').textContent = (adv.management_fee || 0).toLocaleString() + '원';
-
-                document.getElementById('detail-memo').textContent = adv.description || '';
-                currentLandlordId = adv.created_by;
-                currentBuildingId = adv.building_id;
+                document.getElementById('detail-deposit').textContent = formatFull(room.deposit);
+                document.getElementById('detail-rent').textContent = formatFull(room.rent);
+                document.getElementById('detail-mgmt').textContent = formatFull(room.management_fee);
+                document.getElementById('detail-cleaning').textContent = room.cleaning_fee ? formatFull(room.cleaning_fee) : '없음';
+                document.getElementById('detail-date').textContent = room.available_date || '상시 가능';
+                document.getElementById('detail-memo').textContent = room.description || '내용 없음';
 
                 const gallery = document.getElementById('detail-photos');
                 gallery.innerHTML = '';
-                if (adv.images && adv.images.length > 0) {
-                    adv.images.forEach(img => {
+                if (room.images && room.images.length > 0) {
+                    room.images.forEach(img => {
                         const imgEl = document.createElement('img');
                         imgEl.src = img.image_url;
                         gallery.appendChild(imgEl);
                     });
                 } else {
-                    gallery.innerHTML = '<div style="padding:1rem; opacity:0.5; color:white;">사진 없음</div>';
+                    gallery.innerHTML = '<div style="padding:1rem; opacity:0.3;">등록된 사진이 없습니다.</div>';
                 }
 
-                document.getElementById('detail-modal').style.display = 'flex';
+                document.getElementById('room-detail-modal').style.display = 'flex';
                 document.body.style.overflow = 'hidden';
-
             } catch (err) {
                 console.error(err);
-                alert('정보를 불러오지 못했습니다.');
+                alert('방 정보를 불러오지 못했습니다.');
             }
         }
 
         function closeDetailModal() {
-            document.getElementById('detail-modal').style.display = 'none';
+            document.getElementById('room-detail-modal').style.display = 'none';
             document.body.style.overflow = 'auto';
-        }
-
-        let currentAdvId = null;
-        let currentLandlordId = null;
-        let currentBuildingId = null;
-
-        function openRequestModal() {
-            if (!currentLandlordId) {
-                alert('임대인 정보를 찾을 수 없습니다.');
-                return;
-            }
-            document.getElementById('request-modal').style.display = 'flex';
-        }
-
-        function closeRequestModal() {
-            document.getElementById('request-modal').style.display = 'none';
-        }
-
-        async function submitRequest() {
-            const name = document.getElementById('req-name').value.trim();
-            const phone = document.getElementById('req-phone').value.trim();
-            const birth = document.getElementById('req-birth').value.trim();
-            const memo = document.getElementById('req-memo').value.trim();
-
-            if (!name || !phone || !birth) {
-                alert('이름, 생년월일, 연락처를 모두 입력해주세요.');
-                return;
-            }
-
-            try {
-                const res = await fetch('/api/apply', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, phone, birth, memo, landlordId: currentLandlordId, buildingId: currentBuildingId })
-                });
-
-                if (res.ok) {
-                    alert(`${name}님, 신청이 접수되었습니다.\n곧 연락드리겠습니다!`);
-                    closeRequestModal();
-
-                    // Clear fields
-                    document.getElementById('req-name').value = '';
-                    document.getElementById('req-phone').value = '';
-                    document.getElementById('req-birth').value = '';
-                    document.getElementById('req-memo').value = '';
-                } else {
-                    const data = await res.json();
-                    alert('신청 실패: ' + (data.error || '알 수 없는 오류'));
-                }
-            } catch (err) {
-                console.error(err);
-                alert('서버와 통신 중 오류가 발생했습니다.');
-            }
         }
     </script>
 </body>

@@ -118,19 +118,76 @@
             height: 2rem;
             padding: 0 1rem;
             border-radius: 0.4rem;
-            border: none;
+            border: 1px solid rgba(255, 255, 255, 0.1);
             font-size: 0.8rem;
             font-weight: 600;
             cursor: pointer;
             color: white;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            transition: all 0.2s;
         }
 
         .btn-edit {
-            background: var(--primary);
+            background: rgba(99, 102, 241, 0.25);
+            border-color: rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-edit:hover {
+            background: rgba(99, 102, 241, 0.4);
+            border-color: rgba(99, 102, 241, 0.5);
         }
 
         .btn-done {
-            background: #22c55e;
+            background: rgba(34, 197, 94, 0.25);
+            border-color: rgba(34, 197, 94, 0.3);
+        }
+
+        .btn-done:hover {
+            background: rgba(34, 197, 94, 0.4);
+            border-color: rgba(34, 197, 94, 0.5);
+        }
+
+        .btn-delete {
+            background: rgba(239, 68, 68, 0.25);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-delete:hover {
+            background: rgba(239, 68, 68, 0.4);
+            border-color: rgba(239, 68, 68, 0.5);
+        }
+
+        .status-badge {
+            height: 2rem;
+            padding: 0 0.8rem;
+            border-radius: 0.4rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 3.5rem;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+        .status-advertising {
+            background: rgba(34, 197, 94, 0.2);
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .status-completed {
+            background: rgba(148, 163, 184, 0.2);
+            color: #94a3b8;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
+
+        .status-drawing {
+            background: rgba(99, 102, 241, 0.2);
+            color: #818cf8;
+            border: 1px solid rgba(99, 102, 241, 0.3);
         }
 
         .btn-add {
@@ -149,7 +206,7 @@
     <!-- Navbar -->
     <div class="header">
         <h1>방 내놓기</h1>
-        <a href="#" class="btn-add" onclick="openAddModal()">추가</a>
+        <a href="#" class="btn-glass" onclick="openAddModal()">추가</a>
     </div>
 
     <div class="container">
@@ -230,61 +287,6 @@
                 <button class="action-btn" style="background:var(--surface); color:var(--text-secondary)"
                     onclick="closeModal()">취소</button>
                 <button class="action-btn btn-add" onclick="submitRoomAdv()">완료</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Detail Room Advertisement Modal -->
-    <div id="detail-modal" class="modal-overlay" style="display: none;"
-        onclick="if(event.target === this) closeDetailModal()">
-        <div class="modal-content" style="max-width: 600px;">
-            <h3 id="detail-title"></h3>
-
-            <div id="detail-photos" class="photo-gallery"></div>
-
-            <div class="detail-info">
-                <div class="detail-row">
-                    <span class="label">건물명</span>
-                    <span class="value" id="detail-building"></span>
-                </div>
-                <div class="detail-row" style="flex-direction: column; gap: 4px; align-items: flex-start;">
-                    <span class="label">주소</span>
-                    <span class="value" id="detail-address" style="font-size: 0.85rem; opacity: 0.9;"></span>
-                </div>
-                <div class="detail-row">
-                    <span class="label">호수</span>
-                    <span class="value" id="detail-room"></span>
-                </div>
-                <div class="detail-row">
-                    <span class="label">입실 가능</span>
-                    <span class="value" id="detail-available"></span>
-                </div>
-                <div class="detail-row">
-                    <span class="label">보증금</span>
-                    <span class="value" id="detail-deposit"></span>
-                </div>
-                <div class="detail-row">
-                    <span class="label">월세</span>
-                    <span class="value" id="detail-rent"></span>
-                </div>
-                <div class="detail-row">
-                    <span class="label">관리비</span>
-                    <span class="value" id="detail-mgmt"></span>
-                </div>
-                <div class="detail-row">
-                    <span class="label">청소비</span>
-                    <span class="value" id="detail-cleaning"></span>
-                </div>
-            </div>
-
-            <div class="form-group" style="margin-top: 1.5rem;">
-                <label>메모</label>
-                <div id="detail-memo" class="detail-memo-box"></div>
-            </div>
-
-            <div class="modal-actions">
-                <button class="action-btn" style="background:var(--surface); color:var(--text-secondary)"
-                    onclick="closeDetailModal()">닫기</button>
             </div>
         </div>
     </div>
@@ -484,14 +486,15 @@
 
         function formatVal(v) {
             if (!v) return '0';
-            return (v / 10000).toLocaleString();
+            const val = v / 10000;
+            return val.toLocaleString(undefined, { maximumFractionDigits: 1 });
         }
 
         function renderRooms(rooms) {
             const list = document.getElementById('adv-list');
             list.innerHTML = '';
 
-            if (rooms.length === 0) {
+            if (!Array.isArray(rooms) || rooms.length === 0) {
                 list.innerHTML = '<div style="text-align:center; opacity:0.5; padding:3rem;">광고 중인 방이 없습니다.</div>';
                 return;
             }
@@ -505,8 +508,15 @@
                 const mgmt = formatVal(room.management_fee);
                 const available = room.available_date || '-';
 
+                const statusMap = {
+                    'advertising': { label: '광고중', class: 'status-advertising' },
+                    'completed': { label: '완료', class: 'status-completed' },
+                    'drawing': { label: '추첨중', class: 'status-drawing' }
+                };
+                const statusInfo = statusMap[room.status] || { label: room.status || '대기', class: '' };
+
                 item.innerHTML = `
-                    <div class="mgmt-summary" onclick="openDetailModal(${room.id}, event)">
+                    <div class="mgmt-summary" onclick="location.href='/room_detail.html?id=${room.id}'">
                         <div class="mgmt-left">
                             <div class="b-name">${room.building || '미지정'}</div>
                             <div class="r-num">${room.room_number}</div>
@@ -515,9 +525,9 @@
                             <div class="center-top">${room.title || '제목 없음'}</div>
                             <div class="center-bottom">${deposit} / ${rent} / ${mgmt}<br>입실 가능: ${available}</div>
                         </div>
-                        <div class="mgmt-right">
-                            <button class="action-btn btn-edit" onclick="editAdv(${room.id}); event.stopPropagation();">수정</button>
-                            <button class="action-btn btn-done" onclick="completeAdv(${room.id}); event.stopPropagation();">완료</button>
+                        <div class="mgmt-right" style="align-items: center;">
+                            <span class="status-badge ${statusInfo.class}">${statusInfo.label}</span>
+                            <button class="action-btn btn-delete" onclick="deleteAdv(${room.id}); event.stopPropagation();">삭제</button>
                         </div>
                     </div>
                 `;
@@ -525,18 +535,24 @@
             });
         }
 
-        async function completeAdv(id) {
-            if (!confirm('광고를 종료하고 계약 완료 상태로 변경하시겠습니까?')) return;
-            // This needs to update room_advs status or delete it, and maybe update actual room status?
-            // Current prompt says "Complete saves to room_advs status 0". Wait, prompt says "When creating, Status 0".
-            // It doesn't enable "Completing" existing ads in the prompt logic, but I should probably implement the "Complete" button logic to update status of room_advs.
-            // But the prompt was about CREATING new ads.
-            // Existing "Complete" button logic was: POST /api/rooms/:id/status (updating ROOM status).
-            // Now we are dealing with room_advs. I'll leave the "Complete" logic as is for now or maybe just hide it if not specified?
-            // The prompt says "Modify room page... Add button...". It didn't ask to remove existing functionality, but the existing functionality was based on different table.
-            // I will just make it alert "Not implemented" if clicked for now to avoid breaking data, as I changed the table.
-            alert('이 기능은 업데이트 중입니다.');
+        async function deleteAdv(id) {
+            if (!confirm('광고를 삭제하시겠습니까?')) return;
+            try {
+                const res = await fetch(`/api/ads/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    alert('삭제되었습니다.');
+                    fetchAdvRooms();
+                } else {
+                    const err = await res.json();
+                    alert('삭제 실패: ' + err.error);
+                }
+            } catch (err) {
+                console.error(err);
+                alert('서버 통신 오류');
+            }
         }
+
+
 
         // --- NEW: Add Modal Logic ---
 
@@ -664,85 +680,7 @@
             renderPhotoPreviews();
         }
 
-        async function editAdv(id) {
-            currentAdvId = id;
-            document.querySelector('#add-modal h3').textContent = '방 내놓기 수정';
-            document.getElementById('add-modal').style.display = 'flex';
 
-            selectedFiles = [];
-            document.getElementById('photo-preview').innerHTML = '';
-            document.getElementById('existing-photos').innerHTML = '';
-            document.getElementById('photo-input').value = '';
-
-            try {
-                const res = await fetch(`/api/ads/${id}`);
-                const adv = await res.json();
-
-                if (cachedBuildings.length === 0) await fetchBuildings();
-                else {
-                    const select = document.getElementById('modal-building');
-                    if (select.options.length <= 1) {
-                        // Re-populate if needed or just trust cachedBuildings logic if structure matches
-                        // Ideally fetchBuildings should populate select.
-                        // If cachedBuildings has data but select is empty (e.g. reload), we need to repopulate.
-                        // Safest is to call fetchBuildings if select is empty.
-                        if (select.children.length < 2) await fetchBuildings();
-                    }
-                }
-
-                document.getElementById('modal-building').value = adv.building_id;
-
-                document.getElementById('modal-building').value = adv.building_id;
-
-                // Fetch rooms for this building
-                await fetchRooms(adv.building_id);
-                // When using advertisements table, related_id is room_id for room ads
-                document.getElementById('modal-room').value = adv.related_id;
-
-                document.getElementById('modal-title').value = adv.title;
-                document.getElementById('modal-deposit').value = adv.deposit;
-                document.getElementById('modal-rent').value = adv.rent;
-                document.getElementById('modal-mgmt').value = adv.management_fee;
-                document.getElementById('modal-cleaning').value = adv.cleaning_fee;
-                document.getElementById('modal-memo').value = adv.description;
-                document.getElementById('modal-date').value = adv.available_date;
-
-                renderExistingPhotos(adv.images || []);
-
-            } catch (err) {
-                console.error(err);
-                alert('데이터를 불러오는데 실패했습니다.');
-                closeModal();
-            }
-        }
-
-        function renderExistingPhotos(images) {
-            const container = document.getElementById('existing-photos');
-            container.innerHTML = '';
-            images.forEach(img => {
-                const div = document.createElement('div');
-                div.className = 'photo-preview-item';
-                div.style.position = 'relative';
-                div.innerHTML = `
-                    <img src="${img.image_url}">
-                    <div style="position:absolute; top:0; right:0; background:rgba(0,0,0,0.5); color:white; cursor:pointer; width:15px; height:15px; display:flex; align-items:center; justify-content:center; font-size:10px;"
-                         onclick="deleteImage(${img.id}, this.parentNode)">x</div>
-                `;
-                container.appendChild(div);
-            });
-        }
-
-        async function deleteImage(imgId, element) {
-            if (!confirm('사진을 삭제하시겠습니까?')) return;
-            try {
-                const res = await fetch(`/api/images/${imgId}`, { method: 'DELETE' });
-                if (res.ok) {
-                    element.remove();
-                } else {
-                    alert('삭제 실패');
-                }
-            } catch (e) { console.error(e); }
-        }
 
         async function submitRoomAdv() {
             const rawRoomId = document.getElementById('modal-room').value;
@@ -787,65 +725,6 @@
                 console.error(err);
                 alert('서버 통신 오류');
             }
-        }
-        async function openDetailModal(id, e) {
-            if (e && (e.target.closest('.action-btn') || e.target.closest('.modal-overlay'))) return;
-
-            try {
-                const res = await fetch(`/api/ads/${id}`);
-                const adv = await res.json();
-
-                // Need to fetch extra building info for address
-                let address = '주소 정보 없음';
-                // Try to find in cache or fetch
-                if (cachedBuildings.length > 0) {
-                    const b = cachedBuildings.find(b => b.id === adv.building_id);
-                    if (b) address = (b.address1 || '') + ' ' + (b.address2 || '');
-                } else {
-                    // Quick fetch just to get address if not cached
-                    try {
-                        const bRes = await fetch(`/api/admin/buildings`);
-                        const buildings = await bRes.json();
-                        const b = buildings.find(b => b.id === adv.building_id);
-                        if (b) address = (b.address1 || '') + ' ' + (b.address2 || '');
-                    } catch (err) { }
-                }
-
-                document.getElementById('detail-title').textContent = adv.title || '제목 없음';
-                document.getElementById('detail-building').textContent = adv.building_name || '미지정';
-                document.getElementById('detail-address').textContent = address;
-                document.getElementById('detail-room').textContent = adv.room_number + '호';
-                document.getElementById('detail-available').textContent = adv.available_date || '-';
-
-                document.getElementById('detail-deposit').textContent = (adv.deposit || 0).toLocaleString();
-                document.getElementById('detail-rent').textContent = (adv.rent || 0).toLocaleString();
-                document.getElementById('detail-mgmt').textContent = (adv.management_fee || 0).toLocaleString();
-                document.getElementById('detail-cleaning').textContent = (adv.cleaning_fee || 0).toLocaleString();
-
-                document.getElementById('detail-memo').textContent = adv.description || '';
-
-                const gallery = document.getElementById('detail-photos');
-                gallery.innerHTML = '';
-                if (adv.images && adv.images.length > 0) {
-                    adv.images.forEach(img => {
-                        const imgEl = document.createElement('img');
-                        imgEl.src = img.image_url;
-                        gallery.appendChild(imgEl);
-                    });
-                } else {
-                    gallery.innerHTML = '<div style="padding:1rem; opacity:0.5; color:white;">사진 없음</div>';
-                }
-
-                document.getElementById('detail-modal').style.display = 'flex';
-
-            } catch (err) {
-                console.error(err);
-                alert('정보를 불러오지 못했습니다.');
-            }
-        }
-
-        function closeDetailModal() {
-            document.getElementById('detail-modal').style.display = 'none';
         }
     </script>
 </body>

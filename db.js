@@ -90,7 +90,7 @@ if (databaseUrl) {
     };
 
     // Init PG Schema
-    const SCHEMA_PG_PATH = path.join(__dirname, 'schema_pg.sql');
+    const SCHEMA_PG_PATH = path.join(__dirname, 'migrate', 'schema_pg.sql');
     if (fs.existsSync(SCHEMA_PG_PATH)) {
         const schema = fs.readFileSync(SCHEMA_PG_PATH, 'utf8');
         pool.query(schema, (err) => {
@@ -115,7 +115,7 @@ if (databaseUrl) {
         }
     }
 
-    const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
+    const SCHEMA_PATH = path.join(__dirname, 'migrate', 'schema.sql');
 
     db = new sqlite3.Database(DB_PATH, (err) => {
         if (err) {
@@ -163,6 +163,7 @@ function ensureColumns() {
         { table: 'message_box', name: 'title', type: 'TEXT' },
         { table: 'message_box', name: 'message_id', type: 'INTEGER' },
         { table: 'messages', name: 'read_at', type: 'DATETIME' },
+        { table: 'items', name: 'belongs_to', type: 'INTEGER' },
     ];
 
     columns.forEach(col => {
@@ -230,7 +231,7 @@ db.resetDatabase = function (cb) {
         `;
         db.pool.query(dropQuery, (err) => {
             if (err) return cb && cb(err);
-            const SCHEMA_PG_PATH = path.join(__dirname, 'schema_pg.sql');
+            const SCHEMA_PG_PATH = path.join(__dirname, 'migrate', 'schema_pg.sql');
             const schema = fs.readFileSync(SCHEMA_PG_PATH, 'utf8');
             db.pool.query(schema, (err2) => {
                 if (err2) return cb && cb(err2);
@@ -246,7 +247,7 @@ db.resetDatabase = function (cb) {
                 let dropCount = 0;
                 const tablesToDrop = rows.filter(r => r.name !== 'sqlite_sequence');
                 if (tablesToDrop.length === 0) {
-                    const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
+                    const SCHEMA_PATH = path.join(__dirname, 'migrate', 'schema.sql');
                     const schema = fs.readFileSync(SCHEMA_PATH, 'utf8');
                     db.exec(schema, (err) => {
                         seedAdmin(cb);
@@ -257,7 +258,7 @@ db.resetDatabase = function (cb) {
                     db.run(`DROP TABLE IF EXISTS ${row.name}`, () => {
                         dropCount++;
                         if (dropCount === tablesToDrop.length) {
-                            const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
+                            const SCHEMA_PATH = path.join(__dirname, 'migrate', 'schema.sql');
                             const schema = fs.readFileSync(SCHEMA_PATH, 'utf8');
                             db.exec(schema, (err) => {
                                 db.run("PRAGMA foreign_keys = ON;");

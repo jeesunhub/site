@@ -166,8 +166,6 @@ Table advertisements {
   created_by integer [note: "null if anonymous"]
   created_at datetime [default: `CURRENT_TIMESTAMP`]
   status text [note: "'advertising', 'drawing', 'completed'"]
-  target_id integer [note: "building_id for targeted ads"]
-  category text
 }
 
 Table applicants {
@@ -175,7 +173,6 @@ Table applicants {
   user_id integer [not null]
   advertisement_id integer [not null]
   status text [note: "'applying', 'won', 'lost'"]
-  created_at datetime [default: `CURRENT_TIMESTAMP`]
 }
 
 Table images {
@@ -216,8 +213,7 @@ Ref: payment_allocation.payment_id > payments.id
 Ref: payment_allocation.invoice_id > invoices.id
 Ref: room_events.room_id > rooms.id
 Ref: advertisements.created_by > users.id
-Ref: advertisements.target_id > buildings.id
 Ref: applicants.user_id > users.id
 Ref: applicants.advertisement_id > advertisements.id
 Ref: items.belongs_to > users.id
-Ref: logs.related_id > items.id
+Ref: logs.related_id > items.id [note: "Generic reference"]
