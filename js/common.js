@@ -73,8 +73,8 @@ function renderNavbar() {
             <div class="footer-container">
                 <div class="footer-biz-name" onclick="toggleFooterInfo()">상호명: 김지선, 김세미 부동산</div>
                 <div class="footer-links">
-                    <button class="footer-btn">이용약관</button>
-                    <button class="footer-btn">개인정보처리방침</button>
+                    <a href="/terms.html" class="footer-btn" style="text-decoration: none;">이용약관</a>
+                    <a href="/privacy.html" class="footer-btn" style="text-decoration: none;">개인정보처리방침</a>
                 </div>
                 <div id="footer-biz-details" class="footer-info-details">
                     상호명: 김지선, 김세미 부동산<br>

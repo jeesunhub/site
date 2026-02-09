@@ -200,8 +200,10 @@ function seedAdmin(cb) {
         }
         if (!row) {
             console.log('Creating default admin user...');
-            const insertSql = "INSERT INTO users (login_id, password, nickname, role, approved, status) VALUES (?, ?, ?, ?, 1, '승인')";
-            db.run(insertSql, ['admin', 'admin', 'admin', 'admin'], (err) => {
+            const colors = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#ef4444', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6'];
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+            const insertSql = "INSERT INTO users (login_id, password, nickname, role, approved, status, color) VALUES (?, ?, ?, ?, 1, '승인', ?)";
+            db.run(insertSql, ['admin', 'admin', 'admin', 'admin', randomColor], (err) => {
                 if (err) console.error('Error creating admin user:', err.message);
                 else {
                     console.log('Default admin user created.');

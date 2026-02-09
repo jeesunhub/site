@@ -43,7 +43,9 @@ async function recreateDatabase() {
             console.log('Schema applied successfully.');
 
             console.log('Seeding admin user...');
-            const seedSql = "INSERT INTO users (login_id, password, nickname, role, approved, status) VALUES ('admin', 'admin', 'admin', 'admin', 1, '승인')";
+            const colors = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#ef4444', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6'];
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+            const seedSql = `INSERT INTO users (login_id, password, nickname, role, approved, status, color) VALUES ('admin', 'admin', 'admin', 'admin', 1, '승인', '${randomColor}')`;
             await client.query(seedSql);
             console.log('Default admin user created.');
 

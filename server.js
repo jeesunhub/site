@@ -927,9 +927,13 @@ app.post('/api/signup', (req, res) => {
             if (err) return res.status(500).json({ error: err.message });
             if (row) return res.status(400).json({ error: 'USER_EXISTS' });
 
-            // Insert new user with '임시' status
-            db.run(`INSERT INTO users(login_id, password, nickname, birth_date, phone_number, role, approved, status) VALUES(?, ?, ?, ?, ?, ?, 0, '임시')`,
-                [login_id, password, nickname, birth_date, cleanPhone, role],
+            // Generate random color for profile avatar
+            const colors = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#ef4444', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6'];
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+            // Insert new user with '임시' status and random color
+            db.run(`INSERT INTO users(login_id, password, nickname, birth_date, phone_number, role, approved, status, color) VALUES(?, ?, ?, ?, ?, ?, 0, '임시', ?)`,
+                [login_id, password, nickname, birth_date, cleanPhone, role, randomColor],
                 async function (err) {
                     if (err) return res.status(500).json({ error: err.message });
                     const newUserId = this.lastID;
@@ -2641,43 +2645,66 @@ app.delete('/api/notices/:id', (req, res) => {
     const messageId = req.params.id;
     console.log(`[API] DELETE / api / notices / ${messageId} `);
 
-    // Get message details first to check if it's a signup and get author_id
-    db.get("SELECT category, author_id FROM message_box WHERE id = ?", [messageId], (err, msg) => {
+    // Get all necessary details in one go
+    db.get("SELECT category, author_id, message_id as contentId FROM message_box WHERE id = ?", [messageId], (err, msg) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!msg) return res.status(404).json({ error: 'Message not found' });
+
+        const { category, author_id, contentId } = msg;
 
         db.serialize(() => {
             db.run('BEGIN TRANSACTION');
 
-            // 1. Delete Recipients (Child of message)
+            // 1. Delete Recipients
             db.run(`DELETE FROM message_recipient WHERE message_id = ? `, [messageId], (err) => {
                 if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
 
-                // 2. Delete the box and then the message content
-                db.get("SELECT message_id FROM message_box WHERE id = ?", [messageId], (err, row) => {
-                    const contentId = row ? row.message_id : null;
-                    db.run(`DELETE FROM message_box WHERE id = ? `, [messageId], (err) => {
-                        if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
+                // 2. Delete the box
+                db.run(`DELETE FROM message_box WHERE id = ? `, [messageId], (err) => {
+                    if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
 
-                        if (contentId) {
-                            db.run(`DELETE FROM messages WHERE id = ? `, [contentId]);
-                        }
+                    // 3. Delete the message content
+                    if (contentId) {
+                        db.run(`DELETE FROM messages WHERE id = ? `, [contentId]);
+                    }
 
-                        // 3. Delete the user if it's a signup (Parent)
-                        if (msg.category === '가입신청' && msg.author_id) {
-                            db.run("DELETE FROM users WHERE id = ?", [msg.author_id], (err) => {
-                                if (err) {
-                                    db.run('ROLLBACK');
-                                    return res.status(500).json({ error: `User deletion failed: ${err.message} ` });
-                                }
+                    // 4. Delete the user if it's a signup AND not approved yet
+                    if (category === '가입신청' && author_id) {
+                        // Check if user is approved or has contracts before deleting
+                        db.get("SELECT approved FROM users WHERE id = ?", [author_id], (err, userRow) => {
+                            if (userRow && userRow.approved === 1) {
+                                // User is already approved, just commit message deletion
                                 db.run('COMMIT');
-                                res.json({ message: 'Message and user deleted' });
+                                return res.json({ message: 'Message deleted' });
+                            }
+
+                            // Check for contracts as a secondary safety measure
+                            db.get("SELECT id FROM contracts WHERE tenant_id = ? LIMIT 1", [author_id], (err, contractRow) => {
+                                if (contractRow) {
+                                    // User has contracts, don't delete user
+                                    db.run('COMMIT');
+                                    return res.json({ message: 'Message deleted' });
+                                }
+
+                                // Safe to delete the temporary user
+                                db.run("DELETE FROM room_tenant WHERE tenant_id = ?", [author_id], (err) => {
+                                    if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: `Room relationship deletion failed: ${err.message}` }); }
+
+                                    db.run("DELETE FROM users WHERE id = ?", [author_id], (err) => {
+                                        if (err) {
+                                            db.run('ROLLBACK');
+                                            return res.status(500).json({ error: `User deletion failed: ${err.message}` });
+                                        }
+                                        db.run('COMMIT');
+                                        res.json({ message: 'Message and temporary user deleted' });
+                                    });
+                                });
                             });
-                        } else {
-                            db.run('COMMIT');
-                            res.json({ message: 'Message deleted' });
-                        }
-                    });
+                        });
+                    } else {
+                        db.run('COMMIT');
+                        res.json({ message: 'Message deleted' });
+                    }
                 });
             });
         });
