@@ -8,6 +8,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     <style>
+        .container {
+            padding: 0;
+            margin: 0;
+            width: 100%;
+        }
+
         .page-header {
             display: flex;
             justify-content: space-between;
@@ -157,7 +163,7 @@
         <h1>임대인 관리</h1>
     </div>
 
-    <div class="container" style="padding: 0;">
+    <div class="container">
         <div id="landlord-list" class="mgmt-list">
             <!-- Populated by JS -->
             <div style="text-align: center; padding: 3rem; opacity: 0.5;">로딩 중...</div>
@@ -210,10 +216,7 @@
             list.forEach(u => {
                 const el = document.createElement('div');
                 el.className = 'mgmt-item';
-                const isApproved = u.status === '승인';
-                const statusStyle = isApproved
-                    ? 'color: #4ade80; border: 1px solid #4ade80; opacity: 1;'
-                    : 'opacity:0.7; border: 1px solid rgba(255,255,255,0.3);';
+
 
                 el.innerHTML = `
                     <div class="mgmt-summary" onclick="location.href='/landlord_new.html?id=${u.id}'">
@@ -223,7 +226,7 @@
                         <div class="mgmt-center">
                             <div class="center-top">
                                 ${u.nickname || 'Unknown'} 
-                                <span style="font-size:0.8rem; margin-left:0.5rem; padding: 0.1rem 0.3rem; border-radius: 0.3rem; ${statusStyle}">${u.status || '-'}</span>
+                                <span class="user-status-badge status-${u.status || '임시'}">${u.status || '임시'}</span>
                             </div>
                             <div class="center-bottom">ID: ${u.login_id}</div>
                         </div>

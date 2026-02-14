@@ -44,6 +44,7 @@
 
         .container {
             padding: 0;
+            margin: 0;
             width: 100%;
         }
 
@@ -221,7 +222,7 @@
 
                 let statusHtml = '';
 
-                // Logic: Show status only for Author
+                // Logic: Show status
                 if (isAuthor) {
                     const total = notice.total_cnt || 0;
                     const read = notice.read_cnt || 0;
@@ -230,9 +231,8 @@
 
                     if (read === 0) {
                         text = '안읽음';
-                        cls = 'status-btn-reject'; // Use reject style (Redish) for Unread, or tmp (Gray)
+                        cls = 'status-btn-reject';
                     } else {
-                        // Read > 0
                         cls = 'status-btn-approve'; // Green
                         if (total <= 1) {
                             text = '읽음';
@@ -242,14 +242,12 @@
                     }
                     statusHtml = `<button class="action-btn ${cls}">${text}</button>`;
                 } else {
-                    // Recipient gets nothing
-                    statusHtml = '';
+                    // Recipient status
+                    const isRead = notice.my_read_at !== null;
+                    const text = isRead ? '읽음' : '안읽음';
+                    const cls = isRead ? 'status-btn-approve' : 'status-btn-reject';
+                    statusHtml = `<button class="action-btn ${cls}">${text}</button>`;
                 }
-
-                // Delete Button
-                statusHtml += `
-                    <button class="action-btn status-btn-reject" onclick="deleteMessage(event, ${notice.id})">삭제</button>
-                `;
 
                 // Display category
                 let displayCategory = notice.category || '알림';

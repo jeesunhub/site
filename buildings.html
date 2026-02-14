@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ko">
 
 <head>
@@ -8,6 +8,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     <style>
+        .container {
+            padding: 0;
+            margin: 0;
+            width: 100%;
+        }
+
         .dynamic-field-row {
             display: flex;
             align-items: center;
@@ -225,28 +231,37 @@
         .action-btn {
             height: 2rem;
             padding: 0 1rem;
-            border-radius: 0.4rem;
-            border: none;
+            border-radius: 0.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
             font-size: 0.8rem;
-            font-weight: 600;
+            font-weight: 500;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
-            transition: opacity 0.2s;
-        }
-
-        .action-btn:hover {
-            opacity: 0.9;
+            min-width: 4rem;
+            white-space: nowrap;
+            transition: background 0.2s;
         }
 
         .btn-edit {
-            background: var(--primary);
+            background: rgba(99, 102, 241, 0.2);
+            color: #a5b4fc;
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-edit:hover {
+            background: rgba(99, 102, 241, 0.3);
         }
 
         .btn-delete {
-            background: var(--danger);
+            background: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-delete:hover {
+            background: rgba(239, 68, 68, 0.3);
         }
 
         /* Room Sub-list */
@@ -317,6 +332,25 @@
             opacity: 0.5;
             padding-top: 2px;
         }
+
+        .room-right {
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
+            padding-right: 0.5rem;
+        }
+
+        .event-count-tag {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.4);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
     </style>
 </head>
 
@@ -326,7 +360,7 @@
     <div class="building-mgmt-header" id="building-header">
         <h1>건물 관리</h1>
     </div>
-    <div class="container" id="main-content" style="margin-top: 0; padding: 0;">
+    <div class="container" id="main-content">
         <div id="building-toolbar" style="margin: 1rem 0; padding: 0 1.5rem;">
             <!-- Toolbar populated by JS -->
         </div>
@@ -449,11 +483,8 @@
                 <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
                     <h1>건물 관리</h1>
                     <div style="display: flex; gap: 0.5rem; align-items: center;">
-                        <select id="building-filter" onchange="filterBuildingManagement()" style="padding:0.4rem 0.6rem; border-radius:0.5rem; background:var(--card-bg); color:white; border:1px solid rgba(255,255,255,0.1); font-size: 0.9rem;">
-                            <option value="ALL">ALL (전체 건물)</option>
-                            ${buildings.map(b => `<option value="${b.id}" ${b.id == filterId ? 'selected' : ''}>${b.name}</option>`).join('')}
-                        </select>
                         <button class="btn-glass" onclick="location.href='building_new.html'">건물 추가</button>
+                        <button class="btn-glass" onclick="location.href='event_new.html'" style="background: rgba(168, 85, 247, 0.2); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.3);">이벤트 추가</button>
                     </div>
                 </div>
                 `;
@@ -487,15 +518,14 @@
                         const memo = r.latest_event || '이벤트 없음';
                         const date = r.latest_event_date || '-';
                         return `
-                            <div class="room-item">
+                            <div class="room-item" onclick="location.href='buildings_room.html?id=${r.id}'" style="cursor:pointer;">
                                 <div class="room-left"><span class="room-badge">${r.room_number}호</span></div>
                                 <div class="room-center">
                                     <div class="room-top" title="${memo}">${memo}</div>
                                     <div class="room-bottom">${date}</div>
                                 </div>
                                 <div class="room-right">
-                                    <button class="add-small-btn" onclick="event.stopPropagation(); openAddEventInputModal(${r.id})">+</button>
-                                    <button class="delete-small-btn" onclick="event.stopPropagation(); alert('방 삭제 기능은 준비중입니다.')">-</button>
+                                    ${r.event_count > 0 ? `<span class="event-count-tag">이벤트 ${r.event_count}</span>` : ''}
                                 </div>
                             </div>
                         `;
@@ -511,7 +541,7 @@
                             <div class="center-bottom" title="${address}">${address}</div>
                         </div>
                         <div class="mgmt-right">
-                            <button class="action-btn btn-edit" onclick="event.stopPropagation(); location.href='building_new.html?id=' + b.id">편집</button>
+                            <button class="action-btn btn-edit" onclick="event.stopPropagation(); location.href='building_new.html?id=${b.id}'">편집</button>
                             <button class="action-btn btn-delete" onclick="event.stopPropagation(); deleteBuilding(${b.id})">삭제</button>
                         </div>
                     </div>
@@ -610,10 +640,6 @@
                 alert('오류 발생: ' + err.message);
             }
         }
-
-
-
-
 
         async function deleteBuilding(buildingId) {
             if (!confirm('정말로 이 건물을 삭제하시겠습니까?')) return;

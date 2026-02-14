@@ -468,7 +468,7 @@
 
                 if (res.ok) {
                     alert('성공적으로 수정되었습니다.');
-                    location.reload();
+                    location.href = '/room_adv.html';
                 } else {
                     const err = await res.json();
                     alert('저장 실패: ' + err.error);

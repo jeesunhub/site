@@ -164,6 +164,7 @@ function ensureColumns() {
         { table: 'message_box', name: 'message_id', type: 'INTEGER' },
         { table: 'messages', name: 'read_at', type: 'DATETIME' },
         { table: 'items', name: 'belongs_to', type: 'INTEGER' },
+        { table: 'room_events', name: 'photo', type: 'TEXT' },
     ];
 
     columns.forEach(col => {

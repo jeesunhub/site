@@ -419,9 +419,7 @@
                                 <div class="tenant-center">
                                     <div class="center-top" style="display: flex; align-items: center;">
                                         <span>${t.nickname || '이름 없음'}</span>
-                                        ${t.status === '종료' ? `
-                                            <span style="font-size: 0.65rem; background: rgba(239, 68, 68, 0.15); color: #f87171; padding: 1px 6px; border-radius: 4px; margin-left: 8px; border: 1px solid rgba(239, 68, 68, 0.2);">계약 종료됨</span>
-                                        ` : ''}
+                                        <span class="user-status-badge status-${t.status || '임시'}">${t.status === '종료' ? '계약 종료됨' : (t.status || '임시')}</span>
                                     </div>
                                     <div class="center-bottom">
                                         <div>${start} ~ ${end}</div>

@@ -375,14 +375,16 @@ app.post('/api/ads', upload.array('photos', 5), (req, res) => {
 
                 const contractQuery = `
                     INSERT INTO contracts(
-        room_id, tenant_id, payment_type, contract_start_date,
-        deposit, monthly_rent, maintenance_fee, cleaning_fee, landlord_id
-    ) VALUES(?, ?, 'postpaid', ?, ?, ?, ?, ?, ?)
+                        room_id, tenant_id, payment_type, contract_start_date,
+                        deposit, monthly_rent, maintenance_fee, cleaning_fee
+                    ) VALUES(?, ?, 'postpaid', ?, ?, ?, ?, ?)
                 `;
+                const finalAvailableDate = available_date || new Date().toISOString().split('T')[0];
+
                 db.run(contractQuery, [
-                    related_id, finalTenantId, available_date || null,
+                    related_id, finalTenantId, finalAvailableDate,
                     parseInt(deposit) || 0, parseInt(rent) || 0, parseInt(management_fee) || 0,
-                    parseInt(cleaning_fee) || 0, finalLandlordId
+                    parseInt(cleaning_fee) || 0
                 ], function (err) {
                     if (err) {
                         console.error('[API] Error creating contract for ad:', err.message);
@@ -449,9 +451,10 @@ app.put('/api/ads/:id', upload.array('photos', 5), (req, res) => {
                 });
             } else if (ad.related_table === 'contract' && ad.related_id) {
                 const contractQuery = `UPDATE contracts SET deposit = ?, monthly_rent = ?, maintenance_fee = ?, cleaning_fee = ?, contract_start_date = ? WHERE id = ? `;
+                const finalAvailableDate = available_date || new Date().toISOString().split('T')[0];
                 db.run(contractQuery, [
                     parseInt(deposit) || 0, parseInt(rent) || 0, parseInt(management_fee) || 0,
-                    parseInt(cleaning_fee) || 0, available_date || null, ad.related_id
+                    parseInt(cleaning_fee) || 0, finalAvailableDate, ad.related_id
                 ], function (err) {
                     if (err) {
                         console.error('[API] Contract Update Error:', err.message);
@@ -2213,6 +2216,10 @@ app.post('/api/users/quick', (req, res) => {
                 updateFields.push('status = ?');
                 updateParams.push(req.body.status);
             }
+            if (req.body.approved !== undefined) {
+                updateFields.push('approved = ?');
+                updateParams.push(req.body.approved);
+            }
 
             if (updateFields.length > 0) {
                 const updateQuery = `UPDATE users SET ${updateFields.join(', ')} WHERE id = ? `;
@@ -2324,12 +2331,14 @@ app.get('/api/tenants/search', (req, res) => {
     // We search in: Users.nickname, Contracts.keyword
     // Filter by landlord_id if provided (for context)
     let query = `
-        SELECT DISTINCT u.id, u.nickname, b.name as building, r.room_number, c.keyword
+        SELECT DISTINCT u.id, u.nickname, b.name as building, r.room_number,
+               (SELECT GROUP_CONCAT(keyword, ', ') FROM contract_keywords WHERE contract_id = c.id) as keywords_str
         FROM contracts c
         JOIN rooms r ON c.room_id = r.id
         JOIN buildings b ON r.building_id = b.id
         JOIN landlord_buildings lb ON b.id = lb.building_id
         JOIN users u ON c.tenant_id = u.id
+        LEFT JOIN contract_keywords ck ON c.id = ck.contract_id
         WHERE c.contract_end_date >= date('now')
         AND u.status != '종료'
     `;
@@ -2342,8 +2351,8 @@ app.get('/api/tenants/search', (req, res) => {
     }
 
     if (keyword) {
-        query += ` AND(u.nickname LIKE ? OR c.keyword LIKE ?)`;
-        const likeKey = `% ${keyword}% `;
+        query += ` AND (u.nickname LIKE ? OR ck.keyword LIKE ?)`;
+        const likeKey = `%${keyword}%`;
         params.push(likeKey, likeKey);
     }
 
@@ -2351,7 +2360,11 @@ app.get('/api/tenants/search', (req, res) => {
 
     db.all(query, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
+        const processed = rows.map(r => ({
+            ...r,
+            keywords: r.keywords_str ? r.keywords_str.split(', ').filter(k => k) : []
+        }));
+        res.json(processed);
     });
 });
 
@@ -2390,18 +2403,21 @@ app.post('/api/contracts/full', (req, res) => {
     const query = `
         INSERT INTO contracts(
         tenant_id, payment_type, contract_start_date, contract_end_date,
-        deposit, monthly_rent, maintenance_fee, cleaning_fee, room_id, landlord_id
-    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        deposit, monthly_rent, maintenance_fee, cleaning_fee, room_id
+    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
     db.run(query, [
         tenant_id, payment_type, contract_start_date, contract_end_date,
-        deposit, monthly_rent, management_fee, cleaning_fee, room_id, landlord_id
+        deposit, monthly_rent, management_fee, cleaning_fee, room_id
     ], function (err) {
         if (err) return res.status(500).json({ error: err.message });
 
         // Sync user info because room might have changed
         syncUserBuildingInfo(tenant_id);
+
+        // Update tenant status to approved
+        db.run("UPDATE users SET approved = 1, status = '승인' WHERE id = ?", [tenant_id]);
 
         res.json({ message: 'Contract created', contractId: this.lastID });
     });
@@ -2428,6 +2444,10 @@ tenant_id = ?, payment_type = ?, contract_start_date = ?, contract_end_date = ?,
         contractId
     ], function (err) {
         if (err) return res.status(500).json({ error: err.message });
+
+        // Update tenant status to approved
+        db.run("UPDATE users SET approved = 1, status = '승인' WHERE id = ?", [tenant_id]);
+
         res.json({ message: 'Contract updated' });
     });
 });
@@ -2448,7 +2468,8 @@ AND(re.memo LIKE ? OR ? = '')
          FROM room_events re 
          WHERE re.room_id = r.id
 AND(re.memo LIKE ? OR ? = '')
-         ORDER BY re.event_date DESC, re.id DESC LIMIT 1) as latest_event_date
+         ORDER BY re.event_date DESC, re.id DESC LIMIT 1) as latest_event_date,
+    (SELECT COUNT(*) FROM room_events re WHERE re.room_id = r.id) as event_count
         FROM rooms r
         WHERE r.building_id = ?
     `;
@@ -2457,6 +2478,22 @@ AND(re.memo LIKE ? OR ? = '')
     db.all(query, [searchQuery, search, searchQuery, search, buildingId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
+    });
+});
+
+// 26b. Get Single Room Event
+app.get('/api/room-events/:id', (req, res) => {
+    const eventId = req.params.id;
+    const query = `
+        SELECT re.*, r.building_id 
+        FROM room_events re
+        JOIN rooms r ON re.room_id = r.id
+        WHERE re.id = ?
+    `;
+    db.get(query, [eventId], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(404).json({ error: 'Event not found' });
+        res.json(row);
     });
 });
 
@@ -2474,11 +2511,12 @@ SELECT * FROM room_events
     });
 });
 
-app.post('/api/rooms/:id/events', (req, res) => {
+app.post('/api/rooms/:id/events', upload.single('photo'), (req, res) => {
     const roomId = req.params.id;
     const { event_date, memo } = req.body;
-    db.run(`INSERT INTO room_events(room_id, event_date, memo) VALUES(?, ?, ?)`,
-        [roomId, event_date, memo],
+    const photo = req.file ? `/uploads/${req.file.filename}` : null;
+    db.run(`INSERT INTO room_events(room_id, event_date, memo, photo) VALUES(?, ?, ?, ?)`,
+        [roomId, event_date, memo, photo],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ message: 'Event added', eventId: this.lastID });
@@ -2487,17 +2525,67 @@ app.post('/api/rooms/:id/events', (req, res) => {
 });
 
 // 28. Update Room Event
-app.put('/api/room-events/:id', (req, res) => {
+app.put('/api/room-events/:id', upload.single('photo'), (req, res) => {
     const eventId = req.params.id;
     const { event_date, memo } = req.body;
-    db.run(`UPDATE room_events SET event_date = ?, memo = ? WHERE id = ? `,
-        [event_date, memo, eventId],
-        function (err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ message: 'Event updated' });
-        }
-    );
+    let query = `UPDATE room_events SET event_date = ?, memo = ? `;
+    let params = [event_date, memo];
+
+    if (req.file) {
+        query += `, photo = ? `;
+        params.push(`/uploads/${req.file.filename}`);
+    }
+
+    query += ` WHERE id = ? `;
+    params.push(eventId);
+
+    db.run(query, params, function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Event updated' });
+    });
 });
+
+// 28a. Delete Room Event
+app.delete('/api/room-events/:id', (req, res) => {
+    const eventId = req.params.id;
+    db.run(`DELETE FROM room_events WHERE id = ? `, [eventId], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Event deleted' });
+    });
+});
+
+// 29a. Get Room Tenants
+app.get('/api/rooms/:id/tenants', (req, res) => {
+    const roomId = req.params.id;
+    const query = `
+        SELECT rt.*, u.nickname, u.status as user_status
+        FROM room_tenant rt
+        JOIN users u ON rt.tenant_id = u.id
+        WHERE rt.room_id = ?
+        ORDER BY rt.start_date DESC
+    `;
+    db.all(query, [roomId], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows || []);
+    });
+});
+
+// 29. Get Single Room Detail
+app.get('/api/rooms/:id', (req, res) => {
+    const roomId = req.params.id;
+    const query = `
+        SELECT r.*, b.name as building_name 
+        FROM rooms r 
+        LEFT JOIN buildings b ON r.building_id = b.id 
+        WHERE r.id = ? 
+    `;
+    db.get(query, [roomId], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(404).json({ error: `Room with ID ${roomId} not found in database.` });
+        res.json(row);
+    });
+});
+
 
 // 30. Get Messages (Visibility Logic)
 app.get('/api/notices', (req, res) => {
@@ -2507,13 +2595,14 @@ app.get('/api/notices', (req, res) => {
 
     const baseFields = `
         mb.*,
-    COALESCE(mb.title, a.title, i.title, u_rel.title, '알림') as title,
-    msg.content as content,
-    COALESCE(a.status, i.status, u_rel.status, '-') as related_status,
-    u.nickname, u.status as user_status,
-    (SELECT COUNT(*) FROM message_recipient WHERE message_id = mb.id AND recipient_id != mb.author_id) as total_cnt,
-        (SELECT COUNT(*) FROM message_recipient WHERE message_id = mb.id AND read_at IS NOT NULL AND recipient_id != mb.author_id) as read_cnt
-            `;
+        COALESCE(mb.title, a.title, i.title, u_rel.title, '알림') as title,
+        msg.content as content,
+        COALESCE(a.status, i.status, u_rel.status, '-') as related_status,
+        u.nickname, u.status as user_status,
+        (SELECT COUNT(*) FROM message_recipient WHERE message_id = mb.id AND recipient_id != mb.author_id) as total_cnt,
+        (SELECT COUNT(*) FROM message_recipient WHERE message_id = mb.id AND read_at IS NOT NULL AND recipient_id != mb.author_id) as read_cnt,
+        (SELECT read_at FROM message_recipient WHERE message_id = mb.id AND recipient_id = ?) as my_read_at
+    `;
 
     const joinClause = `
         LEFT JOIN messages msg ON mb.message_id = msg.id
@@ -2530,19 +2619,20 @@ app.get('/api/notices', (req, res) => {
             FROM message_box mb
             ${joinClause}
             ORDER BY mb.created_at DESC
-    `;
+        `;
+        params = [user_id];
     } else {
         query = `
             SELECT DISTINCT ${baseFields}
             FROM message_box mb
             ${joinClause}
-WHERE(
-    mb.author_id = ?
-        OR mr.recipient_id = ?
+            WHERE (
+                mb.author_id = ?
+                OR mr.recipient_id = ?
             )
             ORDER BY mb.created_at DESC
-    `;
-        params = [user_id, user_id];
+        `;
+        params = [user_id, user_id, user_id];
     }
 
     db.all(query, params, (err, rows) => {

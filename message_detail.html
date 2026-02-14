@@ -19,9 +19,9 @@
 
         .header {
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            padding: 0 0.5rem;
-            /* Reduced horizontal padding to move items to ends */
+            padding: 0.5rem 1.5rem;
             background: rgba(15, 23, 42, 0.9);
             backdrop-filter: blur(10px);
             position: sticky;
@@ -42,10 +42,11 @@
             align-items: center;
         }
 
-        .content-card {
-            margin: 1.5rem;
-            padding: 0;
-            /* Box removed, content directly shown */
+        .container {
+            padding: 1.5rem;
+            width: 100%;
+            max-width: none;
+            margin: 0;
         }
 
         .info-row {
@@ -161,54 +162,17 @@
 </head>
 
 <body class="has-back-button">
-    <!-- Navbar will be rendered by JS into this placeholder -->
-    <div id="navbar-placeholder"></div>
+
+    <div class="header">
+        <h1
+            style="font-size: 1.25rem; margin: 0; background: linear-gradient(to right, #6366f1, #a855f7); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+            메시지 상세</h1>
+    </div>
 
     <div class="container">
         <div class="form-group">
             <label class="form-label">제목</label>
             <div id="msg-title" class="form-input" style="background: rgba(255, 255, 255, 0.05);">제목 로딩 중...</div>
-        </div>
-
-        <div id="applicant-info" style="display:none;">
-            <!-- Keep applicant info for 'signup' messages as is, or adapt style if needed. 
-                  For now, we keep it but maybe wrap in a form-group style container? 
-                  Let's keep the existing applicant-info structure inside a form-group for consistency if possible, 
-                  or just below title. -->
-            <div class="form-group">
-                <label class="form-label">신청 정보</label>
-                <div
-                    style="background: rgba(255, 255, 255, 0.05); border-radius: 0.8rem; border: 1px solid rgba(255, 255, 255, 0.1); padding: 1rem;">
-                    <div class="info-row">
-                        <div class="info-label">아이디</div>
-                        <div id="val-id" class="info-value">-</div>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-label">이름</div>
-                        <div id="val-name" class="info-value">-</div>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-label">생년월일</div>
-                        <div id="val-birth" class="info-value">-</div>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-label">전화번호</div>
-                        <div id="val-phone" class="info-value">-</div>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-label">건물명</div>
-                        <div id="val-building" class="info-value">-</div>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-label">호수</div>
-                        <div id="val-room" class="info-value">-</div>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-label">현재 상태</div>
-                        <div id="val-status" class="info-value">-</div>
-                    </div>
-                </div>
-            </div>
         </div>
 
         <div class="form-group" id="content-group">
@@ -218,20 +182,19 @@
             </div>
         </div>
 
-        <div class="action-group" id="action-buttons" style="display:none;">
-            <button class="btn btn-reject" onclick="handleAction('reject')">거절</button>
-            <button class="btn btn-approve" onclick="handleAction('approve')">승인</button>
-        </div>
-
-        <div id="status-message" style="text-align:center; padding:1rem; opacity:0.5; display:none;">
-            이미 처리가 완료된 요청입니다.
-        </div>
-
         <div id="recipient-status-section" style="margin-top: 2rem; display: none;">
             <h4
                 style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem; margin-bottom: 1rem; color: #a5b4fc;">
                 수신 확인</h4>
             <div id="recipient-list" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
+        </div>
+
+        <!-- Global Actions -->
+        <div class="action-group"
+            style="margin-top: 3rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 2rem;">
+            <button class="btn btn-reject"
+                style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171;"
+                onclick="deleteMessage()">삭제</button>
         </div>
     </div>
 
@@ -254,39 +217,18 @@
 
                 document.getElementById('msg-title').textContent = data.title;
 
-                authorId = data.author_id;
+                const applicantName = data.author_name || '-';
+                const fullContent = document.getElementById('full-content');
 
-                if (data.category === '가입신청' || data.category === '방있어요') {
-                    document.getElementById('applicant-info').style.display = 'block';
-                    document.getElementById('content-group').style.display = 'none'; // Hide content group for signup
-
-                    // Parse content if it's formatted
-                    if (data.content) {
-                        const lines = data.content.split('\n');
-                        lines.forEach(line => {
-                            if (line.includes('아이디:')) document.getElementById('val-id').textContent = line.split(':')[1].trim();
-                            if (line.includes('이름:')) document.getElementById('val-name').textContent = line.split(':')[1].trim();
-                            if (line.includes('생년월일:')) document.getElementById('val-birth').textContent = line.split(':')[1].trim();
-                            if (line.includes('전화번호:')) document.getElementById('val-phone').textContent = line.split(':')[1].trim();
-                            if (line.includes('건물명:')) document.getElementById('val-building').textContent = line.split(':')[1].trim();
-                            if (line.includes('호수:')) document.getElementById('val-room').textContent = line.split(':')[1].trim();
-                        });
-                    }
-                } else {
-                    document.getElementById('applicant-info').style.display = 'none';
-                    document.getElementById('content-group').style.display = 'block'; // Show content group
-                    document.getElementById('full-content').textContent = data.content || '(내용 없음)';
-                }
-
-                const statusEl = document.getElementById('val-status');
-                statusEl.textContent = data.user_status;
-                statusEl.className = `info-value status-${data.user_status}`;
-
-                if (data.category === '가입신청' && data.user_status === '임시') {
-                    document.getElementById('action-buttons').style.display = 'flex';
+                if (data.title === '임대인 가입 신청') {
+                    fullContent.textContent = `메뉴 > 임대인 관리 > "${applicantName} 임대인" 선택 후 상태를 승인으로 변경 후 저장을 눌러주세요`;
                 } else if (data.category === '가입신청') {
-                    document.getElementById('status-message').style.display = 'block';
+                    fullContent.textContent = `메뉴 > 세입자 관리 > ${applicantName} 선택 후 계약서를 작성해주세요`;
+                } else {
+                    fullContent.textContent = data.content || '(내용 없음)';
                 }
+
+                fullContent.style.minHeight = 'auto';
 
                 // Mark as read
                 const user = JSON.parse(localStorage.getItem('user'));
@@ -337,18 +279,19 @@
             }
         }
 
-        async function handleAction(action) {
-            if (!authorId) return;
-            const msg = action === 'approve' ? '승인하시겠습니까?' : '거절하시겠습니까?';
-            if (!confirm(msg)) return;
+
+
+        async function deleteMessage() {
+            if (!noticeId) return;
+            if (!confirm('메시지를 삭제하시겠습니까?')) return;
 
             try {
-                const res = await fetch(`/api/users/${authorId}/${action}`, { method: 'POST' });
+                const res = await fetch(`/api/notices/${noticeId}`, { method: 'DELETE' });
                 if (res.ok) {
                     location.href = '/notices.html';
                 } else {
-                    const errData = await res.json();
-                    alert('오류: ' + (errData.error || '처리 실패'));
+                    const data = await res.json();
+                    alert('삭제에 실패했습니다: ' + (data.error || '알 수 없는 오류'));
                 }
             } catch (err) {
                 console.error(err);

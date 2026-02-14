@@ -33,6 +33,7 @@
 
         .container {
             padding: 0;
+            margin: 0;
             width: 100%;
         }
 
@@ -575,7 +576,7 @@
             document.getElementById('modal-rent').value = '';
             document.getElementById('modal-mgmt').value = '';
             document.getElementById('modal-cleaning').value = '';
-            document.getElementById('modal-date').value = '';
+            document.getElementById('modal-date').value = new Date().toISOString().split('T')[0];
             document.getElementById('modal-memo').value = '';
 
             fetchBuildings();

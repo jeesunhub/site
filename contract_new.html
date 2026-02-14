@@ -440,7 +440,7 @@
     <script src="/js/common.js"></script>
     <script>const user = JSON.parse(localStorage.getItem('user'));
         const urlParams = new URLSearchParams(window.location.search);
-        const action = urlParams.get('action');
+        let currentAction = urlParams.get('action');
         const contractId = urlParams.get('contract_id');
         const isIframe = window.self !== window.top;
         let currentTenantId = null;
@@ -539,15 +539,15 @@
                 await loadContractData(contractId);
             }
 
-            if (action === 'extend') {
+            if (currentAction === 'extend') {
                 document.getElementById('page-title').textContent = '계약 연장';
             }
 
-            else if (action === 'change') {
+            else if (currentAction === 'change') {
                 document.getElementById('page-title').textContent = '계약 변경';
             }
 
-            else if (action === 'view') {
+            else if (currentAction === 'view') {
                 document.getElementById('page-title').textContent = '계약 정보 확인';
                 disableForm();
             }
@@ -594,12 +594,43 @@
 
             // Change title
             document.getElementById('page-title').textContent = '계약 수정';
+            currentAction = 'change';
             window.history.replaceState({}, '', `/contract_new.html?action=change&contract_id=${contractId}`);
         }
 
         function enableExtendMode() {
+            const startInput = document.getElementById('contract-start');
+            const endInput = document.getElementById('contract-end');
+
+            if (startInput.value && endInput.value) {
+                const oldStart = new Date(startInput.value);
+                const oldEnd = new Date(endInput.value);
+
+                // Calculate duration in days (including both start and end dates usually)
+                // However, simple difference in time is most robust for "same period"
+                const durationMs = oldEnd.getTime() - oldStart.getTime();
+
+                // New Start = Old End + 1 day
+                const newStart = new Date(oldEnd);
+                newStart.setDate(newStart.getDate() + 1);
+
+                // New End = New Start + duration
+                const newEnd = new Date(newStart.getTime() + durationMs);
+
+                const formatDate = (d) => {
+                    const y = d.getFullYear();
+                    const m = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    return `${y}-${m}-${day}`;
+                };
+
+                startInput.value = formatDate(newStart);
+                endInput.value = formatDate(newEnd);
+            }
+
             enableEditMode();
             document.getElementById('page-title').textContent = '계약 연장';
+            currentAction = 'extend';
             window.history.replaceState({}, '', `/contract_new.html?action=extend&contract_id=${contractId}`);
         }
 
@@ -633,7 +664,7 @@
 
         async function loadBuildings() {
             // No longer populating a select, but we can use this to resolve the name if missing
-            if (action === 'new' && !urlParams.get('building_id') && !urlParams.get('building_name')) {
+            if (currentAction === 'new' && !urlParams.get('building_id') && !urlParams.get('building_name')) {
                 const apiPath = user.role === 'admin' ? '/api/admin/buildings' : `/api/landlord/${user.id}/buildings`;
                 const res = await fetch(apiPath);
                 const buildings = await res.json();
@@ -771,7 +802,7 @@
                 const existingUserId = await fetchUserId(data.tenant_name, data.tenant_dob);
                 let targetUserId = existingUserId;
 
-                if (!targetUserId && action === 'change') {
+                if (!targetUserId && currentAction === 'change') {
                     // If no existing user found matches the new details, but we are in change mode,
                     // we update the CURRENT tenant (correcting their info).
                     // This implies the new Name/DOB slot is free (since fetch returned null).
@@ -788,7 +819,9 @@
                     role: 'tenant',
                     birth_date: data.tenant_dob,
                     phone_number: data.tenant_phone,
-                    building_id: data.building_id
+                    building_id: data.building_id,
+                    status: '승인',
+                    approved: 1
                 };
 
                 // Only generate login_id for NEW users
@@ -832,7 +865,7 @@
                     room_id: data.room_id
                 };
 
-                if (action === 'change' && contractId) {
+                if ((currentAction === 'change' || currentAction === 'extend') && contractId) {
                     url = `/api/contracts/${contractId}`;
                     method = 'PUT';
                     payload.keyword = data.tenant_name; // Maintain keyword on update
@@ -850,8 +883,6 @@
                 });
 
                 if (contractRes.ok) {
-                    alert('계약 정보가 저장되었습니다.');
-
                     if (isIframe) {
                         window.parent.postMessage('contract_saved', '*');
                     }
