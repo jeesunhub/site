@@ -477,7 +477,7 @@
 
         async function fetchAdvRooms() {
             try {
-                const res = await fetch(`/api/ads?type=room&role=${user.role}&user_id=${user.id}`);
+                const res = await fetch(`/api/postings?type=room&role=${user.role}&user_id=${user.id}`);
                 const rooms = await res.json();
                 renderRooms(rooms);
             } catch (err) {
@@ -539,7 +539,7 @@
         async function deleteAdv(id) {
             if (!confirm('광고를 삭제하시겠습니까?')) return;
             try {
-                const res = await fetch(`/api/ads/${id}`, { method: 'DELETE' });
+                const res = await fetch(`/api/postings/${id}`, { method: 'DELETE' });
                 if (res.ok) {
                     alert('삭제되었습니다.');
                     fetchAdvRooms();
@@ -707,7 +707,7 @@
             });
 
             const method = currentAdvId ? 'PUT' : 'POST';
-            const url = currentAdvId ? `/api/ads/${currentAdvId}` : '/api/ads';
+            const url = currentAdvId ? `/api/postings/${currentAdvId}` : '/api/postings';
 
             try {
                 const res = await fetch(url, {

@@ -352,7 +352,7 @@
 
         async function loadAdDetail() {
             try {
-                const res = await fetch(`/api/ads/${adId}`);
+                const res = await fetch(`/api/postings/${adId}`);
                 if (!res.ok) throw new Error('광고를 찾을 수 없습니다.');
                 currentAd = await res.json();
 
@@ -649,7 +649,7 @@
                     formData.append('photos', file);
                 });
 
-                const res = await fetch(`/api/ads/${adId}`, {
+                const res = await fetch(`/api/postings/${adId}`, {
                     method: 'PUT',
                     body: formData
                 });
@@ -657,7 +657,7 @@
                 if (res.ok) {
                     if (selectedWinnerId) {
                         // 1. Select Winner
-                        await fetch(`/api/ads/${adId}/select-winner`, {
+                        await fetch(`/api/postings/${adId}/select-winner`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ user_id: selectedWinnerId })
@@ -692,14 +692,14 @@
 
         async function loadApplicants() {
             try {
-                const res = await fetch(`/api/ads/${adId}/applicants`);
+                const res = await fetch(`/api/postings/${adId}/applicants`);
                 currentApplicants = await res.json();
                 updateBtnText();
             } catch (e) { console.error(e); }
         }
 
         async function applyForAd() {
-            const res = await fetch(`/api/ads/${adId}/apply`, {
+            const res = await fetch(`/api/postings/${adId}/apply`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ user_id: user.id })

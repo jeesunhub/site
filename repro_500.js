@@ -30,7 +30,7 @@ body += `--${boundary}--\r\n`;
 const options = {
     hostname: 'localhost',
     port: 3000,
-    path: '/api/ads',
+    path: '/api/postings',
     method: 'POST',
     headers: {
         'Content-Type': `multipart/form-data; boundary=${boundary}`,

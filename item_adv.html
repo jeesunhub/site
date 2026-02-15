@@ -424,7 +424,7 @@
 
         async function fetchItems() {
             try {
-                let url = `/api/ads?type=item`;
+                let url = `/api/postings?type=item`;
                 if (user) {
                     url += `&viewer_id=${user.id}&viewer_role=${user.role}`;
                 }
@@ -501,7 +501,7 @@
         async function deleteAd(id) {
             if (!confirm('정말로 삭제하시겠습니까? 관련 사진과 물건 정보가 모두 삭제됩니다.')) return;
             try {
-                const res = await fetch(`/api/ads/${id}`, { method: 'DELETE' });
+                const res = await fetch(`/api/postings/${id}`, { method: 'DELETE' });
                 if (res.ok) {
                     alert('삭제되었습니다.');
                     fetchItems();
@@ -559,7 +559,7 @@
             await fetchBuildings();
 
             try {
-                const res = await fetch(`/api/ads/${id}`);
+                const res = await fetch(`/api/postings/${id}`);
                 if (!res.ok) throw new Error('Failed to load item');
                 const item = await res.json();
 
@@ -718,10 +718,10 @@
                 formData.append('photos', file);
             });
 
-            let url = '/api/ads';
+            let url = '/api/postings';
             let method = 'POST';
             if (currentEditItemId) {
-                url = `/api/ads/${currentEditItemId}`;
+                url = `/api/postings/${currentEditItemId}`;
                 method = 'PUT';
             }
 

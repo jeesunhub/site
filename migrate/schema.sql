@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     phone_number TEXT,
     noti INTEGER DEFAULT 0,
     approved INTEGER DEFAULT 0,
-    status TEXT DEFAULT '임시' CHECK (status IN ('임시', '승인', '종료')),
+    status TEXT DEFAULT '신청' CHECK (status IN ('임시', '신청', '승인', '종료')),
 
     title TEXT,
     description TEXT,

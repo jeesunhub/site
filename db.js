@@ -156,13 +156,16 @@ function ensureColumns() {
     const columns = [
         { table: 'users', name: 'noti', type: 'INTEGER DEFAULT 0' },
         { table: 'users', name: 'approved', type: 'INTEGER DEFAULT 0' },
-        { table: 'users', name: 'status', type: "TEXT DEFAULT '임시'" },
+        { table: 'users', name: 'status', type: "TEXT DEFAULT '신청'" },
         { table: 'applicants', name: 'created_at', type: "DATETIME DEFAULT CURRENT_TIMESTAMP" },
         { table: 'advertisements', name: 'target_id', type: 'INTEGER' },
         { table: 'advertisements', name: 'category', type: 'TEXT' },
+        { table: 'advertisements', name: 'is_anonymous', type: 'INTEGER DEFAULT 0' },
         { table: 'message_box', name: 'title', type: 'TEXT' },
         { table: 'message_box', name: 'message_id', type: 'INTEGER' },
         { table: 'messages', name: 'read_at', type: 'DATETIME' },
+        { table: 'messages', name: 'sender_id', type: 'INTEGER' },
+        { table: 'messages', name: 'message_box_id', type: 'INTEGER' },
         { table: 'items', name: 'belongs_to', type: 'INTEGER' },
         { table: 'room_events', name: 'photo', type: 'TEXT' },
     ];

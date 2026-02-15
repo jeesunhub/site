@@ -463,7 +463,7 @@
             document.getElementById('add-btn-header').style.display = 'none';
 
             try {
-                let url = `/api/ads?type=info&category=${encodeURIComponent(category)}`;
+                let url = `/api/postings?type=info&category=${encodeURIComponent(category)}`;
                 if (user) {
                     url += `&viewer_id=${user.id}&viewer_role=${user.role}`;
                 }
@@ -518,7 +518,7 @@
         async function deleteAd(id) {
             if (!confirm('정말로 삭제하시겠습니까?')) return;
             try {
-                const res = await fetch(`/api/ads/${id}`, { method: 'DELETE' });
+                const res = await fetch(`/api/postings/${id}`, { method: 'DELETE' });
                 if (res.ok) {
                     alert('삭제되었습니다.');
                     const urlParams = new URLSearchParams(window.location.search);

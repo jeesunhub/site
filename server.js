@@ -188,7 +188,7 @@ app.get('/api/info/stats', (req, res) => {
 
 
 // 34. Get Advertisements
-app.get('/api/ads', (req, res) => {
+app.get('/api/postings', (req, res) => {
     const { type, role, user_id, viewer_id, viewer_role, category } = req.query;
     let query = `
         SELECT a.*, 
@@ -277,10 +277,9 @@ app.get('/api/ads', (req, res) => {
     });
 });
 
-app.post('/api/ads', upload.array('photos', 5), (req, res) => {
-    const { type, title, description, created_by, is_anonymous, item_name, building_id, target_id, category } = req.body;
-    let { price } = req.body;
-    let { related_id } = req.body;
+app.post('/api/postings', upload.array('photos', 5), (req, res) => {
+    const { type, title, description, created_by, item_name, building_id, target_id, category } = req.body;
+    let { price, is_anonymous, related_id } = req.body;
 
     // Convert types
     const finalPrice = parseInt(price) || 0;
@@ -292,8 +291,8 @@ app.post('/api/ads', upload.array('photos', 5), (req, res) => {
         db.run('BEGIN TRANSACTION');
 
         const finalizeAd = (finalRelId, targetTable = type) => {
-            const query = `INSERT INTO advertisements(related_id, related_table, title, description, price, created_by, status, target_id, category) VALUES(?, ?, ?, ?, ?, ?, 'advertising', ?, ?)`;
-            db.run(query, [finalRelId, targetTable, title, description, finalPrice, finalCreatedBy, finalTargetId, category || null], function (err) {
+            const query = `INSERT INTO advertisements(related_id, related_table, title, description, price, created_by, status, target_id, category, is_anonymous) VALUES(?, ?, ?, ?, ?, ?, 'advertising', ?, ?, ?)`;
+            db.run(query, [finalRelId, targetTable, title, description, finalPrice, finalCreatedBy, finalTargetId, category || null, is_anonymous ? 1 : 0], function (err) {
                 if (err) {
                     console.error('[API] Error inserting advertisement:', err.message);
                     db.run('ROLLBACK');
@@ -305,7 +304,7 @@ app.post('/api/ads', upload.array('photos', 5), (req, res) => {
                 if (req.files && req.files.length > 0) {
                     req.files.forEach((file, index) => {
                         db.run(`INSERT INTO images(related_id, image_url, is_main, related_table) VALUES(?, ?, ?, ?)`,
-                            [adId, `/ uploads / ${file.filename} `, index === 0 ? 1 : 0, 'advertisements']);
+                            [adId, `/uploads/${file.filename}`, index === 0 ? 1 : 0, 'advertisements']);
                     });
                 }
 
@@ -403,9 +402,9 @@ app.post('/api/ads', upload.array('photos', 5), (req, res) => {
     });
 });
 
-app.put('/api/ads/:id', upload.array('photos', 5), (req, res) => {
+app.put('/api/postings/:id', upload.array('photos', 5), (req, res) => {
     const adId = req.params.id;
-    const { title, description, price, item_name, building_id, type, target_id, category, deposit, rent, management_fee, cleaning_fee, available_date } = req.body;
+    const { title, description, price, item_name, building_id, type, target_id, category, deposit, rent, management_fee, cleaning_fee, available_date, is_anonymous } = req.body;
 
     // Convert types
     const finalPrice = parseInt(price) || 0;
@@ -420,8 +419,8 @@ app.put('/api/ads/:id', upload.array('photos', 5), (req, res) => {
             db.run('BEGIN TRANSACTION');
 
             const finalizeUpdate = () => {
-                const query = `UPDATE advertisements SET title = ?, description = ?, price = ?, target_id = ?, category = ? WHERE id = ? `;
-                db.run(query, [title, description, finalPrice, finalTargetId, category || null, adId], function (err) {
+                const query = `UPDATE advertisements SET title = ?, description = ?, price = ?, target_id = ?, category = ?, is_anonymous = ? WHERE id = ? `;
+                db.run(query, [title, description, finalPrice, finalTargetId, category || null, is_anonymous ? 1 : 0, adId], function (err) {
                     if (err) {
                         console.error('[API] Update Error:', err.message);
                         db.run('ROLLBACK');
@@ -431,7 +430,7 @@ app.put('/api/ads/:id', upload.array('photos', 5), (req, res) => {
                     if (req.files && req.files.length > 0) {
                         req.files.forEach((file) => {
                             db.run(`INSERT INTO images(related_id, image_url, is_main, related_table) VALUES(?, ?, ?, ?)`,
-                                [adId, `/ uploads / ${file.filename} `, 0, 'advertisements']);
+                                [adId, `/uploads/${file.filename}`, 0, 'advertisements']);
                         });
                     }
                     db.run('COMMIT');
@@ -470,7 +469,7 @@ app.put('/api/ads/:id', upload.array('photos', 5), (req, res) => {
     });
 });
 
-app.delete('/api/ads/:id', (req, res) => {
+app.delete('/api/postings/:id', (req, res) => {
     const id = req.params.id;
     db.get("SELECT related_table, related_id FROM advertisements WHERE id = ?", [id], (err, ad) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -522,7 +521,7 @@ app.delete('/api/ads/:id', (req, res) => {
     });
 });
 
-app.get('/api/ads/:id/applicants', (req, res) => {
+app.get('/api/postings/:id/applicants', (req, res) => {
     const id = req.params.id;
     const query = `
         SELECT a.*, u.nickname, u.login_id, u.photo_path
@@ -536,7 +535,7 @@ app.get('/api/ads/:id/applicants', (req, res) => {
     });
 });
 
-app.post('/api/ads/:id/select-winner', (req, res) => {
+app.post('/api/postings/:id/select-winner', (req, res) => {
     const adId = req.params.id;
     const { user_id } = req.body;
 
@@ -582,7 +581,7 @@ app.post('/api/ads/:id/select-winner', (req, res) => {
     });
 });
 
-app.post('/api/ads/:id/apply', (req, res) => {
+app.post('/api/postings/:id/apply', (req, res) => {
     const adId = req.params.id;
     const { user_id } = req.body;
 
@@ -603,7 +602,7 @@ app.post('/api/ads/:id/apply', (req, res) => {
     });
 });
 
-app.get('/api/ads/:id', (req, res) => {
+app.get('/api/postings/:id', (req, res) => {
     const id = req.params.id;
     const query = `
         SELECT a.*,
@@ -683,7 +682,7 @@ app.post('/api/login', (req, res) => {
         }
 
         // Check status
-        if (user.status === '임시') {
+        if (user.status === '임시' || user.status === '신청') {
             return res.status(403).json({ error: '가입 승인 대기 중입니다. 승인 후 이용 가능합니다.' });
         }
         if (user.status === '종료') {
@@ -926,107 +925,109 @@ app.post('/api/signup', (req, res) => {
         if (row) return res.status(400).json({ error: 'ID_EXISTS' });
 
         // Check duplicate user (phone + DOB)
-        db.get('SELECT id FROM users WHERE phone_number = ? AND birth_date = ?', [cleanPhone, birth_date], (err, row) => {
+        db.get('SELECT id, status FROM users WHERE phone_number = ? AND birth_date = ?', [cleanPhone, birth_date], (err, row) => {
             if (err) return res.status(500).json({ error: err.message });
-            if (row) return res.status(400).json({ error: 'USER_EXISTS' });
+            if (row && row.status === '승인') return res.status(400).json({ error: 'USER_EXISTS' });
 
             // Generate random color for profile avatar
             const colors = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#ef4444', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6'];
             const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
-            // Insert new user with '임시' status and random color
-            db.run(`INSERT INTO users(login_id, password, nickname, birth_date, phone_number, role, approved, status, color) VALUES(?, ?, ?, ?, ?, ?, 0, '임시', ?)`,
-                [login_id, password, nickname, birth_date, cleanPhone, role, randomColor],
-                async function (err) {
-                    if (err) return res.status(500).json({ error: err.message });
-                    const newUserId = this.lastID;
+            // Insert new user with '신청' status and random color
+            const signupAction = (row && row.id)
+                ? [`UPDATE users SET login_id = ?, password = ?, nickname = ?, role = ?, status = '신청', color = ? WHERE id = ?`, [login_id, password, nickname, role, randomColor, row.id]]
+                : [`INSERT INTO users(login_id, password, nickname, birth_date, phone_number, role, approved, status, color) VALUES(?, ?, ?, ?, ?, ?, 0, '신청', ?)`, [login_id, password, nickname, birth_date, cleanPhone, role, randomColor]];
 
-                    // Save relationship to room if provided
-                    if (role === 'tenant' && room_number) {
-                        db.run(`INSERT INTO room_tenant(room_id, tenant_id, start_date) VALUES(?, ?, date('now'))`,
-                            [room_number, newUserId], // room_number here actually contains room_id from frontend
-                            (err) => {
-                                if (err) console.error('Error saving room relationship:', err.message);
-                            }
-                        );
-                    }
+            db.run(signupAction[0], signupAction[1], async function (err) {
+                if (err) return res.status(500).json({ error: err.message });
+                const newUserId = (row && row.id) ? row.id : this.lastID;
 
-                    // Create Notification for Admin
-                    let buildingName = '';
-                    const getBuildingName = () => {
-                        return new Promise((resolve) => {
-                            if (role === 'tenant' && building_id) {
-                                db.get('SELECT name FROM buildings WHERE id = ?', [building_id], (err, b) => {
-                                    if (b) buildingName = b.name;
-                                    resolve();
-                                });
-                            } else {
+                // Save relationship to room if provided
+                if (role === 'tenant' && room_number) {
+                    db.run(`INSERT INTO room_tenant(room_id, tenant_id, start_date) VALUES(?, ?, date('now'))`,
+                        [room_number, newUserId], // room_number here actually contains room_id from frontend
+                        (err) => {
+                            if (err) console.error('Error saving room relationship:', err.message);
+                        }
+                    );
+                }
+
+                // Create Notification for Admin
+                let buildingName = '';
+                const getBuildingName = () => {
+                    return new Promise((resolve) => {
+                        if (role === 'tenant' && building_id) {
+                            db.get('SELECT name FROM buildings WHERE id = ?', [building_id], (err, b) => {
+                                if (b) buildingName = b.name;
                                 resolve();
+                            });
+                        } else {
+                            resolve();
+                        }
+                    });
+                };
+
+                await getBuildingName();
+
+                let displayRoom = '-';
+                if (role === 'tenant' && room_number) {
+                    // Find room number from id
+                    const roomRow = await new Promise(resolve => db.get("SELECT room_number FROM rooms WHERE id = ?", [room_number], (e, r) => resolve(r)));
+                    if (roomRow) displayRoom = roomRow.room_number;
+                }
+
+                const title = (role === 'tenant' && buildingName) ? `${buildingName} ${displayRoom} `.trim() : (role === 'landlord' ? '임대인 가입 신청' : '세입자 가입 신청');
+                let content = `아이디: ${login_id} \n이름: ${nickname} \n생년월일: ${birth_date} \n전화번호: ${formatPhone(cleanPhone)} `;
+
+                if (role === 'tenant' && building_id) {
+                    content += `\n건물명: ${buildingName} \n호수: ${displayRoom} `;
+                }
+
+                // Update user with title and description
+                db.run(`UPDATE users SET title = ?, description = ? WHERE id = ? `, [title, content, newUserId], (err) => {
+                    if (err) console.error('Error updating user title/description:', err.message);
+
+                    // Admin Notification
+                    db.run(`INSERT INTO message_box(author_id, target, category, related_id, related_table, title) VALUES(?, ?, ?, ?, ?, ?)`,
+                        [newUserId, 'direct', '가입신청', newUserId, 'users', title],
+                        function (err) {
+                            if (err) {
+                                console.error('Error creating admin signup message:', err.message);
+                                return res.status(500).json({ error: err.message });
                             }
-                        });
-                    };
+                            const boxId = this.lastID;
 
-                    await getBuildingName();
+                            // Insert initial message
+                            db.run(`INSERT INTO messages(message_box_id, sender_id, content) VALUES(?, ?, ?)`, [boxId, newUserId, content]);
 
-                    let displayRoom = '-';
-                    if (role === 'tenant' && room_number) {
-                        // Find room number from id
-                        const roomRow = await new Promise(resolve => db.get("SELECT room_number FROM rooms WHERE id = ?", [room_number], (e, r) => resolve(r)));
-                        if (roomRow) displayRoom = roomRow.room_number;
-                    }
-
-                    const title = (role === 'tenant' && buildingName) ? `${buildingName} ${displayRoom} `.trim() : (role === 'landlord' ? '임대인 가입 신청' : '세입자 가입 신청');
-                    let content = `아이디: ${login_id} \n이름: ${nickname} \n생년월일: ${birth_date} \n전화번호: ${formatPhone(cleanPhone)} `;
-
-                    if (role === 'tenant' && building_id) {
-                        content += `\n건물명: ${buildingName} \n호수: ${displayRoom} `;
-                    }
-
-                    // Update user with title and description
-                    db.run(`UPDATE users SET title = ?, description = ? WHERE id = ? `, [title, content, newUserId], (err) => {
-                        if (err) console.error('Error updating user title/description:', err.message);
-
-                        // Admin Notification
-                        db.run(`INSERT INTO message_box(author_id, target, category, related_id, related_table, title) VALUES(?, ?, ?, ?, ?, ?)`,
-                            [newUserId, 'direct', '가입신청', newUserId, 'users', title],
-                            function (err) {
-                                if (err) {
-                                    console.error('Error creating admin signup message:', err.message);
-                                    return res.status(500).json({ error: err.message });
+                            // Notify Admins
+                            db.all("SELECT id FROM users WHERE role = 'admin'", (err, admins) => {
+                                if (admins) {
+                                    admins.forEach(admin => {
+                                        db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, admin.id]);
+                                    });
                                 }
-                                const boxId = this.lastID;
+                            });
 
-                                // Insert initial message
-                                db.run(`INSERT INTO messages(message_box_id, sender_id, content) VALUES(?, ?, ?)`, [boxId, newUserId, content]);
-
-                                // Notify Admins
-                                db.all("SELECT id FROM users WHERE role = 'admin'", (err, admins) => {
-                                    if (admins) {
-                                        admins.forEach(admin => {
-                                            db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, admin.id]);
+                            // If tenant, also notify the landlord
+                            if (role === 'tenant' && building_id) {
+                                db.all(`SELECT landlord_id FROM landlord_buildings WHERE building_id = ? `, [building_id], (err, landlords) => {
+                                    if (landlords) {
+                                        landlords.forEach(l => {
+                                            db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, l.landlord_id]);
                                         });
                                     }
                                 });
-
-                                // If tenant, also notify the landlord
-                                if (role === 'tenant' && building_id) {
-                                    db.all(`SELECT landlord_id FROM landlord_buildings WHERE building_id = ? `, [building_id], (err, landlords) => {
-                                        if (landlords) {
-                                            landlords.forEach(l => {
-                                                db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, l.landlord_id]);
-                                            });
-                                        }
-                                    });
-                                }
-
-                                // Sync Profile Info
-                                syncUserBuildingInfo(newUserId);
-
-                                res.json({ message: 'Signup application submitted', userId: newUserId });
                             }
-                        );
-                    });
-                }
+
+                            // Sync Profile Info
+                            syncUserBuildingInfo(newUserId);
+
+                            res.json({ message: 'Signup application submitted', userId: newUserId });
+                        }
+                    );
+                });
+            }
             );
         });
     });
@@ -1034,94 +1035,105 @@ app.post('/api/signup', (req, res) => {
 
 // 1b. Room Application API (Applicant)
 app.post('/api/apply', (req, res) => {
-    const { name, phone, birth, memo, landlordId, buildingId } = req.body;
+    const { name, phone, birth, memo, landlordId, buildingId, buildingName, roomNumber } = req.body;
     const cleanPhone = phone ? phone.replace(/[^0-9]/g, '') : '';
 
     if (!name || !phone || !birth) {
         return res.status(400).json({ error: 'Name, phone and birth date are required' });
     }
 
-    const login_id = name;
-
-    db.get('SELECT id FROM users WHERE login_id = ? OR phone_number = ?', [login_id, cleanPhone], (err, row) => {
+    // 1. Try to find an EXACT match for this applicant (name + birth + phone)
+    db.get('SELECT id FROM users WHERE nickname = ? AND birth_date = ? AND phone_number = ?', [name, birth, cleanPhone], (err, existingUser) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        const password = Math.floor(1000000000 + Math.random() * 9000000000).toString(); // 10 digit random
-        const colors = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c56e', '#06b6d4', '#3b82f6', '#8b5cf6'];
-        const randomColor = colors[Math.floor(Math.random() * colors.length)];
-
-        const proceedWithInsert = (finalId) => {
-            db.run(`INSERT INTO users(login_id, password, nickname, role, birth_date, phone_number, color, approved, status) VALUES(?, ?, ?, ?, ?, ?, ?, 0, '임시')`,
-                [finalId, password, name, 'tenant', birth, cleanPhone, randomColor],
-                function (err) {
-                    if (err) {
-                        if (err.message.includes('UNIQUE')) {
-                            const newId = name + Math.floor(Math.random() * 1000);
-                            return proceedWithInsert(newId);
+        const processInquiry = (newUserId) => {
+            // Save relationship
+            const saveRelationship = (bid) => {
+                if (bid) {
+                    db.get("SELECT id FROM rooms WHERE building_id = ? LIMIT 1", [bid], (err, r) => {
+                        if (r) {
+                            db.run(`INSERT INTO room_tenant(room_id, tenant_id, start_date) VALUES(?, ?, date('now'))`,
+                                [r.id, newUserId],
+                                (err) => {
+                                    if (err) console.error('Error saving relationship:', err.message);
+                                }
+                            );
                         }
-                        return res.status(500).json({ error: err.message });
-                    }
-                    const newUserId = this.lastID;
-
-                    // Save relationship
-                    const saveRelationship = (bid) => {
-                        if (bid) {
-                            // Find first room in this building
-                            db.get("SELECT id FROM rooms WHERE building_id = ? LIMIT 1", [bid], (err, r) => {
-                                if (r) {
-                                    db.run(`INSERT INTO room_tenant(room_id, tenant_id, start_date) VALUES(?, ?, date('now'))`,
-                                        [r.id, newUserId],
-                                        (err) => {
-                                            if (err) console.error('Error saving relationship:', err.message);
-                                        }
-                                    );
-                                }
-                            });
-                        }
-                    };
-
-                    if (buildingId) {
-                        saveRelationship(buildingId);
-                    } else if (landlordId) {
-                        // Fallback: Find a building for this landlord
-                        db.get("SELECT building_id FROM landlord_buildings WHERE landlord_id = ? LIMIT 1", [landlordId], (err, lb) => {
-                            const bid = lb ? lb.building_id : null;
-                            saveRelationship(bid);
-                        });
-                    }
-
-                    // Create Notification
-                    const title = '방구해요 신청';
-                    const content = `방 구하는 사람 정보\n이름: ${name} \n생년월일: ${birth} \n연락처: ${formatPhone(cleanPhone)} \n메모: ${memo} `;
-
-                    db.run(`UPDATE users SET title = ?, description = ? WHERE id = ? `, [title, content, newUserId], (err) => {
-                        db.run(`INSERT INTO message_box(author_id, target, category, related_id, related_table, title) VALUES(?, ?, ?, ?, ?, ?)`,
-                            [newUserId, 'direct', '방있어요', newUserId, 'users', title],
-                            function (err) {
-                                if (err) {
-                                    console.error('Error creating apply notification:', err.message);
-                                    return res.status(500).json({ error: err.message });
-                                }
-                                const boxId = this.lastID;
-
-                                // Insert initial message
-                                db.run(`INSERT INTO messages(message_box_id, sender_id, content) VALUES(?, ?, ?)`, [boxId, newUserId, content]);
-
-                                if (landlordId) {
-                                    db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, landlordId]);
-                                }
-                                res.json({ message: 'Application submitted', userId: newUserId });
-                            }
-                        );
                     });
                 }
-            );
+            };
+
+            if (buildingId) {
+                saveRelationship(buildingId);
+            } else if (landlordId) {
+                db.get("SELECT building_id FROM landlord_buildings WHERE landlord_id = ? LIMIT 1", [landlordId], (err, lb) => {
+                    const bid = lb ? lb.building_id : null;
+                    saveRelationship(bid);
+                });
+            }
+
+            // Create Notification
+            const title = '방구해요 신청';
+            let roomInfo = '';
+            if (buildingName) {
+                roomInfo = `[${buildingName}${roomNumber ? ' ' + roomNumber + '호' : ''}] \n`;
+            }
+            const content = `${roomInfo}방 구하는 사람 정보\n이름: ${name}\n생년월일: ${birth}\n연락처: ${formatPhone(cleanPhone)}\n메모: ${memo}`;
+
+            // 1. Insert into messages table
+            db.run(`INSERT INTO messages(sender_id, content) VALUES(?, ?)`, [newUserId, content], function (err) {
+                if (err) return res.status(500).json({ error: err.message });
+                const initialMessageId = this.lastID;
+
+                // 2. Create message box
+                db.run(`INSERT INTO message_box(author_id, message_id, target, category, related_id, related_table, title) VALUES(?, ?, ?, ?, ?, ?, ?)`,
+                    [newUserId, initialMessageId, 'direct', '방있어요', newUserId, 'users', title],
+                    function (err) {
+                        if (err) {
+                            console.error('Error creating apply notification:', err.message);
+                            return res.status(500).json({ error: err.message });
+                        }
+                        const boxId = this.lastID;
+
+                        // Update message with box ID
+                        db.run(`UPDATE messages SET message_box_id = ? WHERE id = ?`, [boxId, initialMessageId]);
+
+                        // 3. Distribute to recipients
+                        if (landlordId) {
+                            db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, landlordId]);
+                        }
+                        db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, newUserId]);
+
+                        res.json({ message: 'Application submitted', userId: newUserId });
+                    }
+                );
+            });
         };
 
-        if (row) {
-            proceedWithInsert(login_id + Math.floor(Math.random() * 1000));
+        if (existingUser) {
+            // Re-use existing user
+            processInquiry(existingUser.id);
         } else {
-            proceedWithInsert(login_id);
+            // Create new temporary user
+            const password = Math.floor(1000000000 + Math.random() * 9000000000).toString();
+            const colors = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c56e', '#06b6d4', '#3b82f6', '#8b5cf6'];
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+            const createUser = (loginId) => {
+                db.run(`INSERT INTO users(login_id, password, nickname, role, birth_date, phone_number, color, approved, status) VALUES(?, ?, ?, ?, ?, ?, ?, 0, '신청')`,
+                    [loginId, password, name, 'tenant', birth, cleanPhone, randomColor],
+                    function (err) {
+                        if (err) {
+                            if (err.message.includes('UNIQUE')) {
+                                return createUser(name + Math.floor(Math.random() * 1000));
+                            }
+                            return res.status(500).json({ error: err.message });
+                        }
+                        processInquiry(this.lastID);
+                    }
+                );
+            };
+            createUser(name);
         }
     });
 });

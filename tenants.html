@@ -419,7 +419,7 @@
                                 <div class="tenant-center">
                                     <div class="center-top" style="display: flex; align-items: center;">
                                         <span>${t.nickname || '이름 없음'}</span>
-                                        <span class="user-status-badge status-${t.status || '임시'}">${t.status === '종료' ? '계약 종료됨' : (t.status || '임시')}</span>
+                                        <span class="user-status-badge status-${t.status || '신청'}">${t.status === '종료' ? '계약 종료됨' : (t.status || '신청')}</span>
                                     </div>
                                     <div class="center-bottom">
                                         <div>${start} ~ ${end}</div>
@@ -450,7 +450,8 @@
                 if (tenantData.birth_date) params.set('tenant_dob', tenantData.birth_date);
                 if (tenantData.building_id) params.set('building_id', tenantData.building_id);
                 if (tenantData.room_number) params.set('room_number', tenantData.room_number);
-                if (tenantData.room_id) params.set('room_id', tenantData.room_id);
+                params.set('room_id', tenantData.room_id);
+                params.set('lock', 'true');
                 url = `/contract_new.html?${params.toString()}`;
             }
             window.location.href = url;

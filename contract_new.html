@@ -277,16 +277,10 @@
                 </div>
                 <div class="form-grid">
                     <div class="form-group"><label>성명</label><input type="text" id="tenant-name"
-                            placeholder="세입자 이름을 입력하세요" readonly
-                            style="background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5); cursor: not-allowed;">
-                    </div>
-                    <div class="form-group"><label>생년월일</label><input type="date" id="tenant-dob" readonly
-                            style="background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5); cursor: not-allowed;">
-                    </div>
+                            placeholder="세입자 이름을 입력하세요"></div>
+                    <div class="form-group"><label>생년월일</label><input type="date" id="tenant-dob"></div>
                     <div class="form-group"><label>연락처</label><input type="tel" id="tenant-phone"
-                            placeholder="010-0000-0000" oninput="this.value = formatPhone(this.value)" readonly
-                            style="background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5); cursor: not-allowed;">
-                    </div>
+                            placeholder="010-0000-0000" oninput="this.value = formatPhone(this.value)"></div>
                 </div>
             </div>
             <div class="form-section">
@@ -294,15 +288,11 @@
                 <div class="form-grid">
                     <div class="form-group">
                         <label>건물명</label>
-                        <input type="text" id="contract-building-name" readonly
-                            style="background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5); cursor: not-allowed;">
-                        <input type="hidden" id="contract-building">
+                        <select id="contract-building" onchange="loadRooms()"></select>
                     </div>
                     <div class="form-group">
                         <label>호수 (방번호)</label>
-                        <input type="text" id="contract-room-name" readonly
-                            style="background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5); cursor: not-allowed;">
-                        <input type="hidden" id="contract-room">
+                        <select id="contract-room"></select>
                     </div>
                 </div>
             </div>
@@ -470,32 +460,18 @@
             const urlRoomId = urlParams.get('room_id');
 
             if (urlBuildingId) {
-                const bIdInput = document.getElementById('contract-building');
-                const bNameInput = document.getElementById('contract-building-name');
-                bIdInput.value = urlBuildingId;
-
-                // Fetch buildings to find the name
-                const apiPath = user.role === 'admin' ? '/api/admin/buildings' : `/api/landlord/${user.id}/buildings`;
-                const bRes = await fetch(apiPath);
-                const buildings = await bRes.json();
-                const matched = buildings.find(b => String(b.id) === String(urlBuildingId));
-                if (matched) {
-                    bNameInput.value = matched.name;
-                    await loadRooms(urlRoomId || urlRoomNumber);
-                }
+                document.getElementById('contract-building').value = urlBuildingId;
+                await loadRooms(urlRoomId || urlRoomNumber);
             } else if (urlBuildingName) {
-                const bIdInput = document.getElementById('contract-building');
-                const bNameInput = document.getElementById('contract-building-name');
-                bNameInput.value = urlBuildingName;
-
-                const apiPath = user.role === 'admin' ? '/api/admin/buildings' : `/api/landlord/${user.id}/buildings`;
-                const bRes = await fetch(apiPath);
-                const buildings = await bRes.json();
-                const matched = buildings.find(b => b.name === urlBuildingName);
-                if (matched) {
-                    bIdInput.value = matched.id;
-                    await loadRooms(urlRoomId || urlRoomNumber);
+                const bSelect = document.getElementById('contract-building');
+                const options = bSelect.options;
+                for (let i = 0; i < options.length; i++) {
+                    if (options[i].text === urlBuildingName) {
+                        bSelect.selectedIndex = i;
+                        break;
+                    }
                 }
+                await loadRooms(urlRoomId || urlRoomNumber);
             } else if (urlParams.get('tenant_name') && urlParams.get('tenant_dob')) {
                 const name = urlParams.get('tenant_name');
                 const dob = urlParams.get('tenant_dob');
@@ -512,12 +488,7 @@
                         currentTenantId = user.id;
                         document.getElementById('btn-delete-tenant').style.display = 'block';
 
-                        const bIdInput = document.getElementById('contract-building');
-                        const bNameInput = document.getElementById('contract-building-name');
-
-                        bIdInput.value = user.building_id;
-                        bNameInput.value = user.building_name || '';
-
+                        document.getElementById('contract-building').value = user.building_id;
                         await loadRooms(user.room_id || user.room_number);
                     }
                 } catch (e) {
@@ -551,6 +522,13 @@
                 document.getElementById('page-title').textContent = '계약 정보 확인';
                 disableForm();
             }
+
+            if (urlParams.get('lock') === 'true') {
+                ['tenant-name', 'tenant-dob', 'tenant-phone', 'contract-building', 'contract-room'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.disabled = true;
+                });
+            }
         });
 
         function disableForm() {
@@ -576,7 +554,6 @@
             const inputs = document.querySelectorAll('input, select');
             inputs.forEach(el => {
                 if (el.id === 'contract-room' && el.value) return; // Keep pre-filled room disabled if wanted
-                if (['tenant-name', 'tenant-dob', 'tenant-phone', 'contract-building-name', 'contract-room-name'].includes(el.id)) return;
                 el.disabled = false;
             });
 
@@ -663,14 +640,18 @@
         };
 
         async function loadBuildings() {
-            // No longer populating a select, but we can use this to resolve the name if missing
+            const apiPath = user.role === 'admin' ? '/api/admin/buildings' : `/api/landlord/${user.id}/buildings`;
+            const res = await fetch(apiPath);
+            const buildings = await res.json();
+            const bSelect = document.getElementById('contract-building');
+            bSelect.innerHTML = '<option value="">건물 선택</option>';
+            buildings.forEach(b => {
+                bSelect.innerHTML += `<option value="${b.id}">${b.name}</option>`;
+            });
+
             if (currentAction === 'new' && !urlParams.get('building_id') && !urlParams.get('building_name')) {
-                const apiPath = user.role === 'admin' ? '/api/admin/buildings' : `/api/landlord/${user.id}/buildings`;
-                const res = await fetch(apiPath);
-                const buildings = await res.json();
                 if (buildings.length > 0) {
-                    document.getElementById('contract-building').value = buildings[0].id;
-                    document.getElementById('contract-building-name').value = buildings[0].name;
+                    bSelect.value = buildings[0].id;
                     await loadRooms();
                 }
             }
@@ -678,16 +659,19 @@
 
         async function loadRooms(selectedRoomIdentifier = null) {
             const buildingId = document.getElementById('contract-building').value;
-            const roomNameInput = document.getElementById('contract-room-name');
-            const roomIdInput = document.getElementById('contract-room');
+            const rSelect = document.getElementById('contract-room');
 
             if (!buildingId) {
-                roomNameInput.value = '건물을 먼저 선택해주세요';
+                rSelect.innerHTML = '<option value="">건물을 먼저 선택해주세요</option>';
                 return;
             }
 
             const res = await fetch(`/api/buildings/${buildingId}/rooms`);
             const rooms = await res.json();
+            rSelect.innerHTML = '<option value="">호수 선택</option>';
+            rooms.forEach(r => {
+                rSelect.innerHTML += `<option value="${r.id}">${r.room_number}호</option>`;
+            });
 
             let matchedRoom = null;
             if (selectedRoomIdentifier) {
@@ -697,10 +681,7 @@
             }
 
             if (matchedRoom) {
-                roomIdInput.value = matchedRoom.id;
-                roomNameInput.value = matchedRoom.room_number + '호';
-            } else {
-                roomNameInput.value = '호수 정보 없음';
+                rSelect.value = matchedRoom.id;
             }
         }
 
@@ -716,7 +697,6 @@
             document.getElementById('tenant-phone').value = formatPhone(c.phone_number);
             document.getElementById('tenant-phone').value = formatPhone(c.phone_number);
             document.getElementById('contract-building').value = c.building_id;
-            document.getElementById('contract-building-name').value = c.building;
             await loadRooms(c.room_number);
             document.getElementById('contract-start').value = c.contract_start_date;
             document.getElementById('contract-end').value = c.contract_end_date;

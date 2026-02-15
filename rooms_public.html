@@ -438,7 +438,11 @@
                     <div id="detail-memo" class="detail-memo-box"></div>
                 </div>
 
-                <button class="action-btn" onclick="closeDetailModal()">닫기</button>
+                <div style="display: flex; gap: 0.8rem; margin-top: 1.5rem;">
+                    <button class="action-btn" onclick="goToAskPage()" style="margin-top: 0;">문의하기</button>
+                    <button class="action-btn" onclick="closeDetailModal()"
+                        style="margin-top: 0; background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.2);">닫기</button>
+                </div>
             </div>
         </div>
     </div>
@@ -448,9 +452,11 @@
     <script>
         document.addEventListener('DOMContentLoaded', fetchRooms);
 
+        let currentAdId = null;
+
         async function fetchRooms() {
             try {
-                const res = await fetch('/api/ads?type=room');
+                const res = await fetch('/api/postings?type=room');
                 const rooms = await res.json();
                 renderRooms(rooms);
             } catch (err) {
@@ -510,7 +516,8 @@
 
         async function openDetailModal(id) {
             try {
-                const res = await fetch(`/api/ads/${id}`);
+                currentAdId = id;
+                const res = await fetch(`/api/postings/${id}`);
                 const room = await res.json();
 
                 document.getElementById('detail-building-room').textContent = `${room.building_name || ''} ${room.room_number}호`;
@@ -547,6 +554,12 @@
         function closeDetailModal() {
             document.getElementById('room-detail-modal').style.display = 'none';
             document.body.style.overflow = 'auto';
+            currentAdId = null;
+        }
+
+        function goToAskPage() {
+            if (!currentAdId) return;
+            window.location.href = `/room_ask.html?ad_id=${currentAdId}`;
         }
     </script>
 </body>

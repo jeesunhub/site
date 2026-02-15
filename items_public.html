@@ -384,7 +384,7 @@
         async function fetchItems() {
             try {
                 const user = JSON.parse(localStorage.getItem('user'));
-                let url = '/api/ads?type=item';
+                let url = '/api/postings?type=item';
                 if (user) {
                     url += `&viewer_id=${user.id}&viewer_role=${user.role}`;
                 }
@@ -444,7 +444,7 @@
 
         async function openDetailModal(id) {
             try {
-                const res = await fetch(`/api/ads/${id}`);
+                const res = await fetch(`/api/postings/${id}`);
                 const item = await res.json();
 
                 document.getElementById('detail-title').textContent = item.title || '제목 없음';

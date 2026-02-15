@@ -181,8 +181,7 @@
 <body>
     <div class="header">
         <div style="display: flex; align-items: center;">
-            <a href="javascript:void(0)" class="back-link" id="header-back" onclick="handleBack()"
-                style="display: none;">
+            <a href="javascript:void(0)" class="back-link" id="header-back" onclick="handleBack()">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                     stroke-linecap="round" stroke-linejoin="round">
                     <path d="m15 18-6-6 6-6" />
@@ -283,6 +282,7 @@
         async function fetchCategoryStats() {
             try {
                 const res = await fetch('/api/info/stats');
+                if (!res.ok) throw new Error(`Stats error: ${res.status}`);
                 const stats = await res.json();
                 const categories = [
                     { name: '친절한 부동산', id: 'count-immobilien' },
@@ -296,13 +296,15 @@
                     const el = document.getElementById(cat.id);
                     if (el) el.textContent = count;
                 });
-            } catch (err) { }
+            } catch (err) {
+                console.error('Stats fetch error:', err);
+            }
         }
 
         function showCategoryMenu() {
             document.getElementById('category-menu').style.display = 'block';
             document.getElementById('info-list-container').style.display = 'none';
-            document.getElementById('header-back').style.display = 'none';
+            document.getElementById('header-back').style.display = 'flex';
             document.querySelector('.header h1').textContent = '정보 공유해요';
             fetchCategoryStats();
         }
@@ -344,14 +346,27 @@
             document.querySelector('.header h1').textContent = category;
 
             try {
-                let url = `/api/ads?type=info&category=${encodeURIComponent(category)}`;
+                let url = `/api/postings?type=info&category=${encodeURIComponent(category)}`;
                 if (user) {
                     url += `&viewer_id=${user.id}&viewer_role=${user.role}`;
                 }
                 const res = await fetch(url);
+                if (!res.ok) {
+                    const errorData = await res.json().catch(() => ({}));
+                    throw new Error(errorData.error || `서버 오류 (${res.status})`);
+                }
                 const items = await res.json();
                 renderInfo(items, category);
-            } catch (err) { }
+            } catch (err) {
+                console.error('Fetch error:', err);
+                document.getElementById('info-list').innerHTML = `
+                    <div style="text-align:center; padding:3rem;">
+                        <div style="color:#ef4444; font-weight:600; margin-bottom:1rem;">에러가 발생했습니다</div>
+                        <div style="color:#94a3b8; font-size:0.9rem;">${err.message}</div>
+                        <button onclick="location.reload()" style="margin-top:1.5rem; padding:0.6rem 1.2rem; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white; border-radius:0.5rem; cursor:pointer;">다시 시도</button>
+                    </div>
+                `;
+            }
         }
 
         function renderInfo(items, category) {
@@ -397,7 +412,7 @@
             if (!user) return;
             if (!confirm('정말로 삭제하시겠습니까?')) return;
             try {
-                const res = await fetch(`/api/ads/${id}`, { method: 'DELETE' });
+                const res = await fetch(`/api/postings/${id}`, { method: 'DELETE' });
                 if (res.ok) {
                     alert('삭제되었습니다.');
                     const urlParams = new URLSearchParams(window.location.search);

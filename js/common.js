@@ -54,12 +54,8 @@ function renderNavbar() {
     }
 
     const user = JSON.parse(localStorage.getItem('user'));
-    if (!user) {
-        window.location.href = '/index.html';
-        return;
-    }
 
-    // Reorganize DOM if not already structured
+    // Reorganize DOM even for guests to maintain consistent layout
     if (!document.getElementById('layout-header')) {
         const header = document.createElement('header');
         header.id = 'layout-header';
@@ -102,6 +98,11 @@ function renderNavbar() {
                 main.appendChild(child);
             }
         });
+    }
+
+    if (!user) {
+        console.log('Guest user: skipping complex navbar.');
+        return;
     }
 
     const nav = document.createElement('nav');

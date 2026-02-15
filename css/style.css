@@ -790,6 +790,16 @@ option {
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+
+.user-status-badge.status-신청 {
+    background: rgba(139, 92, 246, 0.25);
+    color: #c4b5fd;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
 .user-status-badge.status-종료,
 .user-status-badge.status-거절 {
     background: rgba(239, 68, 68, 0.15);

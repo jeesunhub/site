@@ -326,7 +326,7 @@
             selectedFiles.forEach(file => formData.append('photos', file));
 
             try {
-                const res = await fetch('/api/ads', { method: 'POST', body: formData });
+                const res = await fetch('/api/postings', { method: 'POST', body: formData });
                 if (res.ok) {
                     alert('등록되었습니다.');
                     location.href = '/info_adv.html';
