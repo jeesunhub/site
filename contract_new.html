@@ -88,22 +88,82 @@
             background: rgba(255, 255, 255, 0.08);
         }
 
-        .action-bar {
+        .action-btns {
             display: flex;
-            justify-content: space-between;
             gap: 1rem;
             margin-top: 2rem;
+            padding-bottom: 2rem;
         }
 
-        .action-bar-right {
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        .action-bar .btn {
-            white-space: nowrap;
+        .btn {
+            flex: 1;
+            height: 3.2rem;
             padding: 0 1rem;
-            /* Slightly reduced padding */
+            border-radius: 0.8rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .btn-cancel {
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+        }
+
+        .btn-cancel:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-submit,
+        .btn-edit {
+            background: rgba(99, 102, 241, 0.3);
+            color: white;
+            border: 1px solid rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-submit:hover,
+        .btn-edit:hover {
+            background: rgba(99, 102, 241, 0.45);
+            border-color: rgba(99, 102, 241, 0.6);
+            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.2);
+        }
+
+        .btn-extend {
+            background: rgba(168, 85, 247, 0.3);
+            color: white;
+            border: 1px solid rgba(168, 85, 247, 0.4);
+        }
+
+        .btn-extend:hover {
+            background: rgba(168, 85, 247, 0.45);
+            border-color: rgba(168, 85, 247, 0.6);
+            box-shadow: 0 8px 20px rgba(168, 85, 247, 0.2);
+        }
+
+        .btn-terminate {
+            background: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-terminate:hover {
+            background: rgba(239, 68, 68, 0.3);
+            border-color: rgba(239, 68, 68, 0.5);
+            box-shadow: 0 8px 20px rgba(239, 68, 68, 0.2);
+        }
+
+        .btn:active {
+            transform: scale(0.98);
         }
 
         .field-label-row {
@@ -168,7 +228,7 @@
 
         /* Adjust container margin since we have a header now */
         .container {
-            margin-top: 0 !important;
+            margin: 0 !important;
             padding-top: 0.5rem;
         }
 
@@ -370,19 +430,15 @@
                     </div>
                 </div>
             </div>
-            <div class="action-bar">
-                <button type="button" class="btn btn-secondary" onclick="showDebugModal()">Debug</button>
-                <div class="action-bar-right" id="action-buttons">
-                    <button class="btn btn-secondary" id="cancel-btn" onclick="handleCancel()">취소</button>
-                    <button class="btn" id="submit-btn" onclick="submitContract()">저장</button>
+            <div class="action-btns" id="action-buttons">
+                <button class="btn btn-cancel" id="cancel-btn" onclick="handleCancel()">취소</button>
+                <button class="btn btn-submit" id="submit-btn" onclick="submitContract()">저장</button>
 
-                    <button class="btn btn-secondary" id="edit-btn" onclick="enableEditMode()"
-                        style="display:none;">수정</button>
-                    <button class="btn btn-secondary" id="extend-btn" onclick="enableExtendMode()"
-                        style="display:none;">연장</button>
-                    <button class="btn btn-reject" id="terminate-btn" onclick="openTerminateModal()"
-                        style="display:none;">퇴실</button>
-                </div>
+                <button class="btn btn-edit" id="edit-btn" onclick="enableEditMode()" style="display:none;">수정</button>
+                <button class="btn btn-extend" id="extend-btn" onclick="enableExtendMode()"
+                    style="display:none;">연장</button>
+                <button class="btn btn-terminate" id="terminate-btn" onclick="openTerminateModal()"
+                    style="display:none;">퇴실</button>
             </div>
         </div>
     </div>
@@ -404,29 +460,6 @@
         </div>
     </div>
 
-    <!-- Debug Modal -->
-    <div id="debug-view-modal" class="debug-modal" onclick="if(event.target === this) closeDebugModal()">
-        <div class="debug-modal-content">
-            <button class="close-debug-btn" onclick="closeDebugModal()">×</button>
-            <h2 style="margin-bottom: 2rem;">🔍 추출 데이터 분석</h2>
-
-            <div class="debug-section">
-                <h3>전체 추출 텍스트</h3>
-                <div id="debug-full-text" class="debug-text-box"></div>
-            </div>
-
-            <div class="debug-section">
-                <h3>필드별 추출 상세</h3>
-                <div id="debug-fields" class="debug-field-list">
-                    <!-- Dynamic segments -->
-                </div>
-            </div>
-
-            <div style="text-align: center;">
-                <button class="btn btn-secondary" onclick="closeDebugModal()" style="width: 200px;">확인</button>
-            </div>
-        </div>
-    </div>
     <script src="/js/common.js"></script>
     <script>const user = JSON.parse(localStorage.getItem('user'));
         const urlParams = new URLSearchParams(window.location.search);
@@ -901,84 +934,6 @@
             return users[0]?.id;
         }
 
-        function showDebugModal() {
-            const parsedDataJson = sessionStorage.getItem('lastFullParsedData');
-            const fullText = sessionStorage.getItem('lastExtractedText');
-
-            if (!parsedDataJson) {
-                alert('최근 분석된 데이터가 없습니다.');
-                return;
-            }
-
-            const parsedData = JSON.parse(parsedDataJson);
-
-            // Show full text from separate key
-            document.getElementById('debug-full-text').textContent = fullText || "추출된 전체 텍스트가 없습니다.";
-
-            const fieldsContainer = document.getElementById('debug-fields');
-            fieldsContainer.innerHTML = '';
-
-            const fieldMapping = [
-                { key: 'tenantName', raw: 'tenantName', label: '세입자 성명', criteria: '키워드: 성명', format: v => v },
-                { key: 'tenantDob', raw: 'tenantDob', label: '생년월일', criteria: '키워드: 주민등록번호, 생년월일', format: v => v },
-                { key: 'tenantPhone', raw: 'tenantPhone', label: '연락처', criteria: '키워드: 전화, 연락처', format: v => formatPhone(v) },
-                { key: 'address', raw: 'address', label: '주소', criteria: '키워드: 소 재 지 ~ 토지/건물', format: v => v },
-                { key: 'roomNumber', raw: 'room', label: '호수', criteria: '키워드: 임대부분', format: v => v + '호' },
-                { key: 'deposit', raw: 'deposit', label: '보증금', criteria: '키워드: 보증금 ~ 금...원', format: v => formatCurrency(v) + '원' },
-                { key: 'rent', raw: 'rent', label: '월세', criteria: '키워드: 차임 ~ 제 2 조', format: v => formatCurrency(v) + '원' },
-                { key: 'managementFee', raw: 'mgmtFee', label: '관리비', criteria: '키워드: 관리비는', format: v => formatCurrency(v) + '원' },
-                { key: 'cleaningFee', raw: 'cleanFee', label: '청소비', criteria: '키워드: 청소비', format: v => formatCurrency(v) + '원' },
-                { key: 'startDate', raw: 'startDate', label: '시작일', criteria: '키워드: 제 2 조', format: v => v },
-                { key: 'endDate', raw: 'endDate', label: '종료일', criteria: '키워드: 인도일로부터', format: v => v }
-            ];
-
-            fieldMapping.forEach(item => {
-                const value = parsedData[item.key];
-                const rawSentence = parsedData.raw[item.raw];
-
-                const div = document.createElement('div');
-                div.className = 'debug-field-item';
-                div.style.gridColumn = 'span 2';
-                div.style.backgroundColor = 'rgba(255,255,255,0.02)';
-                div.style.border = '1px solid rgba(255,255,255,0.05)';
-                div.style.marginBottom = '0.5rem';
-
-                let extraHtml = '';
-                if (item.key === 'tenantName' && parsedData.nameKeywords && parsedData.nameKeywords.length > 0) {
-                    extraHtml = `
-                        <div class="debug-field-label" style="color: #fbbf24; font-weight: 600; margin-top: 0.8rem; margin-bottom: 0.2rem;">🔍 발견된 성명 키워드 목록:</div>
-                        <div style="font-size: 0.75rem; color: #d1d5db; margin-bottom: 0.6rem; padding-left: 0.5rem; background: rgba(251, 191, 36, 0.05); border-radius: 4px;">
-                            ${parsedData.nameKeywords.map(kw => `<div style="margin-bottom:2px;">• ...${kw}...</div>`).join('')}
-                        </div>
-                    `;
-                }
-
-                div.innerHTML = `
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                        <span style="font-size: 0.9rem; font-weight: 600; color: var(--primary);">${item.label}</span>
-                        <span style="font-size: 1rem; font-weight: 600; color: #fff;">${item.format(value) || '-'}</span>
-                    </div>
-                    <div class="debug-field-label" style="color: var(--accent); font-weight: 600; margin-bottom: 0.2rem;">⚙️ 추출 조건:</div>
-                    <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.6rem; padding-left: 0.5rem;">${item.criteria}</div>
-                    
-                    ${extraHtml}
-
-                    <div class="debug-field-label">📄 추출 근거 문장:</div>
-                    <div class="debug-field-value" style="background: rgba(0,0,0,0.2); padding: 0.5rem; border-radius: 0.4rem; color: #a5b4fc; font-style: italic;">
-                        "${rawSentence || '매칭된 문장 없음'}"
-                    </div>
-                `;
-                fieldsContainer.appendChild(div);
-            });
-
-            document.getElementById('debug-view-modal').style.display = 'flex';
-            document.body.style.overflow = 'hidden';
-        }
-
-        function closeDebugModal() {
-            document.getElementById('debug-view-modal').style.display = 'none';
-            document.body.style.overflow = 'auto';
-        }
 
         async function deleteTenant() {
             if (!currentTenantId) return;

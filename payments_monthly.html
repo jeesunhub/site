@@ -379,7 +379,7 @@
             headerInfo.innerHTML = `
                 <div style="font-weight: 600; color: #fff; font-size: 1rem;">${info.building_name} ${info.room_number || ''}호 ${info.tenant_name}</div>
                 <div style="font-size: 0.75rem; opacity: 0.6; margin-top: 2px;">
-                    보증금 ${formatUnit(info.deposit || 0)}만원 / 월세 ${formatUnit(info.monthly_rent || 0)}만원 / 관리비 ${formatUnit(info.maintenance_fee || 0)}만원
+                    ${formatUnit(info.deposit || 0)} / ${formatUnit(info.monthly_rent || 0)} / ${formatUnit(info.maintenance_fee || 0)}
                 </div>
             `;
         }

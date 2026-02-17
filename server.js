@@ -338,8 +338,8 @@ app.post('/api/postings', upload.array('photos', 5), (req, res) => {
 
         if (type === 'item') {
             // Create the item record first
-            const itemQuery = `INSERT INTO items(owner_id, title, description, status, building_id, belongs_to) VALUES(?, ?, ?, 'open', ?, ?)`;
-            db.run(itemQuery, [finalCreatedBy, item_name, description, finalBuildingId, finalCreatedBy], function (err) {
+            const itemQuery = `INSERT INTO items(owner_id, title, description, status, building_id) VALUES(?, ?, ?, 'open', ?)`;
+            db.run(itemQuery, [finalCreatedBy, item_name, description, finalBuildingId], function (err) {
                 if (err) {
                     console.error('[API] Error inserting item:', err.message);
                     db.run('ROLLBACK');
@@ -347,9 +347,12 @@ app.post('/api/postings', upload.array('photos', 5), (req, res) => {
                 }
                 const itemId = this.lastID;
 
+                // Add record to item_users
+                db.run(`INSERT INTO item_users(item_id, user_id, start_date, memo) VALUES(?, ?, date('now'), '최초 등록')`, [itemId, finalCreatedBy]);
+
                 // Add log entry
                 db.run(`INSERT INTO logs(related_table, related_id, memo) VALUES(?, ?, ?)`,
-                    ['items', itemId, `Item created by user ${finalCreatedBy} `]);
+                    ['items', itemId, `Item created by user ${finalCreatedBy}`]);
 
                 finalizeAd(itemId);
             });
@@ -558,17 +561,27 @@ app.post('/api/postings/:id/select-winner', (req, res) => {
                     db.run("UPDATE advertisements SET status = 'completed' WHERE id = ?", [adId], (err) => {
                         if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
 
-                        // If it's an item, update belongs_to
+                        // If it's an item, update item_users
                         if (ad.related_table === 'item') {
-                            db.run("UPDATE items SET belongs_to = ?, status = 'completed' WHERE id = ?", [user_id, ad.related_id], (err) => {
+                            db.run("UPDATE items SET status = 'completed' WHERE id = ?", [ad.related_id], (err) => {
                                 if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
 
-                                // Add log entry for ownership transfer
-                                db.run(`INSERT INTO logs(related_table, related_id, memo) VALUES(?, ?, ?)`,
-                                    ['items', ad.related_id, `Ownership transferred to user ${user_id} via ad ${adId} `]);
+                                // End current owner's period
+                                db.run("UPDATE item_users SET end_date = date('now') WHERE item_id = ? AND end_date IS NULL", [ad.related_id], (err) => {
+                                    if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
 
-                                db.run('COMMIT');
-                                res.json({ message: 'Winner selected and ownership transferred' });
+                                    // Add new owner
+                                    db.run("INSERT INTO item_users(item_id, user_id, start_date, memo) VALUES(?, ?, date('now'), '광고 당첨')", [ad.related_id, user_id], (err) => {
+                                        if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
+
+                                        // Add log entry for ownership transfer
+                                        db.run(`INSERT INTO logs(related_table, related_id, memo) VALUES(?, ?, ?)`,
+                                            ['items', ad.related_id, `Ownership transferred to user ${user_id} via ad ${adId}`]);
+
+                                        db.run('COMMIT');
+                                        res.json({ message: 'Winner selected and ownership transferred' });
+                                    });
+                                });
                             });
                         } else {
                             db.run('COMMIT');
@@ -900,6 +913,27 @@ function syncUserBuildingInfo(userId) {
     });
 }
 
+// Consolidated list of vibrant colors for user profiles
+const USER_COLORS = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#ef4444', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#f97316', '#eab308', '#22c56e'];
+
+// Helper to get a random color that is not currently in use by any user
+function getUnusedColor(callback) {
+    db.all("SELECT DISTINCT color FROM users", (err, rows) => {
+        if (err) {
+            console.error('Error fetching used colors:', err.message);
+            return callback(USER_COLORS[Math.floor(Math.random() * USER_COLORS.length)]);
+        }
+        const usedColors = (rows || []).map(r => r.color);
+        const unusedColors = USER_COLORS.filter(c => !usedColors.includes(c));
+
+        // If there are unused colors, pick one. Otherwise pick randomly from the full pool.
+        const color = unusedColors.length > 0
+            ? unusedColors[Math.floor(Math.random() * unusedColors.length)]
+            : USER_COLORS[Math.floor(Math.random() * USER_COLORS.length)];
+        callback(color);
+    });
+}
+
 // Helper to format phone number for display (01012345678 -> 010-1234-5678)
 function formatPhone(val) {
     if (!val) return '';
@@ -911,7 +945,7 @@ function formatPhone(val) {
     const part3 = num.slice(-4);
     const part2 = num.slice(-8, -4);
     const part1 = num.slice(0, -8);
-    return `${part1} -${part2} -${part3} `;
+    return `${part1}-${part2}-${part3}`;
 }
 
 // 1a. Signup API
@@ -929,106 +963,104 @@ app.post('/api/signup', (req, res) => {
             if (err) return res.status(500).json({ error: err.message });
             if (row && row.status === '승인') return res.status(400).json({ error: 'USER_EXISTS' });
 
-            // Generate random color for profile avatar
-            const colors = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#ef4444', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6'];
-            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+            // Pick a color that hasn't been used yet
+            getUnusedColor((randomColor) => {
+                const signupAction = (row && row.id)
+                    ? [`UPDATE users SET login_id = ?, password = ?, nickname = ?, role = ?, status = '신청', color = ? WHERE id = ?`, [login_id, password, nickname, role, randomColor, row.id]]
+                    : [`INSERT INTO users(login_id, password, nickname, birth_date, phone_number, role, approved, status, color) VALUES(?, ?, ?, ?, ?, ?, 0, '신청', ?)`, [login_id, password, nickname, birth_date, cleanPhone, role, randomColor]];
 
-            // Insert new user with '신청' status and random color
-            const signupAction = (row && row.id)
-                ? [`UPDATE users SET login_id = ?, password = ?, nickname = ?, role = ?, status = '신청', color = ? WHERE id = ?`, [login_id, password, nickname, role, randomColor, row.id]]
-                : [`INSERT INTO users(login_id, password, nickname, birth_date, phone_number, role, approved, status, color) VALUES(?, ?, ?, ?, ?, ?, 0, '신청', ?)`, [login_id, password, nickname, birth_date, cleanPhone, role, randomColor]];
+                db.run(signupAction[0], signupAction[1], async function (err) {
+                    if (err) return res.status(500).json({ error: err.message });
+                    const newUserId = (row && row.id) ? row.id : this.lastID;
 
-            db.run(signupAction[0], signupAction[1], async function (err) {
-                if (err) return res.status(500).json({ error: err.message });
-                const newUserId = (row && row.id) ? row.id : this.lastID;
-
-                // Save relationship to room if provided
-                if (role === 'tenant' && room_number) {
-                    db.run(`INSERT INTO room_tenant(room_id, tenant_id, start_date) VALUES(?, ?, date('now'))`,
-                        [room_number, newUserId], // room_number here actually contains room_id from frontend
-                        (err) => {
-                            if (err) console.error('Error saving room relationship:', err.message);
-                        }
-                    );
-                }
-
-                // Create Notification for Admin
-                let buildingName = '';
-                const getBuildingName = () => {
-                    return new Promise((resolve) => {
-                        if (role === 'tenant' && building_id) {
-                            db.get('SELECT name FROM buildings WHERE id = ?', [building_id], (err, b) => {
-                                if (b) buildingName = b.name;
-                                resolve();
-                            });
-                        } else {
-                            resolve();
-                        }
-                    });
-                };
-
-                await getBuildingName();
-
-                let displayRoom = '-';
-                if (role === 'tenant' && room_number) {
-                    // Find room number from id
-                    const roomRow = await new Promise(resolve => db.get("SELECT room_number FROM rooms WHERE id = ?", [room_number], (e, r) => resolve(r)));
-                    if (roomRow) displayRoom = roomRow.room_number;
-                }
-
-                const title = (role === 'tenant' && buildingName) ? `${buildingName} ${displayRoom} `.trim() : (role === 'landlord' ? '임대인 가입 신청' : '세입자 가입 신청');
-                let content = `아이디: ${login_id} \n이름: ${nickname} \n생년월일: ${birth_date} \n전화번호: ${formatPhone(cleanPhone)} `;
-
-                if (role === 'tenant' && building_id) {
-                    content += `\n건물명: ${buildingName} \n호수: ${displayRoom} `;
-                }
-
-                // Update user with title and description
-                db.run(`UPDATE users SET title = ?, description = ? WHERE id = ? `, [title, content, newUserId], (err) => {
-                    if (err) console.error('Error updating user title/description:', err.message);
-
-                    // Admin Notification
-                    db.run(`INSERT INTO message_box(author_id, target, category, related_id, related_table, title) VALUES(?, ?, ?, ?, ?, ?)`,
-                        [newUserId, 'direct', '가입신청', newUserId, 'users', title],
-                        function (err) {
-                            if (err) {
-                                console.error('Error creating admin signup message:', err.message);
-                                return res.status(500).json({ error: err.message });
+                    // Save relationship to room if provided
+                    if (role === 'tenant' && room_number) {
+                        db.run(`INSERT INTO room_tenant(room_id, tenant_id, start_date) VALUES(?, ?, date('now'))`,
+                            [room_number, newUserId], // room_number here actually contains room_id from frontend
+                            (err) => {
+                                if (err) console.error('Error saving room relationship:', err.message);
                             }
-                            const boxId = this.lastID;
+                        );
+                    }
 
-                            // Insert initial message
-                            db.run(`INSERT INTO messages(message_box_id, sender_id, content) VALUES(?, ?, ?)`, [boxId, newUserId, content]);
-
-                            // Notify Admins
-                            db.all("SELECT id FROM users WHERE role = 'admin'", (err, admins) => {
-                                if (admins) {
-                                    admins.forEach(admin => {
-                                        db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, admin.id]);
-                                    });
-                                }
-                            });
-
-                            // If tenant, also notify the landlord
+                    // Create Notification for Admin
+                    let buildingName = '';
+                    const getBuildingName = () => {
+                        return new Promise((resolve) => {
                             if (role === 'tenant' && building_id) {
-                                db.all(`SELECT landlord_id FROM landlord_buildings WHERE building_id = ? `, [building_id], (err, landlords) => {
-                                    if (landlords) {
-                                        landlords.forEach(l => {
-                                            db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, l.landlord_id]);
+                                db.get('SELECT name FROM buildings WHERE id = ?', [building_id], (err, b) => {
+                                    if (b) buildingName = b.name;
+                                    resolve();
+                                });
+                            } else {
+                                resolve();
+                            }
+                        });
+                    };
+
+                    await getBuildingName();
+
+                    let displayRoom = '-';
+                    if (role === 'tenant' && room_number) {
+                        // Find room number from id
+                        const roomRow = await new Promise(resolve => db.get("SELECT room_number FROM rooms WHERE id = ?", [room_number], (e, r) => resolve(r)));
+                        if (roomRow) displayRoom = roomRow.room_number;
+                    }
+
+                    const title = (role === 'tenant' && buildingName) ? `${buildingName} ${displayRoom} `.trim() : (role === 'landlord' ? '임대인 가입 신청' : '세입자 가입 신청');
+                    let content = `아이디: ${login_id} \n이름: ${nickname} \n생년월일: ${birth_date} \n전화번호: ${formatPhone(cleanPhone)} `;
+
+                    if (role === 'tenant' && building_id) {
+                        content += `\n건물명: ${buildingName} \n호수: ${displayRoom} `;
+                    }
+
+                    // Update user with title and description
+                    db.run(`UPDATE users SET title = ?, description = ? WHERE id = ? `, [title, content, newUserId], (err) => {
+                        if (err) console.error('Error updating user title/description:', err.message);
+
+                        // Admin Notification
+                        db.run(`INSERT INTO message_box(author_id, target, category, related_id, related_table, title) VALUES(?, ?, ?, ?, ?, ?)`,
+                            [newUserId, 'direct', '가입신청', newUserId, 'users', title],
+                            function (err) {
+                                if (err) {
+                                    console.error('Error creating admin signup message:', err.message);
+                                    return res.status(500).json({ error: err.message });
+                                }
+                                const boxId = this.lastID;
+
+                                // Insert initial message
+                                db.run(`INSERT INTO messages(message_box_id, sender_id, content) VALUES(?, ?, ?)`, [boxId, newUserId, content]);
+
+                                // Notify Admins
+                                db.all("SELECT id FROM users WHERE role = 'admin'", (err, admins) => {
+                                    if (admins) {
+                                        admins.forEach(admin => {
+                                            db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, admin.id]);
                                         });
                                     }
                                 });
+
+                                // If tenant, also notify the landlord
+                                if (role === 'tenant' && building_id) {
+                                    db.all(`SELECT landlord_id FROM landlord_buildings WHERE building_id = ? `, [building_id], (err, landlords) => {
+                                        if (landlords) {
+                                            landlords.forEach(l => {
+                                                db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, l.landlord_id]);
+                                            });
+                                        }
+                                    });
+                                }
+
+                                // Sync Profile Info
+                                syncUserBuildingInfo(newUserId);
+
+                                res.json({ message: 'Signup application submitted', userId: newUserId });
                             }
-
-                            // Sync Profile Info
-                            syncUserBuildingInfo(newUserId);
-
-                            res.json({ message: 'Signup application submitted', userId: newUserId });
-                        }
-                    );
-                });
-            }
-            );
+                        );
+                    });
+                }
+                );
+            });
         });
     });
 });
@@ -1116,24 +1148,23 @@ app.post('/api/apply', (req, res) => {
         } else {
             // Create new temporary user
             const password = Math.floor(1000000000 + Math.random() * 9000000000).toString();
-            const colors = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c56e', '#06b6d4', '#3b82f6', '#8b5cf6'];
-            const randomColor = colors[Math.floor(Math.random() * colors.length)];
-
-            const createUser = (loginId) => {
-                db.run(`INSERT INTO users(login_id, password, nickname, role, birth_date, phone_number, color, approved, status) VALUES(?, ?, ?, ?, ?, ?, ?, 0, '신청')`,
-                    [loginId, password, name, 'tenant', birth, cleanPhone, randomColor],
-                    function (err) {
-                        if (err) {
-                            if (err.message.includes('UNIQUE')) {
-                                return createUser(name + Math.floor(Math.random() * 1000));
+            getUnusedColor((randomColor) => {
+                const createUser = (loginId) => {
+                    db.run(`INSERT INTO users(login_id, password, nickname, role, birth_date, phone_number, color, approved, status) VALUES(?, ?, ?, ?, ?, ?, ?, 0, '신청')`,
+                        [loginId, password, name, 'tenant', birth, cleanPhone, randomColor],
+                        function (err) {
+                            if (err) {
+                                if (err.message.includes('UNIQUE')) {
+                                    return createUser(name + Math.floor(Math.random() * 1000));
+                                }
+                                return res.status(500).json({ error: err.message });
                             }
-                            return res.status(500).json({ error: err.message });
+                            processInquiry(this.lastID);
                         }
-                        processInquiry(this.lastID);
-                    }
-                );
-            };
-            createUser(name);
+                    );
+                };
+                createUser(name);
+            });
         }
     });
 });
@@ -1238,6 +1269,22 @@ app.get('/api/landlord/:id/tenants', (req, res) => {
 
     const landlordId = req.params.id;
     db.all(query, [landlordId], (err, tenants) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(tenants || []);
+    });
+});
+
+// 3.1 Get All Tenants (Admin)
+app.get('/api/admin/tenants', (req, res) => {
+    const query = `
+        SELECT u.*, b.name as building, r.room_number 
+        FROM users u
+        LEFT JOIN contracts c ON u.id = c.tenant_id
+        LEFT JOIN rooms r ON c.room_id = r.id
+        LEFT JOIN buildings b ON r.building_id = b.id
+        WHERE u.role = 'tenant'
+    `;
+    db.all(query, [], (err, tenants) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(tenants);
     });
@@ -1347,7 +1394,39 @@ app.get('/api/contract/:id/unmatched-payments', (req, res) => {
     });
 });
 
-// 8. Get Contract Details
+// 8. Contracts list
+app.get('/api/contracts/list', (req, res) => {
+    const { role, user_id } = req.query;
+    let query = `
+        SELECT c.id as contract_id, c.contract_start_date, c.contract_end_date,
+               c.deposit, c.monthly_rent as rent, c.maintenance_fee, c.payment_type,
+               u.nickname, u.id as user_id, u.color, u.status, u.phone_number,
+               b.name as building, b.id as building_id,
+               r.room_number, r.id as room_id
+        FROM contracts c
+        JOIN users u ON c.tenant_id = u.id
+        JOIN rooms r ON c.room_id = r.id
+        JOIN buildings b ON r.building_id = b.id
+    `;
+    let params = [];
+
+    if (role === 'landlord') {
+        query += ` JOIN landlord_buildings lb ON b.id = lb.building_id WHERE lb.landlord_id = ? `;
+        params.push(user_id);
+    } else if (role === 'tenant') {
+        query += ` WHERE u.id = ? `;
+        params.push(user_id);
+    }
+
+    query += ` ORDER BY b.name ASC, r.room_number ASC `;
+
+    db.all(query, params, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows || []);
+    });
+});
+
+// 8b. Get Contract Details
 app.get('/api/contracts/:id', (req, res) => {
     const contractId = req.params.id;
     const query = `
@@ -1393,20 +1472,30 @@ app.get('/api/tenant/:id/calendar-data', (req, res) => {
     const tenantId = req.params.id;
     const query = `
         SELECT
-c.id as contract_id,
-    c.contract_start_date,
-    c.contract_end_date,
-    c.payment_type,
-    i.id as bill_id,
-    i.billing_month as bill_month,
-    i.amount as total_amount,
-    i.type as invoice_type,
-    COALESCE(SUM(pa.amount), 0) as paid_amount
+            c.id as contract_id,
+            c.tenant_id,
+            c.contract_start_date,
+            c.contract_end_date,
+            c.payment_type,
+            b.name as building_name,
+            r.room_number,
+            u.color as tenant_color,
+            i.id as bill_id,
+            i.billing_month as bill_month,
+            i.due_date,
+            i.amount as total_amount,
+            i.type as invoice_type,
+            COALESCE(SUM(pa.amount), 0) as paid_amount,
+            GROUP_CONCAT(DISTINCT DATE(p.paid_at)) as paid_dates
         FROM contracts c
+        JOIN rooms r ON c.room_id = r.id
+        JOIN buildings b ON r.building_id = b.id
+        JOIN users u ON c.tenant_id = u.id
         LEFT JOIN invoices i ON c.id = i.contract_id
         LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
+        LEFT JOIN payments p ON pa.payment_id = p.id
         WHERE c.tenant_id = ?
-    GROUP BY c.id, i.id
+        GROUP BY c.id, i.id
         ORDER BY i.billing_month ASC
     `;
 
@@ -1421,33 +1510,99 @@ app.get('/api/landlord/:id/calendar-data', (req, res) => {
     const landlordId = req.params.id;
     const query = `
 SELECT
-c.id as contract_id,
+    c.id as contract_id,
     c.tenant_id,
     c.contract_start_date,
     c.contract_end_date,
     c.payment_type,
+    b.name as building_name,
+    r.room_number,
     u.nickname as tenant_nickname,
     u.color as tenant_color,
     i.id as bill_id,
     i.billing_month as bill_month,
+    i.due_date,
     i.amount as total_amount,
     i.type as invoice_type,
-    COALESCE(SUM(pa.amount), 0) as paid_amount
-        FROM contracts c
-        JOIN rooms r ON c.room_id = r.id
-        JOIN buildings b ON r.building_id = b.id
-        JOIN landlord_buildings lb ON b.id = lb.building_id
-        JOIN users u ON c.tenant_id = u.id
-        LEFT JOIN invoices i ON c.id = i.contract_id
-        LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
-        WHERE lb.landlord_id = ?
-    GROUP BY c.id, u.id, i.id
-        ORDER BY i.billing_month ASC
-    `;
+    COALESCE(SUM(pa.amount), 0) as paid_amount,
+    GROUP_CONCAT(DISTINCT DATE(p.paid_at)) as paid_dates
+FROM contracts c
+JOIN rooms r ON c.room_id = r.id
+JOIN buildings b ON r.building_id = b.id
+JOIN landlord_buildings lb ON b.id = lb.building_id
+JOIN users u ON c.tenant_id = u.id
+LEFT JOIN invoices i ON c.id = i.contract_id
+LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
+LEFT JOIN payments p ON pa.payment_id = p.id
+WHERE lb.landlord_id = ?
+GROUP BY c.id, u.id, i.id
+ORDER BY i.billing_month ASC
+`;
 
-    db.all(query, [landlordId], (err, data) => {
+    db.all(query, [landlordId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(data || []);
+        res.json(rows || []);
+    });
+});
+
+// 10.1 Get Calendar Data for Admin (All Contracts)
+app.get('/api/admin/calendar-data', (req, res) => {
+    const query = `
+SELECT
+    c.id as contract_id,
+    c.tenant_id,
+    c.contract_start_date,
+    c.contract_end_date,
+    c.payment_type,
+    b.name as building_name,
+    r.room_number,
+    u.nickname as tenant_nickname,
+    u.color as tenant_color,
+    i.id as bill_id,
+    i.billing_month as bill_month,
+    i.due_date,
+    i.amount as total_amount,
+    i.type as invoice_type,
+    COALESCE(SUM(pa.amount), 0) as paid_amount,
+    GROUP_CONCAT(DISTINCT DATE(p.paid_at)) as paid_dates
+FROM contracts c
+JOIN rooms r ON c.room_id = r.id
+JOIN buildings b ON r.building_id = b.id
+JOIN users u ON c.tenant_id = u.id
+LEFT JOIN invoices i ON c.id = i.contract_id
+LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
+LEFT JOIN payments p ON pa.payment_id = p.id
+GROUP BY c.id, u.id, i.id
+ORDER BY i.billing_month ASC
+`;
+
+    db.all(query, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows || []);
+    });
+});
+
+// 8c. Delete Contract
+app.delete('/api/contracts/:id', (req, res) => {
+    const contractId = req.params.id;
+
+    db.serialize(() => {
+        db.run('BEGIN TRANSACTION');
+
+        // Delete related data first (Keywords, Invoices, Payment Allocations)
+        db.run('DELETE FROM contract_keywords WHERE contract_id = ?', [contractId]);
+        db.run('DELETE FROM payment_allocation WHERE invoice_id IN (SELECT id FROM invoices WHERE contract_id = ?)', [contractId]);
+        db.run('DELETE FROM invoices WHERE contract_id = ?', [contractId]);
+
+        // Delete the contract itself
+        db.run('DELETE FROM contracts WHERE id = ?', [contractId], function (err) {
+            if (err) {
+                db.run('ROLLBACK');
+                return res.status(500).json({ error: err.message });
+            }
+            db.run('COMMIT');
+            res.json({ success: true });
+        });
     });
 });
 
@@ -2246,91 +2401,90 @@ app.post('/api/users/quick', (req, res) => {
             }
         } else {
             // Truly new - Insert
-            const colors = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6'];
-            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+            getUnusedColor((randomColor) => {
+                // Failsafe: Ensure login_id exists
+                const finalLoginId = login_id || (nickname + (birth_date ? birth_date.replace(/-/g, '').slice(2) : Math.floor(Math.random() * 10000)));
 
-            // Failsafe: Ensure login_id exists
-            const finalLoginId = login_id || (nickname + (birth_date ? birth_date.replace(/-/g, '').slice(2) : Math.floor(Math.random() * 10000)));
+                db.run(`INSERT INTO users(login_id, password, nickname, role, color, birth_date, phone_number, approved, status) VALUES(?, ?, ?, ?, ?, ?, ?, 1, '승인')`,
+                    [finalLoginId, password || '1234', nickname, role, randomColor, birth_date, cleanPhone],
+                    async function (err) {
+                        if (err) return res.status(500).json({ error: err.message });
+                        const newUserId = this.lastID;
 
-            db.run(`INSERT INTO users(login_id, password, nickname, role, color, birth_date, phone_number, approved, status) VALUES(?, ?, ?, ?, ?, ?, ?, 1, '승인')`,
-                [finalLoginId, password || '1234', nickname, role, randomColor, birth_date, cleanPhone],
-                async function (err) {
-                    if (err) return res.status(500).json({ error: err.message });
-                    const newUserId = this.lastID;
-
-                    // Save relationship to room if provided
-                    if (role === 'tenant' && building_id) {
-                        // Find first room in building
-                        db.get("SELECT id FROM rooms WHERE building_id = ? LIMIT 1", [building_id], (err, r) => {
-                            if (r) {
-                                db.run(`INSERT INTO room_tenant(room_id, tenant_id, start_date) VALUES(?, ?, date('now'))`,
-                                    [r.id, newUserId],
-                                    (err) => {
-                                        if (err) console.error('Error saving quick user room relationship:', err.message);
-                                    }
-                                );
-                            }
-                        });
-                    }
-
-                    // Notification & Building Info Resolution
-                    let buildingName = '';
-                    let roomNumber = '';
-
-                    const getBuildingInfo = () => {
-                        return new Promise((resolve) => {
-                            if (role === 'tenant' && building_id) {
-                                db.get('SELECT name FROM buildings WHERE id = ?', [building_id], (err, b) => {
-                                    if (b) buildingName = b.name;
-
-                                    // Also try to find the latest room assigned
-                                    db.get('SELECT room_number FROM rooms WHERE building_id = ? AND id IN (SELECT room_id FROM contracts WHERE tenant_id = ?)', [building_id, newUserId], (err, r) => {
-                                        if (r) roomNumber = r.room_number;
-                                        resolve();
-                                    });
-                                });
-                            } else {
-                                resolve();
-                            }
-                        });
-                    };
-
-                    await getBuildingInfo();
-
-                    const titleText = (role === 'tenant' && buildingName) ? `${buildingName} ${roomNumber || ''} `.trim() : (role === 'landlord' ? '임대인 등록 완료' : '세입자 등록 완료');
-                    let content = `아이디: ${login_id} \n이름: ${nickname} \n생년월일: ${birth_date} \n전화번호: ${formatPhone(cleanPhone)} `;
-
-                    if (role === 'tenant' && buildingName) {
-                        content += `\n건물명: ${buildingName} \n호수: ${roomNumber || '-'} `;
-                    }
-
-                    db.run(`UPDATE users SET title = ?, description = ? WHERE id = ? `, [titleText, content, newUserId], (err) => {
-                        db.run(`INSERT INTO message_box(author_id, target, category, related_id, related_table, title) VALUES(?, ?, ?, ?, ?, ?)`,
-                            [newUserId, 'direct', '시스템', newUserId, 'users', titleText],
-                            function (err) {
-                                if (err) {
-                                    console.error('Error creating user quick notification:', err.message);
-                                } else {
-                                    const boxId = this.lastID;
-
-                                    // Insert initial message
-                                    db.run(`INSERT INTO messages(message_box_id, sender_id, content) VALUES(?, ?, ?)`, [boxId, newUserId, content]);
-
-                                    // Auto-send to the user themselves
-                                    db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, newUserId]);
+                        // Save relationship to room if provided
+                        if (role === 'tenant' && building_id) {
+                            // Find first room in building
+                            db.get("SELECT id FROM rooms WHERE building_id = ? LIMIT 1", [building_id], (err, r) => {
+                                if (r) {
+                                    db.run(`INSERT INTO room_tenant(room_id, tenant_id, start_date) VALUES(?, ?, date('now'))`,
+                                        [r.id, newUserId],
+                                        (err) => {
+                                            if (err) console.error('Error saving quick user room relationship:', err.message);
+                                        }
+                                    );
                                 }
-                                // Distribute global messages
-                                distributeGlobalMessagesToUser(newUserId);
+                            });
+                        }
 
-                                // Sync Profile Info
-                                syncUserBuildingInfo(newUserId);
+                        // Notification & Building Info Resolution
+                        let buildingName = '';
+                        let roomNumber = '';
 
-                                res.json({ message: 'User created', userId: newUserId });
-                            }
-                        );
-                    });
-                }
-            );
+                        const getBuildingInfo = () => {
+                            return new Promise((resolve) => {
+                                if (role === 'tenant' && building_id) {
+                                    db.get('SELECT name FROM buildings WHERE id = ?', [building_id], (err, b) => {
+                                        if (b) buildingName = b.name;
+
+                                        // Also try to find the latest room assigned
+                                        db.get('SELECT room_number FROM rooms WHERE building_id = ? AND id IN (SELECT room_id FROM contracts WHERE tenant_id = ?)', [building_id, newUserId], (err, r) => {
+                                            if (r) roomNumber = r.room_number;
+                                            resolve();
+                                        });
+                                    });
+                                } else {
+                                    resolve();
+                                }
+                            });
+                        };
+
+                        await getBuildingInfo();
+
+                        const titleText = (role === 'tenant' && buildingName) ? `${buildingName} ${roomNumber || ''} `.trim() : (role === 'landlord' ? '임대인 등록 완료' : '세입자 등록 완료');
+                        let content = `아이디: ${login_id} \n이름: ${nickname} \n생년월일: ${birth_date} \n전화번호: ${formatPhone(cleanPhone)} `;
+
+                        if (role === 'tenant' && buildingName) {
+                            content += `\n건물명: ${buildingName} \n호수: ${roomNumber || '-'} `;
+                        }
+
+                        db.run(`UPDATE users SET title = ?, description = ? WHERE id = ? `, [titleText, content, newUserId], (err) => {
+                            db.run(`INSERT INTO message_box(author_id, target, category, related_id, related_table, title) VALUES(?, ?, ?, ?, ?, ?)`,
+                                [newUserId, 'direct', '시스템', newUserId, 'users', titleText],
+                                function (err) {
+                                    if (err) {
+                                        console.error('Error creating user quick notification:', err.message);
+                                    } else {
+                                        const boxId = this.lastID;
+
+                                        // Insert initial message
+                                        db.run(`INSERT INTO messages(message_box_id, sender_id, content) VALUES(?, ?, ?)`, [boxId, newUserId, content]);
+
+                                        // Auto-send to the user themselves
+                                        db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, newUserId]);
+                                    }
+                                    // Distribute global messages
+                                    distributeGlobalMessagesToUser(newUserId);
+
+                                    // Sync Profile Info
+                                    syncUserBuildingInfo(newUserId);
+
+                                    res.json({ message: 'User created', userId: newUserId });
+                                }
+                            );
+                        });
+                    }
+                );
+            });
         }
     });
 });

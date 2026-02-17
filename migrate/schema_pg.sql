@@ -97,11 +97,21 @@ CREATE TABLE IF NOT EXISTS items (
     description TEXT,
     status TEXT DEFAULT 'open',
     building_id INTEGER,
-    belongs_to INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (owner_id) REFERENCES users(id),
-    FOREIGN KEY (building_id) REFERENCES buildings(id),
-    FOREIGN KEY (belongs_to) REFERENCES users(id)
+    FOREIGN KEY (building_id) REFERENCES buildings(id)
+);
+
+CREATE TABLE IF NOT EXISTS item_users (
+    id SERIAL PRIMARY KEY,
+    item_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    start_date DATE,
+    end_date DATE,
+    memo TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS room_tenant (

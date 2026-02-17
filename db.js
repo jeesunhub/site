@@ -166,9 +166,24 @@ function ensureColumns() {
         { table: 'messages', name: 'read_at', type: 'DATETIME' },
         { table: 'messages', name: 'sender_id', type: 'INTEGER' },
         { table: 'messages', name: 'message_box_id', type: 'INTEGER' },
-        { table: 'items', name: 'belongs_to', type: 'INTEGER' },
         { table: 'room_events', name: 'photo', type: 'TEXT' },
     ];
+
+    // Create item_users table if it doesn't exist (Legacy Fix)
+    const createItemUsersSql = `
+        CREATE TABLE IF NOT EXISTS item_users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            start_date DATE,
+            end_date DATE,
+            memo TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    `;
+    db.run(createItemUsersSql);
 
     columns.forEach(col => {
         const testSql = `SELECT ${col.name} FROM ${col.table} LIMIT 1`;

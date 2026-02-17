@@ -158,6 +158,7 @@ function renderNavbar() {
                         ${user.role === 'admin' ? '<a href="/landlord_management.html">👑 임대인 관리</a>' : ''}
                         ${(user.role === 'landlord' || user.role === 'admin') ? '<a href="/buildings.html">🏢 건물 관리</a>' : ''}
                         ${(user.role === 'landlord' || user.role === 'admin') ? '<a href="/tenants.html">👥 세입자 관리</a>' : ''}
+                        ${user.role === 'admin' ? '<a href="/contracts.html">📄 계약 관리</a>' : ''}
                         ${(user.role === 'landlord' || user.role === 'admin') ? '<a href="/payments.html">💰 납부 관리</a>' : ''}
                         <hr>
                         ${(user.role === 'landlord' || user.role === 'admin') ? '<a href="/room_adv.html">🏠 방 내놓기</a>' : ''}
@@ -259,6 +260,14 @@ function getDueDate(billMonth, startDate, type) {
     } catch (e) {
         return null;
     }
+}
+
+function formatLocalDate(date) {
+    if (!date) return '';
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
 }
 
 async function initTestingMode() {
