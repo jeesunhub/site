@@ -157,51 +157,122 @@
             width: 100%;
         }
 
+        #layout-main {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden !important;
+            flex: 1;
+            min-height: 0;
+            height: 100%;
+            /* Force height */
+        }
+
         #main-content {
-            flex-grow: 1;
-            overflow-y: auto;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden !important;
             margin: 0 !important;
             padding: 0 !important;
-            width: 100%;
+            width: 100% !important;
             max-width: none !important;
-        }
-
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: 1fr 420px;
-            gap: 2rem;
-            margin-top: 0;
-            /* Margin removed as requested */
-        }
-
-        @media (max-width: 1024px) {
-            .dashboard-grid {
-                grid-template-columns: 1fr;
-            }
+            min-height: 0;
         }
 
         .list-container {
+            flex: 1;
             width: 100%;
             margin: 0;
             padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
         }
 
         .list-section-header {
-            padding: 1.5rem 1rem 0.5rem 1.2rem;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            padding: 1rem 1.2rem;
             font-size: 0.85rem;
             font-weight: 600;
             color: var(--primary);
             text-transform: uppercase;
             letter-spacing: 0.05rem;
-            opacity: 0.8;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(10px);
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            background: rgba(255, 255, 255, 0.01);
+            margin-top: 0;
         }
 
         .item-list {
             list-style: none;
             padding: 0;
             margin: 0;
+            background: var(--bg);
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .toggle-container {
+            display: flex;
+            background: rgba(15, 23, 42, 0.95);
+            padding: 0.8rem 1.2rem;
+            gap: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+
+        .toggle-btn {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 0.5rem 0;
+            position: relative;
+            transition: color 0.2s;
+        }
+
+        .toggle-btn.active {
+            color: var(--primary);
+        }
+
+        .toggle-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -0.8rem;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--primary);
+            box-shadow: 0 0 10px var(--primary);
+        }
+
+        .list-scroll-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .item-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            background: var(--bg);
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
+            display: flex;
+            flex-direction: column;
         }
 
         .item-row {
@@ -525,18 +596,40 @@
 
             // Render Unified List area below calendar
             container.innerHTML = `
-                <div class="list-container">
-                    <div class="list-section-header">미납 현황</div>
-                    <div id="unpaid-list" class="item-list"></div>
-                    
-                    <div class="list-section-header">최근 거래 내역</div>
-                    <div id="recent-transactions" class="item-list"></div>
+                <div class="list-container" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+                    <div class="toggle-container">
+                        <button id="btn-unpaid" class="toggle-btn active" onclick="switchListView('unpaid')">미납 현황</button>
+                        <button id="btn-recent" class="toggle-btn" onclick="switchListView('recent')">최근 거래 내역</button>
+                    </div>
+                    <div id="list-scroll-area" class="list-scroll-area">
+                        <ul id="unpaid-list" class="item-list"></ul>
+                        <ul id="recent-transactions" class="item-list" style="display: none;"></ul>
+                    </div>
                 </div>
             `;
 
             renderCalendar();
             renderStats();
             renderRecentTransactions();
+        }
+
+        function switchListView(view) {
+            const unpaidBtn = document.getElementById('btn-unpaid');
+            const recentBtn = document.getElementById('btn-recent');
+            const unpaidList = document.getElementById('unpaid-list');
+            const recentList = document.getElementById('recent-transactions');
+
+            if (view === 'unpaid') {
+                unpaidBtn.classList.add('active');
+                recentBtn.classList.remove('active');
+                unpaidList.style.display = 'block';
+                recentList.style.display = 'none';
+            } else {
+                recentBtn.classList.add('active');
+                unpaidBtn.classList.remove('active');
+                recentList.style.display = 'block';
+                unpaidList.style.display = 'none';
+            }
         }
 
         async function fetchHolidays(year) {

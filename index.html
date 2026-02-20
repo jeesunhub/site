@@ -415,11 +415,11 @@
 
         async function loadCounts() {
             try {
-                const r = await fetch('/api/stats/counts');
+                const r = await fetch('/api/public/stats');
                 const d = await r.json();
-                document.getElementById('room-count').textContent = d.room_count || 0;
-                document.getElementById('item-count').textContent = d.item_count || 0;
-                document.getElementById('info-count').textContent = d.info_count || 0;
+                document.getElementById('room-count').textContent = d.roomCount || 0;
+                document.getElementById('item-count').textContent = d.itemCount || 0;
+                document.getElementById('info-count').textContent = d.infoCount || 0;
             } catch (e) { }
         }
 

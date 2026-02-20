@@ -379,6 +379,7 @@ body.test-mode #layout-footer {
     max-width: 1400px;
     margin: 2rem auto;
     padding: 0 1.5rem;
+    overflow: auto;
 }
 
 .card {

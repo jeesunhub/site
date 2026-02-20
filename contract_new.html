@@ -348,16 +348,24 @@
                 <div class="form-grid">
                     <div class="form-group">
                         <label>건물명</label>
-                        <select id="contract-building" onchange="loadRooms()"></select>
+                        <select id="contract-building" onchange="loadRooms(); renderVacantPostings();"></select>
                     </div>
                     <div class="form-group">
                         <label>호수 (방번호)</label>
-                        <select id="contract-room"></select>
+                        <select id="contract-room" onchange="renderVacantPostings()"></select>
                     </div>
                 </div>
             </div>
             <div class="form-section">
                 <h2>📄 계약 조건</h2>
+                <div class="form-grid" style="grid-template-columns: 1fr;">
+                    <div class="form-group">
+                        <label>방 내놓기 중 선택 (공실 광고)</label>
+                        <select id="vacant-postings-select" onchange="applyPostingData(this.value)">
+                            <option value="">광고 내역에서 선택 (자동 입력)</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="form-grid">
                     <div class="form-group"><label>계약 시작일</label><input type="date" id="contract-start"></div>
                     <div class="form-group">
@@ -467,6 +475,8 @@
         const contractId = urlParams.get('contract_id');
         const isIframe = window.self !== window.top;
         let currentTenantId = null;
+        let vacantPostings = [];
+        let activeContractId = contractId; // ID of the contract we are editing/updating
 
         if (!user) {
             window.location.href = '/index.html';
@@ -485,6 +495,7 @@
             }
 
             await loadBuildings();
+            await loadVacantPostings();
 
             // Pre-fill from URL params (e.g. from Text Extraction or Tenant Mgmt)
             const urlBuildingName = urlParams.get('building_name');
@@ -690,6 +701,76 @@
             }
         }
 
+        async function loadVacantPostings() {
+            if (contractId) return;
+            try {
+                const res = await fetch(`/api/landlord/${user.id}/vacant-postings`);
+                vacantPostings = await res.json();
+                renderVacantPostings();
+            } catch (err) {
+                console.error('Failed to load vacant postings:', err);
+            }
+        }
+
+        function renderVacantPostings() {
+            const select = document.getElementById('vacant-postings-select');
+            const buildingId = document.getElementById('contract-building').value;
+            const roomId = document.getElementById('contract-room').value;
+
+            // Save current selection if any
+            const currentVal = select.value;
+
+            select.innerHTML = '<option value="">광고 내역에서 선택 (자동 입력)</option>';
+
+            const filtered = vacantPostings.filter(p => {
+                const bMatch = !buildingId || p.building_id == buildingId;
+                const rMatch = !roomId || p.room_id == roomId;
+                return bMatch && rMatch;
+            });
+
+            if (filtered.length === 0) {
+                const opt = document.createElement('option');
+                opt.value = "";
+                opt.textContent = "건물과 호수에 맞는 광고 없음";
+                opt.disabled = true;
+                select.appendChild(opt);
+            } else {
+                filtered.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.posting_id;
+                    opt.textContent = `${p.building_name} ${p.room_number}호 (${p.title})`;
+                    select.appendChild(opt);
+                });
+
+                // Try to restore previous selection if it's still in the filtered list
+                if (filtered.some(f => f.posting_id == currentVal)) {
+                    select.value = currentVal;
+                }
+            }
+        }
+
+        async function applyPostingData(selectedId) {
+            if (!selectedId) return;
+            const p = vacantPostings.find(x => x.posting_id == selectedId);
+            if (!p) return;
+
+            if (p.contract_id) {
+                activeContractId = p.contract_id;
+            } else {
+                activeContractId = null; // New contract will be created
+            }
+
+            // Auto-fill fields
+            document.getElementById('contract-building').value = p.building_id;
+            await loadRooms(p.room_id);
+            document.getElementById('contract-start').value = p.contract_start_date || '';
+            document.getElementById('contract-deposit').value = formatCurrency(p.deposit || 0);
+            document.getElementById('contract-rent').value = formatCurrency(p.monthly_rent || 0);
+            document.getElementById('contract-fee').value = formatCurrency(p.maintenance_fee || 0);
+            document.getElementById('contract-cleaning').value = formatCurrency(p.cleaning_fee || 0);
+            document.getElementById('contract-payment-type').value = p.payment_type || 'postpaid';
+        }
+
         async function loadRooms(selectedRoomIdentifier = null) {
             const buildingId = document.getElementById('contract-building').value;
             const rSelect = document.getElementById('contract-room');
@@ -716,6 +797,7 @@
             if (matchedRoom) {
                 rSelect.value = matchedRoom.id;
             }
+            renderVacantPostings();
         }
 
         async function loadContractData(id) {
@@ -878,8 +960,8 @@
                     room_id: data.room_id
                 };
 
-                if ((currentAction === 'change' || currentAction === 'extend') && contractId) {
-                    url = `/api/contracts/${contractId}`;
+                if (activeContractId) {
+                    url = `/api/contracts/${activeContractId}`;
                     method = 'PUT';
                     payload.keyword = data.tenant_name; // Maintain keyword on update
                 }

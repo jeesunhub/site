@@ -455,11 +455,7 @@
                 const item = document.createElement('div');
                 item.className = 'mgmt-item';
 
-                let dayPart = '01';
-                if (row.contract_start_date) {
-                    dayPart = row.contract_start_date.split('-')[2] || '01';
-                }
-                const dueDate = `${row.bill_month}-${dayPart}`;
+                const dueDate = row.due_date || `${row.bill_month}-01`;
                 const displayDueDate = dueDate.slice(5); // MM-DD
 
                 const due = row.due_amount;

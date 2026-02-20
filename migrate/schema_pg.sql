@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     phone_number TEXT,
     noti INTEGER DEFAULT 0,
     approved INTEGER DEFAULT 0,
-    status TEXT DEFAULT '임시' CHECK (status IN ('임시', '승인', '종료')),
+    status TEXT DEFAULT '임시' CHECK (status IN ('임시', '신청', '승인', '종료')),
     title TEXT,
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS messages (
 
 CREATE TABLE IF NOT EXISTS message_box (
     id SERIAL PRIMARY KEY,
-    author_id INTEGER REFERENCES users(id),
+    author_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     message_id INTEGER REFERENCES messages(id) ON DELETE CASCADE,
     target TEXT CHECK(target IN ('direct', 'to_all', 'to_building', 'to_landlords')),
     category TEXT CHECK(category IN ('가입신청', '방있어요', '물품공유', '시스템')),
@@ -63,15 +63,15 @@ CREATE TABLE IF NOT EXISTS building_addresses (
     id SERIAL PRIMARY KEY,
     building_id INTEGER NOT NULL,
     address TEXT NOT NULL,
-    FOREIGN KEY (building_id) REFERENCES buildings(id)
+    FOREIGN KEY (building_id) REFERENCES buildings(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS landlord_buildings (
     id SERIAL PRIMARY KEY,
     landlord_id INTEGER NOT NULL,
     building_id INTEGER NOT NULL,
-    FOREIGN KEY (landlord_id) REFERENCES users(id),
-    FOREIGN KEY (building_id) REFERENCES buildings(id)
+    FOREIGN KEY (landlord_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (building_id) REFERENCES buildings(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS rooms (
@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS rooms (
     rent INTEGER,
     management_fee INTEGER,
     available_date TEXT,
-    FOREIGN KEY (building_id) REFERENCES buildings(id)
+    FOREIGN KEY (building_id) REFERENCES buildings(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS items (
@@ -97,9 +97,10 @@ CREATE TABLE IF NOT EXISTS items (
     description TEXT,
     status TEXT DEFAULT 'open',
     building_id INTEGER,
+    belongs_to INTEGER REFERENCES users(id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (owner_id) REFERENCES users(id),
-    FOREIGN KEY (building_id) REFERENCES buildings(id)
+    FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (building_id) REFERENCES buildings(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS item_users (
@@ -108,6 +109,7 @@ CREATE TABLE IF NOT EXISTS item_users (
     user_id INTEGER NOT NULL,
     start_date DATE,
     end_date DATE,
+    status TEXT DEFAULT '사용중' CHECK (status IN ('사용중', '폐기')),
     memo TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
@@ -116,7 +118,7 @@ CREATE TABLE IF NOT EXISTS item_users (
 
 CREATE TABLE IF NOT EXISTS room_tenant (
     id SERIAL PRIMARY KEY,
-    room_id INTEGER NOT NULL REFERENCES rooms(id),
+    room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     tenant_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 
     start_date DATE NOT NULL,
@@ -127,11 +129,11 @@ CREATE TABLE IF NOT EXISTS contracts (
     id SERIAL PRIMARY KEY,
 
     room_id INTEGER NOT NULL,
-    tenant_id INTEGER NOT NULL,
+    tenant_id INTEGER,
 
     payment_type TEXT NOT NULL CHECK (payment_type IN ('prepaid', 'postpaid')),
     
-    contract_start_date DATE NOT NULL,
+    contract_start_date DATE,
     contract_end_date DATE,
     move_out_date DATE,
 
@@ -143,15 +145,15 @@ CREATE TABLE IF NOT EXISTS contracts (
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-    FOREIGN KEY (room_id) REFERENCES rooms(id),
-    FOREIGN KEY (tenant_id) REFERENCES users(id)
+    FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS contract_keywords (
     id SERIAL PRIMARY KEY,
     contract_id INTEGER NOT NULL,
     keyword TEXT,
-    FOREIGN KEY (contract_id) REFERENCES contracts(id)
+    FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS invoices (
@@ -164,7 +166,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     status TEXT,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (contract_id) REFERENCES contracts(id)
+    FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS payments (
@@ -178,7 +180,7 @@ CREATE TABLE IF NOT EXISTS payments (
     raw_text TEXT,
     memo TEXT,
 
-    FOREIGN KEY (contract_id) REFERENCES contracts(id)
+    FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS payment_allocation (
@@ -188,8 +190,8 @@ CREATE TABLE IF NOT EXISTS payment_allocation (
     invoice_id INTEGER NOT NULL,
     amount INTEGER NOT NULL,
 
-    FOREIGN KEY (payment_id) REFERENCES payments(id),
-    FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+    FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE CASCADE,
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS room_events (
@@ -197,8 +199,9 @@ CREATE TABLE IF NOT EXISTS room_events (
     room_id INTEGER NOT NULL,
     event_date DATE NOT NULL,
     memo TEXT,
+    photo TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (room_id) REFERENCES rooms(id)
+    FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS advertisements (
@@ -211,7 +214,10 @@ CREATE TABLE IF NOT EXISTS advertisements (
     created_by INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     status TEXT,
-    target_id INTEGER
+    target_id INTEGER,
+    category TEXT,
+    is_anonymous INTEGER DEFAULT 0,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS applicants (
@@ -220,8 +226,8 @@ CREATE TABLE IF NOT EXISTS applicants (
     advertisement_id INTEGER NOT NULL,
     status TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (advertisement_id) REFERENCES advertisements(id)
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (advertisement_id) REFERENCES advertisements(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS images (

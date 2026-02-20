@@ -187,9 +187,47 @@ app.get('/api/info/stats', (req, res) => {
 
 
 
+app.get('/api/landlord/:id/vacant-postings', (req, res) => {
+    const landlordId = req.params.id;
+    const query = `
+        SELECT 
+            a.id as posting_id, 
+            a.title, 
+            a.related_table, 
+            a.related_id,
+            COALESCE(b.name, b2.name) as building_name,
+            COALESCE(r.room_number, r2.room_number) as room_number,
+            COALESCE(c.deposit, r2.deposit, 0) as deposit,
+            COALESCE(c.monthly_rent, r2.rent, 0) as monthly_rent,
+            COALESCE(c.maintenance_fee, r2.management_fee, 0) as maintenance_fee,
+            COALESCE(c.cleaning_fee, 0) as cleaning_fee,
+            COALESCE(c.contract_start_date, r2.available_date) as contract_start_date,
+            COALESCE(r.id, r2.id) as room_id,
+            COALESCE(b.id, b2.id) as building_id,
+            c.id as contract_id,
+            c.payment_type
+        FROM advertisements a
+        LEFT JOIN contracts c ON (
+            (a.related_table = 'contract' AND a.related_id = c.id) OR
+            (a.related_table = 'room' AND a.related_id = c.room_id AND c.tenant_id IS NULL)
+        )
+        LEFT JOIN rooms r ON c.room_id = r.id
+        LEFT JOIN buildings b ON r.building_id = b.id
+        LEFT JOIN rooms r2 ON a.related_id = r2.id AND a.related_table = 'room'
+        LEFT JOIN buildings b2 ON r2.building_id = b2.id
+        WHERE a.created_by = ? 
+          AND (a.related_table = 'contract' OR a.related_table = 'room')
+          AND ( (a.related_table = 'contract' AND c.tenant_id IS NULL) OR a.related_table = 'room' )
+    `;
+    db.all(query, [landlordId], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows || []);
+    });
+});
+
 // 34. Get Advertisements
 app.get('/api/postings', (req, res) => {
-    const { type, role, user_id, viewer_id, viewer_role, category } = req.query;
+    const { type, role, user_id, viewer_id, viewer_role, category, status } = req.query;
     let query = `
         SELECT a.*, 
             u.nickname as owner_name, u.login_id as owner_login_id, u.id as owner_id,
@@ -239,6 +277,11 @@ app.get('/api/postings', (req, res) => {
     if (category) {
         whereClauses.push(`a.category = ? `);
         params.push(category);
+    }
+
+    if (status) {
+        whereClauses.push(`a.status = ? `);
+        params.push(status);
     }
 
     // Manager/Self view filter (Show only MY ads)
@@ -373,7 +416,7 @@ app.post('/api/postings', upload.array('photos', 5), (req, res) => {
                 }
 
                 const finalLandlordId = roomInfo.landlord_id || finalCreatedBy;
-                const finalTenantId = finalCreatedBy; // Using creator as placeholder tenant
+                const finalTenantId = null; // No tenant yet for an advertisement
 
                 const contractQuery = `
                     INSERT INTO contracts(
@@ -407,23 +450,31 @@ app.post('/api/postings', upload.array('photos', 5), (req, res) => {
 
 app.put('/api/postings/:id', upload.array('photos', 5), (req, res) => {
     const adId = req.params.id;
-    const { title, description, price, item_name, building_id, type, target_id, category, deposit, rent, management_fee, cleaning_fee, available_date, is_anonymous } = req.body;
+    const { title, description, price, item_name, building_id, room_id, type, target_id, category, deposit, rent, management_fee, cleaning_fee, available_date, is_anonymous } = req.body;
 
     // Convert types
     const finalPrice = parseInt(price) || 0;
     const finalBuildingId = building_id ? parseInt(building_id) : null;
+    const finalRoomId = room_id ? parseInt(room_id) : null;
     const finalTargetId = (target_id && target_id !== "" && target_id !== "null") ? parseInt(target_id) : null;
 
     db.get("SELECT related_table, related_id FROM advertisements WHERE id = ?", [adId], (err, ad) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!ad) return res.status(404).json({ error: 'Ad not found' });
 
+        // If it's a room-based ad, the room_id IS the related_id.
+        // If it's a contract-based ad, related_id stays the contract_id.
+        let finalRelatedId = ad.related_id;
+        if (type === 'room' || ad.related_table === 'room') {
+            finalRelatedId = finalRoomId || ad.related_id;
+        }
+
         db.serialize(() => {
             db.run('BEGIN TRANSACTION');
 
             const finalizeUpdate = () => {
-                const query = `UPDATE advertisements SET title = ?, description = ?, price = ?, target_id = ?, category = ?, is_anonymous = ? WHERE id = ? `;
-                db.run(query, [title, description, finalPrice, finalTargetId, category || null, is_anonymous ? 1 : 0, adId], function (err) {
+                const query = `UPDATE advertisements SET title = ?, description = ?, price = ?, target_id = ?, category = ?, is_anonymous = ?, related_id = ?, related_table = ? WHERE id = ? `;
+                db.run(query, [title, description, finalPrice, finalTargetId, category || null, is_anonymous ? 1 : 0, finalRelatedId, type || ad.related_table, adId], function (err) {
                     if (err) {
                         console.error('[API] Update Error:', err.message);
                         db.run('ROLLBACK');
@@ -452,14 +503,28 @@ app.put('/api/postings/:id', upload.array('photos', 5), (req, res) => {
                     finalizeUpdate();
                 });
             } else if (ad.related_table === 'contract' && ad.related_id) {
-                const contractQuery = `UPDATE contracts SET deposit = ?, monthly_rent = ?, maintenance_fee = ?, cleaning_fee = ?, contract_start_date = ? WHERE id = ? `;
+                const contractQuery = `UPDATE contracts SET room_id = ?, deposit = ?, monthly_rent = ?, maintenance_fee = ?, cleaning_fee = ?, contract_start_date = ? WHERE id = ? `;
                 const finalAvailableDate = available_date || new Date().toISOString().split('T')[0];
                 db.run(contractQuery, [
+                    finalRoomId || null,
                     parseInt(deposit) || 0, parseInt(rent) || 0, parseInt(management_fee) || 0,
                     parseInt(cleaning_fee) || 0, finalAvailableDate, ad.related_id
                 ], function (err) {
                     if (err) {
                         console.error('[API] Contract Update Error:', err.message);
+                        db.run('ROLLBACK');
+                        return res.status(500).json({ error: err.message });
+                    }
+                    finalizeUpdate();
+                });
+            } else if (ad.related_table === 'room' && ad.related_id) {
+                const roomQuery = `UPDATE rooms SET deposit = ?, rent = ?, management_fee = ?, available_date = ? WHERE id = ? `;
+                db.run(roomQuery, [
+                    parseInt(deposit) || 0, parseInt(rent) || 0, parseInt(management_fee) || 0,
+                    available_date, ad.related_id
+                ], function (err) {
+                    if (err) {
+                        console.error('[API] Room Update Error:', err.message);
                         db.run('ROLLBACK');
                         return res.status(500).json({ error: err.message });
                     }
@@ -636,7 +701,8 @@ END as building_name,
     i.title as item_name,
     i.description as item_description,
     i.building_id as item_building_id,
-    target_b.name as target_building_name
+    target_b.name as target_building_name,
+    COALESCE(r.id, rc.id) as room_id
         FROM advertisements a
         LEFT JOIN users u ON a.created_by = u.id
         LEFT JOIN rooms r ON a.related_id = r.id AND a.related_table = 'room'
@@ -1293,7 +1359,19 @@ app.get('/api/admin/tenants', (req, res) => {
 // 4. Get Tenant's Bills and Payments
 app.get('/api/tenant/:id/billing', (req, res) => {
     const tenantId = req.params.id;
-    const query = `
+
+    // Proactively sync invoices for the latest active contract
+    db.get("SELECT id FROM contracts WHERE tenant_id = ? AND (move_out_date IS NULL OR move_out_date >= date('now')) ORDER BY contract_start_date DESC LIMIT 1", [tenantId], (err, contract) => {
+        if (contract) {
+            syncContractInvoices(contract.id, () => {
+                fetchBilling();
+            });
+        } else {
+            fetchBilling();
+        }
+
+        function fetchBilling() {
+            const query = `
 SELECT
 i.id as bill_id,
     i.billing_month as bill_month,
@@ -1314,35 +1392,37 @@ i.id as bill_id,
     ORDER BY i.billing_month DESC, p.paid_at ASC
     `;
 
-    db.all(query, [tenantId], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
+            db.all(query, [tenantId], (err, rows) => {
+                if (err) return res.status(500).json({ error: err.message });
 
-        // Group by invoice (bill_id)
-        const billsMap = {};
-        rows.forEach(row => {
-            if (!billsMap[row.bill_id]) {
-                billsMap[row.bill_id] = {
-                    id: row.bill_id,
-                    bill_month: row.bill_month,
-                    total_amount: row.total_amount,
-                    type: row.invoice_type,
-                    contract_start_date: row.contract_start_date,
-                    payment_type: row.payment_type,
-                    payments: []
-                };
-            }
-            if (row.payment_id) {
-                billsMap[row.bill_id].payments.push({
-                    id: row.payment_id,
-                    amount: row.payment_amount,
-                    matched_amount: row.matched_amount,
-                    paid_at: row.paid_at,
-                    memo: row.memo
+                // Group by invoice (bill_id)
+                const billsMap = {};
+                rows.forEach(row => {
+                    if (!billsMap[row.bill_id]) {
+                        billsMap[row.bill_id] = {
+                            id: row.bill_id,
+                            bill_month: row.bill_month,
+                            total_amount: row.total_amount,
+                            type: row.invoice_type,
+                            contract_start_date: row.contract_start_date,
+                            payment_type: row.payment_type,
+                            payments: []
+                        };
+                    }
+                    if (row.payment_id) {
+                        billsMap[row.bill_id].payments.push({
+                            id: row.payment_id,
+                            amount: row.payment_amount,
+                            matched_amount: row.matched_amount,
+                            paid_at: row.paid_at,
+                            memo: row.memo
+                        });
+                    }
                 });
-            }
-        });
 
-        res.json(Object.values(billsMap));
+                res.json(Object.values(billsMap));
+            });
+        }
     });
 });
 
@@ -1404,7 +1484,7 @@ app.get('/api/contracts/list', (req, res) => {
                b.name as building, b.id as building_id,
                r.room_number, r.id as room_id
         FROM contracts c
-        JOIN users u ON c.tenant_id = u.id
+        LEFT JOIN users u ON c.tenant_id = u.id
         JOIN rooms r ON c.room_id = r.id
         JOIN buildings b ON r.building_id = b.id
     `;
@@ -1436,7 +1516,7 @@ app.get('/api/contracts/:id', (req, res) => {
         FROM contracts c
         JOIN rooms r ON c.room_id = r.id
         JOIN buildings b ON r.building_id = b.id
-        JOIN users u1 ON c.tenant_id = u1.id
+        LEFT JOIN users u1 ON c.tenant_id = u1.id
         LEFT JOIN landlord_buildings lb ON b.id = lb.building_id
         LEFT JOIN users u2 ON lb.landlord_id = u2.id
         WHERE c.id = ?
@@ -1628,6 +1708,7 @@ l.nickname as landlord_name,
         r.room_number,
         i.id as invoice_id,
         i.billing_month as bill_month,
+        i.due_date,
         i.amount as due_amount,
         i.type as invoice_type,
         i.status as invoice_status,
@@ -2579,13 +2660,26 @@ app.post('/api/contracts/full', (req, res) => {
     ], function (err) {
         if (err) return res.status(500).json({ error: err.message });
 
+        const contractId = this.lastID;
         // Sync user info because room might have changed
         syncUserBuildingInfo(tenant_id);
 
         // Update tenant status to approved
         db.run("UPDATE users SET approved = 1, status = '승인' WHERE id = ?", [tenant_id]);
 
-        res.json({ message: 'Contract created', contractId: this.lastID });
+        // Mark associated advertisements as completed
+        const finalizeAdQuery = `
+            UPDATE advertisements 
+            SET status = 'completed' 
+            WHERE (related_table = 'contract' AND related_id = ?)
+               OR (related_table = 'room' AND related_id = ?)
+        `;
+        db.run(finalizeAdQuery, [contractId, room_id]);
+
+        // Automatically generate missing invoices
+        syncContractInvoices(contractId, () => {
+            res.json({ message: 'Contract created', contractId: contractId });
+        });
     });
 });
 
@@ -2614,7 +2708,19 @@ tenant_id = ?, payment_type = ?, contract_start_date = ?, contract_end_date = ?,
         // Update tenant status to approved
         db.run("UPDATE users SET approved = 1, status = '승인' WHERE id = ?", [tenant_id]);
 
-        res.json({ message: 'Contract updated' });
+        // Mark associated advertisements as completed
+        const finalizeAdQuery = `
+            UPDATE advertisements 
+            SET status = 'completed' 
+            WHERE (related_table = 'contract' AND related_id = ?)
+               OR (related_table = 'room' AND related_id = ?)
+        `;
+        db.run(finalizeAdQuery, [contractId, room_id]);
+
+        // Automatically generate missing invoices
+        syncContractInvoices(contractId, () => {
+            res.json({ message: 'Contract updated' });
+        });
     });
 });
 
@@ -3006,57 +3112,22 @@ app.delete('/api/users/:id', (req, res) => {
 
     if (isHardDelete) {
         db.serialize(() => {
-            db.run('BEGIN TRANSACTION');
+            // Check if user exists
+            db.get("SELECT id FROM users WHERE id = ?", [userId], (err, row) => {
+                if (err) return res.status(500).json({ error: err.message });
+                if (!row) return res.status(404).json({ error: 'User not found' });
 
-            // Recursive deletion of related data
-            // Note: Order matters due to Foreign Key constraints (if enforced) and logic.
-            // We must delete payments and keywords (children of contracts) before contracts.
-            // Also payment_allocation -> invoices -> contracts
-            const deleteOps = [
-                { name: 'applicants_user', sql: `DELETE FROM applicants WHERE user_id = ? ` },
-                { name: 'applicants_adv', sql: `DELETE FROM applicants WHERE advertisement_id IN(SELECT id FROM advertisements WHERE created_by = ?)` },
-                { name: 'payment_allocation_inv', sql: `DELETE FROM payment_allocation WHERE invoice_id IN(SELECT id FROM invoices WHERE contract_id IN(SELECT id FROM contracts WHERE tenant_id = ?))` },
-                { name: 'payment_allocation_pay', sql: `DELETE FROM payment_allocation WHERE payment_id IN(SELECT id FROM payments WHERE contract_id IN(SELECT id FROM contracts WHERE tenant_id = ?))` },
-                { name: 'invoices', sql: `DELETE FROM invoices WHERE contract_id IN(SELECT id FROM contracts WHERE tenant_id = ?)` },
-                { name: 'payments', sql: `DELETE FROM payments WHERE contract_id IN(SELECT id FROM contracts WHERE tenant_id = ?)` },
-                { name: 'contract_keywords', sql: `DELETE FROM contract_keywords WHERE contract_id IN(SELECT id FROM contracts WHERE tenant_id = ?)` },
-                { name: 'contracts', sql: `DELETE FROM contracts WHERE tenant_id = ? ` },
-                { name: 'messages', sql: `DELETE FROM message_box WHERE author_id = ? ` },
-                { name: 'advertisements', sql: `DELETE FROM advertisements WHERE created_by = ? ` },
-                { name: 'items', sql: `DELETE FROM items WHERE owner_id = ? ` },
-                { name: 'room_tenant', sql: `DELETE FROM room_tenant WHERE tenant_id = ? ` },
-                { name: 'message_recipient', sql: `DELETE FROM message_recipient WHERE recipient_id = ? ` },
-                { name: 'landlord_buildings', sql: `DELETE FROM landlord_buildings WHERE landlord_id = ? ` }
-            ];
-
-            let completed = 0;
-            let hasError = false;
-            const checkDone = () => {
-                completed++;
-                if (completed === deleteOps.length) {
-                    if (hasError) {
-                        db.run('ROLLBACK');
-                        return res.status(500).json({ error: 'One or more cascade delete operations failed. Check server logs.' });
-                    }
-                    db.run(`DELETE FROM users WHERE id = ? `, [userId], function (err) {
-                        if (err) {
-                            console.error('Final user delete error:', err);
-                            db.run('ROLLBACK');
-                            return res.status(500).json({ error: err.message });
-                        }
-                        db.run('COMMIT');
-                        res.json({ message: 'User and all related data permanently deleted' });
-                    });
-                }
-            };
-
-            deleteOps.forEach(op => {
-                db.run(op.sql, [userId], (err) => {
+                db.run('BEGIN TRANSACTION');
+                // The database has ON DELETE CASCADE on all relevant tables (contracts, payments, etc.)
+                // so deleting from 'users' will trigger a full cascade.
+                db.run(`DELETE FROM users WHERE id = ? `, [userId], function (err) {
                     if (err) {
-                        console.error(`Cascade delete error in ${op.name}: `, err);
-                        hasError = true;
+                        console.error('User delete error:', err);
+                        db.run('ROLLBACK');
+                        return res.status(500).json({ error: err.message });
                     }
-                    checkDone();
+                    db.run('COMMIT');
+                    res.json({ message: 'User and all related data permanently deleted' });
                 });
             });
         });
@@ -3101,6 +3172,75 @@ app.post('/api/admin/reset-db', (req, res) => {
         res.json({ message: 'Database reset successfully' });
     });
 });
+
+
+/**
+ * Automatically generates missing invoices for a contract.
+ * - Deposit: always on contract_start_date.
+ * - Monthly Rent/Mgmt Fee: according to payment_type (prepaid/postpaid).
+ */
+function syncContractInvoices(contractId, callback) {
+    db.get("SELECT * FROM contracts WHERE id = ?", [contractId], (err, contract) => {
+        if (err || !contract) return callback && callback(err);
+
+        const {
+            contract_start_date, contract_end_date, move_out_date,
+            payment_type, deposit, monthly_rent, maintenance_fee
+        } = contract;
+
+        const today = new Date();
+        const start = new Date(contract_start_date);
+        const end = (move_out_date || contract_end_date) ? new Date(move_out_date || contract_end_date) : new Date(today.getFullYear() + 2, today.getMonth(), today.getDate());
+
+        // We sync up to today (inclusive of the current month's due date)
+        const limit = today > end ? end : today;
+
+        db.serialize(() => {
+            // 1. Ensure Deposit Invoice
+            const billingMonthStart = contract_start_date.substring(0, 7); // YYYY-MM
+            db.get("SELECT id FROM invoices WHERE contract_id = ? AND type = 'deposit'", [contractId], (err, row) => {
+                if (!row && deposit > 0) {
+                    db.run("INSERT INTO invoices (contract_id, type, billing_month, due_date, amount, status) VALUES (?, 'deposit', ?, ?, ?, '정산대기')",
+                        [contractId, billingMonthStart, contract_start_date, deposit]);
+                }
+            });
+
+            // 2. Generate Monthly Invoices
+            let currentDueDate = new Date(start);
+            // If postpaid, the first rent period (Start to Start+1M) is billed at Start+1M.
+            if (payment_type === 'postpaid') {
+                currentDueDate.setMonth(currentDueDate.getMonth() + 1);
+            }
+
+            // Loop and create missing invoices
+            while (currentDueDate <= limit) {
+                // Inside loop, we need to handle the closure for DB calls properly or use serialize effectively
+                const d = new Date(currentDueDate);
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                const billingMonth = `${yyyy}-${mm}`;
+                const dueDateStr = `${yyyy}-${mm}-${dd}`;
+                const totalAmount = (monthly_rent || 0) + (maintenance_fee || 0);
+
+                if (totalAmount > 0) {
+                    // Check if invoice exists for this month and type
+                    // Note: In serialize, these run sequentially
+                    db.get("SELECT id FROM invoices WHERE contract_id = ? AND billing_month = ? AND type = 'monthly_rent'",
+                        [contractId, billingMonth], (err, row) => {
+                            if (!row) {
+                                db.run("INSERT INTO invoices (contract_id, type, billing_month, due_date, amount, status) VALUES (?, 'monthly_rent', ?, ?, ?, '정산대기')",
+                                    [contractId, billingMonth, dueDateStr, totalAmount]);
+                            }
+                        });
+                }
+                currentDueDate.setMonth(currentDueDate.getMonth() + 1);
+            }
+        });
+
+        if (callback) callback(null);
+    });
+}
 
 const server = app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

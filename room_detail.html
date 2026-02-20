@@ -113,6 +113,17 @@
     <div class="detail-container">
         <!-- Edit Mode Section -->
         <div id="edit-section" style="display:none;">
+            <div class="price-grid">
+                <div class="form-group">
+                    <label>건물명</label>
+                    <select id="modal-building" class="form-input" onchange="fetchRooms(this.value)"></select>
+                </div>
+                <div class="form-group">
+                    <label>호수 (방번호)</label>
+                    <select id="modal-room" class="form-input"></select>
+                </div>
+            </div>
+
             <div class="form-group">
                 <label>광고 제목</label>
                 <input type="text" id="modal-title" class="form-input">
@@ -270,6 +281,7 @@
         const adId = new URLSearchParams(window.location.search).get('id');
         let currentAd = null;
         let selectedFiles = [];
+        let cachedBuildings = [];
 
         document.addEventListener('DOMContentLoaded', async () => {
             renderNavbar();
@@ -292,6 +304,7 @@
                 const isAdmin = user && user.role === 'admin';
 
                 if (isAuthor || isAdmin) {
+                    await fetchBuildings();
                     showEditMode();
                 } else {
                     showViewMode();
@@ -303,8 +316,11 @@
             }
         }
 
-        function showEditMode() {
+        async function showEditMode() {
             document.getElementById('edit-section').style.display = 'block';
+
+            document.getElementById('modal-building').value = currentAd.room_building_id || '';
+            await fetchRooms(currentAd.room_building_id, currentAd.related_id);
 
             document.getElementById('modal-title').value = currentAd.title || '';
             document.getElementById('modal-deposit').value = currentAd.deposit || 0;
@@ -336,6 +352,42 @@
             if (!isAuthor) {
                 document.getElementById('applicant-section').style.display = 'block';
             }
+        }
+
+        async function fetchBuildings() {
+            let url = user.role === 'admin' ? '/api/admin/buildings' : `/api/landlord/${user.id}/buildings`;
+            try {
+                const res = await fetch(url);
+                cachedBuildings = await res.json();
+                const select = document.getElementById('modal-building');
+                select.innerHTML = '<option value="">건물 선택</option>';
+                cachedBuildings.forEach(b => {
+                    const opt = document.createElement('option');
+                    opt.value = b.id;
+                    opt.textContent = b.name;
+                    select.appendChild(opt);
+                });
+            } catch (err) { console.error(err); }
+        }
+
+        async function fetchRooms(buildingId, selectedRoomId = null) {
+            const select = document.getElementById('modal-room');
+            if (!buildingId) {
+                select.innerHTML = '<option value="">호수 선택</option>';
+                return;
+            }
+            try {
+                const res = await fetch(`/api/buildings/${buildingId}/rooms`);
+                const rooms = await res.json();
+                select.innerHTML = '<option value="">호수 선택</option>';
+                rooms.forEach(r => {
+                    const opt = document.createElement('option');
+                    opt.value = r.id;
+                    opt.textContent = r.room_number + '호';
+                    if (selectedRoomId && r.id == selectedRoomId) opt.selected = true;
+                    select.appendChild(opt);
+                });
+            } catch (err) { console.error(err); }
         }
 
         function openRequestModal() {
@@ -454,6 +506,7 @@
             formData.append('cleaning_fee', document.getElementById('modal-cleaning').value);
             formData.append('available_date', document.getElementById('modal-date').value);
             formData.append('description', document.getElementById('modal-memo').value);
+            formData.append('related_id', document.getElementById('modal-room').value);
             formData.append('type', 'room');
 
             selectedFiles.forEach(file => {

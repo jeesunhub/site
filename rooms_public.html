@@ -456,7 +456,7 @@
 
         async function fetchRooms() {
             try {
-                const res = await fetch('/api/postings?type=room');
+                const res = await fetch('/api/postings?type=room&status=advertising');
                 const rooms = await res.json();
                 renderRooms(rooms);
             } catch (err) {
