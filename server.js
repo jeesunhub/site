@@ -1322,11 +1322,12 @@ app.post('/api/auth/reset-password', (req, res) => {
 app.get('/api/landlord/:id/tenants', (req, res) => {
     const { role } = req.query;
     let query = `
-        SELECT DISTINCT u.id, u.login_id, u.nickname, u.photo_path, u.color
+        SELECT DISTINCT u.id, u.login_id, u.nickname, u.photo_path, u.color, b.name as building, r.room_number
         FROM users u
         JOIN room_tenant rt ON u.id = rt.tenant_id
         JOIN rooms r ON rt.room_id = r.id
-        JOIN landlord_buildings lb ON r.building_id = lb.building_id
+        JOIN buildings b ON r.building_id = b.id
+        JOIN landlord_buildings lb ON b.id = lb.building_id
         WHERE lb.landlord_id = ?
     `;
     if (role !== 'admin') {
@@ -1379,6 +1380,8 @@ i.id as bill_id,
     i.type as invoice_type,
     c.contract_start_date,
     c.payment_type,
+    b.name as building_name,
+    r.room_number,
     p.id as payment_id,
     p.amount as payment_amount,
     p.paid_at,
@@ -1386,6 +1389,8 @@ i.id as bill_id,
     pa.amount as matched_amount
         FROM invoices i
         JOIN contracts c ON i.contract_id = c.id
+        LEFT JOIN rooms r ON c.room_id = r.id
+        LEFT JOIN buildings b ON r.building_id = b.id
         LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
         LEFT JOIN payments p ON pa.payment_id = p.id
         WHERE c.tenant_id = ?
@@ -1406,6 +1411,8 @@ i.id as bill_id,
                             type: row.invoice_type,
                             contract_start_date: row.contract_start_date,
                             payment_type: row.payment_type,
+                            building_name: row.building_name,
+                            room_number: row.room_number,
                             payments: []
                         };
                     }

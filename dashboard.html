@@ -289,31 +289,42 @@
         .item-summary {
             display: flex;
             align-items: center;
-            padding: 0.6rem 1rem;
-            gap: 1rem;
-            min-height: 4rem;
+            padding: 0.8rem 1rem;
+            gap: 1.2rem;
+            min-height: 5rem;
         }
 
-        .item-type {
-            font-size: 0.75rem;
-            padding: 0.25rem 0.6rem;
-            border-radius: 0.4rem;
-            background: rgba(99, 102, 241, 0.2);
+        /* Room Badge Style from tenants.html */
+        .room-badge {
+            width: 4.5rem;
+            padding: 0.4rem 0.2rem;
+            background: rgba(99, 102, 241, 0.15);
             color: #a5b4fc;
-            white-space: nowrap;
-            flex-shrink: 0;
-            min-width: 4rem;
+            border-radius: 0.4rem;
             text-align: center;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1px;
+            min-height: 3.2rem;
         }
 
-        .item-type.unpaid {
-            background: rgba(239, 68, 68, 0.2);
-            color: #fca5a5;
+        .room-badge .b-name {
+            font-size: 0.65rem;
+            opacity: 0.7;
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-weight: 400;
         }
 
-        .item-type.paid {
-            background: rgba(34, 197, 94, 0.2);
-            color: #a7f3d0;
+        .room-badge .r-num {
+            font-size: 0.9rem;
+            font-weight: 700;
+            width: 100%;
         }
 
         .item-content-group {
@@ -324,37 +335,60 @@
             min-width: 0;
         }
 
+        .item-title-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 2px;
+        }
+
         .item-title {
-            font-size: 0.95rem;
-            font-weight: 500;
+            font-size: 1rem;
+            font-weight: 600;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             color: #f1f5f9;
         }
 
+        .item-status {
+            font-size: 0.65rem;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .item-status.unpaid {
+            background: rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+        }
+
+        .item-status.paid {
+            background: rgba(34, 197, 94, 0.2);
+            color: #a7f3d0;
+        }
+
         .item-meta {
             font-size: 0.75rem;
-            color: rgba(255, 255, 255, 0.4);
-            margin-top: 2px;
+            color: rgba(255, 255, 255, 0.5);
             display: flex;
-            gap: 0.8rem;
+            flex-direction: column;
         }
 
         .item-amount {
             font-weight: 600;
-            font-size: 0.9rem;
+            font-size: 1rem;
             flex-shrink: 0;
             text-align: right;
             margin-left: auto;
+            color: #f1f5f9;
         }
 
-        .item-amount.unpaid {
-            color: #f87171;
-        }
-
-        .item-amount.paid {
-            color: #4ade80;
+        .amount-detail {
+            font-size: 0.7rem;
+            opacity: 0.5;
+            font-weight: 400;
         }
 
         .empty-state {
@@ -531,6 +565,9 @@
                         bill.tenant_nickname = t.nickname || t.login_id;
                         bill.tenant_color = t.color;
                         bill.tenant_id = t.id || t.user_id;
+                        // Fallback to tenant data if bill doesn't have it
+                        bill.building_name = bill.building_name || t.building || '-';
+                        bill.room_number = bill.room_number || t.room_number || '-';
                         allBills.push(bill);
                     });
                 } catch (e) {
@@ -802,23 +839,37 @@
 
             list.innerHTML = unpaidBills.map(b => {
                 const paid = b.payments.reduce((sum, p) => sum + p.matched_amount, 0);
-                const remaining = b.total_amount - paid;
                 const name = user.role === 'landlord' ? b.tenant_nickname : user.nickname;
+                const building = b.building_name || b.building || '-';
+                const room = b.room_number || b.room || '-';
+
+                const paidMan = Math.floor(paid / 10000);
+                const totalMan = Math.floor(b.total_amount / 10000);
+
+                const metaText = b.type === 'deposit' ? '보증금' : `${b.bill_month}분`;
+
                 return `
-                    <div class="item-row">
+                    <li class="item-row">
                         <div class="item-summary">
-                            <span class="item-type unpaid">미납</span>
+                            <div class="room-badge">
+                                <div class="b-name">${building}</div>
+                                <div class="r-num">${room}</div>
+                            </div>
                             <div class="item-content-group">
-                                <div class="item-title">${name}</div>
+                                <div class="item-title-row">
+                                    <span class="item-title">${name}</span>
+                                    <span class="item-status unpaid">미납</span>
+                                </div>
                                 <div class="item-meta">
-                                    <span>${b.bill_month}월분</span>
+                                    <span>${metaText}</span>
                                 </div>
                             </div>
-                            <div class="item-amount unpaid">
-                                ${formatCurrency(remaining)}원
+                            <div class="item-amount">
+                                ${paidMan} / ${totalMan}
+                                <div class="amount-detail">단위: 만원</div>
                             </div>
                         </div>
-                    </div>
+                    </li>
                 `;
             }).join('');
         }
@@ -827,7 +878,7 @@
             const list = document.getElementById('recent-transactions');
             if (!list) return;
 
-            const recentBills = billingData.slice(0, 10); // Show more since it's a list now
+            const recentBills = billingData.slice(0, 10);
             if (recentBills.length === 0) {
                 list.innerHTML = `<div class="empty-state">내역이 없습니다.</div>`;
                 return;
@@ -836,24 +887,38 @@
             list.innerHTML = recentBills.map(b => {
                 const paid = b.payments.reduce((sum, p) => sum + p.matched_amount, 0);
                 const status = paid >= b.total_amount ? 'paid' : 'unpaid';
-                const statusLabel = status === 'paid' ? '완납' : '부분';
+                const statusLabel = status === 'paid' ? '완납' : '미납';
                 const name = user.role === 'landlord' ? b.tenant_nickname : user.nickname;
+                const building = b.building_name || b.building || '-';
+                const room = b.room_number || b.room || '-';
+
+                const paidMan = Math.floor(paid / 10000);
+                const totalMan = Math.floor(b.total_amount / 10000);
+
+                const metaText = b.type === 'deposit' ? '보증금' : `${b.bill_month}분`;
+
                 return `
-                    <div class="item-row">
+                    <li class="item-row">
                         <div class="item-summary">
-                            <span class="item-type ${status}">${statusLabel}</span>
+                            <div class="room-badge">
+                                <div class="b-name">${building}</div>
+                                <div class="r-num">${room}</div>
+                            </div>
                             <div class="item-content-group">
-                                <div class="item-title">${name}</div>
+                                <div class="item-title-row">
+                                    <span class="item-title">${name}</span>
+                                    <span class="item-status ${status}">${statusLabel}</span>
+                                </div>
                                 <div class="item-meta">
-                                    <span>${b.bill_month}월분</span>
-                                    <span>총 ${formatCurrency(b.total_amount)}원</span>
+                                    <span>${metaText}</span>
                                 </div>
                             </div>
-                            <div class="item-amount ${status}">
-                                ${formatCurrency(paid)}원
+                            <div class="item-amount">
+                                ${paidMan} / ${totalMan}
+                                <div class="amount-detail">단위: 만원</div>
                             </div>
                         </div>
-                    </div>
+                    </li>
                 `;
             }).join('');
         }
