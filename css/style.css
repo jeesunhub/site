@@ -139,13 +139,11 @@ body.test-mode #layout-footer {
 
 .nav-container {
     width: 100%;
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 0 0.5rem;
-    /* Reduced padding for edge elements */
+    max-width: none;
+    margin: 0;
+    padding: 0 1.5rem;
     display: flex;
     justify-content: space-between;
-    /* Space between left and right */
     align-items: center;
 }
 

@@ -32,6 +32,8 @@ function convertSqlToPg(sql) {
 
     // Replace GROUP_CONCAT with STRING_AGG
     newSql = newSql.replace(/GROUP_CONCAT\(DISTINCT DATE\(p\.paid_at\)\)/gi, "STRING_AGG(DISTINCT TO_CHAR(p.paid_at, 'YYYY-MM-DD'), ',')");
+    // Handle GROUP_CONCAT(col, 'delimiter') -> STRING_AGG(col, 'delimiter')
+    newSql = newSql.replace(/GROUP_CONCAT\(([^,]+),\s*(['"].*?['"])\)/gi, "STRING_AGG($1, $2)");
     newSql = newSql.replace(/GROUP_CONCAT\((.*?)\)/gi, "STRING_AGG($1, ',')");
 
     return newSql;

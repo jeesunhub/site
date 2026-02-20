@@ -50,10 +50,10 @@ app.get('/api/health', (req, res) => {
 app.get('/api/admin/buildings', (req, res) => {
     console.log('[API] GET /api/admin/buildings');
     const query = `
-        SELECT b.*, GROUP_CONCAT(ba.address, '|||') as addresses
+        SELECT b.id, b.name, b.memo, b.created_at, GROUP_CONCAT(ba.address, '|||') as addresses
         FROM buildings b
         LEFT JOIN building_addresses ba ON b.id = ba.building_id
-        GROUP BY b.id
+        GROUP BY b.id, b.name, b.memo, b.created_at
         ORDER BY b.name
     `;
     db.all(query, [], (err, rows) => {
@@ -201,7 +201,7 @@ app.get('/api/landlord/:id/vacant-postings', (req, res) => {
             COALESCE(c.monthly_rent, r2.rent, 0) as monthly_rent,
             COALESCE(c.maintenance_fee, r2.management_fee, 0) as maintenance_fee,
             COALESCE(c.cleaning_fee, 0) as cleaning_fee,
-            COALESCE(c.contract_start_date, r2.available_date) as contract_start_date,
+            COALESCE(CAST(c.contract_start_date AS TEXT), r2.available_date) as contract_start_date,
             COALESCE(r.id, r2.id) as room_id,
             COALESCE(b.id, b2.id) as building_id,
             c.id as contract_id,
@@ -696,7 +696,7 @@ END as building_name,
     COALESCE(r.rent, c.monthly_rent) as rent,
     COALESCE(r.management_fee, c.maintenance_fee) as management_fee,
     c.cleaning_fee as cleaning_fee,
-    COALESCE(r.available_date, c.contract_start_date) as available_date,
+    COALESCE(r.available_date, CAST(c.contract_start_date AS TEXT)) as available_date,
     COALESCE(r.building_id, rc.building_id) as room_building_id,
     i.title as item_name,
     i.description as item_description,
@@ -2119,12 +2119,12 @@ app.delete('/api/invoices/:id', (req, res) => {
 app.get('/api/landlord/:id/buildings', (req, res) => {
     const landlordId = req.params.id;
     const query = `
-        SELECT b.*, GROUP_CONCAT(ba.address, '|||') as addresses
+        SELECT b.id, b.name, b.memo, b.created_at, GROUP_CONCAT(ba.address, '|||') as addresses
         FROM buildings b
         JOIN landlord_buildings lb ON b.id = lb.building_id
         LEFT JOIN building_addresses ba ON b.id = ba.building_id
         WHERE lb.landlord_id = ?
-    GROUP BY b.id
+        GROUP BY b.id, b.name, b.memo, b.created_at
         `;
     db.all(query, [landlordId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -2147,7 +2147,7 @@ app.get('/api/landlord/:id/buildings', (req, res) => {
 app.get('/api/tenant/:id/buildings', (req, res) => {
     const tenantId = req.params.id;
     const query = `
-        SELECT b.*, GROUP_CONCAT(ba.address, '|||') as addresses
+        SELECT b.id, b.name, b.memo, b.created_at, GROUP_CONCAT(ba.address, '|||') as addresses
         FROM buildings b
         LEFT JOIN building_addresses ba ON b.id = ba.building_id
         WHERE b.id IN(
@@ -2156,7 +2156,7 @@ app.get('/api/tenant/:id/buildings', (req, res) => {
             SELECT r.building_id FROM rooms r JOIN contracts c ON r.id = c.room_id 
             WHERE c.tenant_id = ? AND(c.contract_end_date IS NULL OR c.contract_end_date >= date('now'))
         )
-        GROUP BY b.id
+        GROUP BY b.id, b.name, b.memo, b.created_at
     `;
     db.all(query, [tenantId, tenantId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
