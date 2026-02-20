@@ -1464,13 +1464,13 @@ app.post('/api/match-payment', (req, res) => {
 app.get('/api/contract/:id/unmatched-payments', (req, res) => {
     const contractId = req.params.id;
     const query = `
-        SELECT p.*,
+        SELECT p.id, p.contract_id, p.amount, p.paid_at, p.type, p.raw_text, p.memo,
     COALESCE(SUM(pa.amount), 0) as total_matched,
     (p.amount - COALESCE(SUM(pa.amount), 0)) as remaining_amount
         FROM payments p
         LEFT JOIN payment_allocation pa ON p.id = pa.payment_id
         WHERE p.contract_id = ?
-    GROUP BY p.id
+    GROUP BY p.id, p.contract_id, p.amount, p.paid_at, p.type, p.raw_text, p.memo
         HAVING remaining_amount > 0
         ORDER BY p.paid_at ASC
     `;
@@ -1582,7 +1582,7 @@ app.get('/api/tenant/:id/calendar-data', (req, res) => {
         LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
         LEFT JOIN payments p ON pa.payment_id = p.id
         WHERE c.tenant_id = ?
-        GROUP BY c.id, i.id
+        GROUP BY c.id, c.tenant_id, c.contract_start_date, c.contract_end_date, c.payment_type, b.name, r.room_number, u.color, i.id, i.billing_month, i.due_date, i.amount, i.type
         ORDER BY i.billing_month ASC
     `;
 
@@ -1622,7 +1622,7 @@ LEFT JOIN invoices i ON c.id = i.contract_id
 LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
 LEFT JOIN payments p ON pa.payment_id = p.id
 WHERE lb.landlord_id = ?
-GROUP BY c.id, u.id, i.id
+GROUP BY c.id, c.tenant_id, c.contract_start_date, c.contract_end_date, c.payment_type, b.name, r.room_number, u.nickname, u.color, i.id, i.billing_month, i.due_date, i.amount, i.type
 ORDER BY i.billing_month ASC
 `;
 
@@ -1659,7 +1659,7 @@ JOIN users u ON c.tenant_id = u.id
 LEFT JOIN invoices i ON c.id = i.contract_id
 LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
 LEFT JOIN payments p ON pa.payment_id = p.id
-GROUP BY c.id, u.id, i.id
+GROUP BY c.id, c.tenant_id, c.contract_start_date, c.contract_end_date, c.payment_type, b.name, r.room_number, u.nickname, u.color, i.id, i.billing_month, i.due_date, i.amount, i.type
 ORDER BY i.billing_month ASC
 `;
 
@@ -1761,7 +1761,7 @@ l.nickname as landlord_name,
 
     query += ` 
         GROUP BY
-l.id, t.id, b.id, c.id, i.id
+        l.id, l.nickname, t.id, t.nickname, b.id, b.name, c.id, c.contract_start_date, c.payment_type, c.deposit, c.monthly_rent, c.maintenance_fee, r.room_number, i.id, i.billing_month, i.due_date, i.amount, i.type, i.status
         ORDER BY i.billing_month DESC`;
 
     db.all(query, params, (err, rows) => {
