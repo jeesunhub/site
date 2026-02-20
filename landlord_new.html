@@ -14,11 +14,12 @@
         }
 
         .form-container {
-            max-width: 900px;
-            margin: 0 auto;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1.5rem;
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
+            gap: 1rem;
         }
 
         .form-section {
@@ -38,8 +39,8 @@
 
         .form-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 0.12rem;
+            grid-template-columns: 1fr;
+            gap: 0.8rem;
         }
 
         .form-group {
@@ -93,6 +94,33 @@
         option {
             background-color: #1e293b;
             color: #f8fafc;
+        }
+
+        #status.status-applied {
+            border-color: #fbbf24;
+            color: #fbbf24;
+        }
+
+        #status.status-approved {
+            border-color: #34d399;
+            color: #34d399;
+        }
+
+        #status.status-terminated {
+            border-color: #f87171;
+            color: #f87171;
+        }
+
+        #status option[value="신청"] {
+            color: #fbbf24;
+        }
+
+        #status option[value="승인"] {
+            color: #34d399;
+        }
+
+        #status option[value="종료"] {
+            color: #f87171;
         }
 
         .action-bar {
@@ -170,7 +198,7 @@
                     </div>
                     <div class="form-group">
                         <label>상태</label>
-                        <select id="status">
+                        <select id="status" onchange="updateStatusColor(this.value)">
                             <option value="신청">신청</option>
                             <option value="승인">승인</option>
                             <option value="종료">종료</option>
@@ -216,6 +244,7 @@
                 document.getElementById('birth_date').value = user.birth_date;
                 document.getElementById('phone_number').value = formatPhone(user.phone_number);
                 document.getElementById('status').value = user.status;
+                updateStatusColor(user.status);
 
             } catch (err) {
                 console.error(err);
@@ -261,6 +290,14 @@
             } catch (err) {
                 alert('오류가 발생했습니다.');
             }
+        }
+
+        function updateStatusColor(status) {
+            const select = document.getElementById('status');
+            select.classList.remove('status-applied', 'status-approved', 'status-terminated');
+            if (status === '신청') select.classList.add('status-applied');
+            if (status === '승인') select.classList.add('status-approved');
+            if (status === '종료') select.classList.add('status-terminated');
         }
 
         document.getElementById('phone_number').addEventListener('input', (e) => {

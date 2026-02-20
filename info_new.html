@@ -34,12 +34,10 @@
 
         .container {
             width: 100%;
-            margin: 0;
-            padding: 1.5rem;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1.5rem;
             box-sizing: border-box;
-            max-width: 600px;
-            margin-left: auto;
-            margin-right: auto;
         }
 
         .form-group {
@@ -163,14 +161,7 @@
             </select>
         </div>
 
-        <div class="form-group">
-            <label>건물</label>
-            <div id="building-wrapper">
-                <select id="info-building" class="form-input">
-                    <option value="">불러오는 중...</option>
-                </select>
-            </div>
-        </div>
+
 
         <div class="form-group">
             <label>정보 제목</label>
@@ -246,21 +237,7 @@
                 const res = await fetch(url);
                 const buildings = await res.json();
 
-                const bWrapper = document.getElementById('building-wrapper');
                 const tSelect = document.getElementById('info-target');
-
-                if (user.role === 'tenant') {
-                    const b = buildings[0] || { id: '', name: '소속 없음' };
-                    bWrapper.innerHTML = `
-                        <input type="text" class="form-input" value="${b.name}" disabled>
-                        <input type="hidden" id="info-building" value="${b.id}">
-                    `;
-                } else {
-                    let html = `<select id="info-building" class="form-input"><option value="">전체 선택</option>`;
-                    buildings.forEach(b => html += `<option value="${b.id}">${b.name}</option>`);
-                    html += `</select>`;
-                    bWrapper.innerHTML = html;
-                }
 
                 tSelect.innerHTML = '<option value="">전체공개 (모두에게 보임)</option>';
                 buildings.forEach(b => tSelect.innerHTML += `<option value="${b.id}">${b.name} 내 전용</option>`);
@@ -304,7 +281,7 @@
 
         async function submitInfo() {
             const category = document.getElementById('info-category').value;
-            const bId = document.getElementById('info-building').value;
+            const bId = ''; // Building selection removed
             const title = document.getElementById('info-title').value.trim();
             const desc = document.getElementById('info-desc').value.trim();
             const tId = document.getElementById('info-target').value;
