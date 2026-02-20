@@ -25,7 +25,7 @@ let query = `
         COALESCE(r.rent, c.monthly_rent) as rent,
         COALESCE(r.management_fee, c.maintenance_fee) as management_fee,
         c.cleaning_fee as cleaning_fee,
-        COALESCE(r.available_date, c.contract_start_date) as available_date,
+        COALESCE(r.available_date, CAST(c.contract_start_date AS TEXT)) as available_date,
         COALESCE(r.building_id, rc.building_id) as building_id,
         (SELECT image_url FROM images WHERE related_id = a.id AND related_table = 'advertisements' LIMIT 1) as main_image
     FROM advertisements a
