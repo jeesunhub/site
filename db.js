@@ -19,6 +19,9 @@ function convertSqlToPg(sql) {
     newSql = newSql.replace(/datetime\('now'\)/gi, 'CURRENT_TIMESTAMP');
     newSql = newSql.replace(/date\('now'\)/gi, 'CURRENT_DATE');
 
+    // Replace SQLite REPLACE(..., ' ', '') with Postgres REGEXP_REPLACE(..., '\s+', '', 'g')
+    newSql = newSql.replace(/REPLACE\((.*?),\s*' ',\s*''\)/gi, "REGEXP_REPLACE($1, '\\s+', '', 'g')");
+
     // Handle shift logic from server.js: date(bill_month || '-01', '${direction} month')
     if (newSql.includes("date(bill_month || '-01'")) {
         newSql = newSql.replace(
@@ -26,6 +29,10 @@ function convertSqlToPg(sql) {
             "(bill_month || '-01')::date + interval '$1 month'"
         );
     }
+
+    // Replace GROUP_CONCAT with STRING_AGG
+    newSql = newSql.replace(/GROUP_CONCAT\(DISTINCT DATE\(p\.paid_at\)\)/gi, "STRING_AGG(DISTINCT TO_CHAR(p.paid_at, 'YYYY-MM-DD'), ',')");
+    newSql = newSql.replace(/GROUP_CONCAT\((.*?)\)/gi, "STRING_AGG($1, ',')");
 
     return newSql;
 }
@@ -52,16 +59,22 @@ if (databaseUrl) {
             if (typeof params === 'function') { cb = params; params = []; }
             sql = convertSqlToPg(sql);
             pool.query(sql, params, (err, res) => {
-                if (err) return cb ? cb(err) : console.error(err);
-                cb && cb(null, res.rows[0]);
+                if (err) {
+                    console.error('PG SQL Error (get):', err.message, '| SQL:', sql);
+                    return cb ? cb(err) : null;
+                }
+                cb && cb(null, res.rows[0] || null);
             });
         },
         all: (sql, params, cb) => {
             if (typeof params === 'function') { cb = params; params = []; }
             sql = convertSqlToPg(sql);
             pool.query(sql, params, (err, res) => {
-                if (err) return cb ? cb(err) : console.error(err);
-                cb && cb(null, res.rows);
+                if (err) {
+                    console.error('PG SQL Error (all):', err.message, '| SQL:', sql);
+                    return cb ? cb(err) : null;
+                }
+                cb && cb(null, res.rows || []);
             });
         },
         run: function (sql, params, cb) {
@@ -137,6 +150,7 @@ if (databaseUrl) {
 
 // Helper to rename table if it exists
 function renameTableIfExists(oldName, newName, callback) {
+    if (databaseUrl) return callback && callback();
     db.get(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, [oldName], (err, row) => {
         if (!err && row) {
             console.log(`Renaming table '${oldName}' to '${newName}'...`);
@@ -152,6 +166,7 @@ function renameTableIfExists(oldName, newName, callback) {
 }
 
 function ensureColumns() {
+    if (databaseUrl) return; // Managed by schema_pg.sql in Postgres
     // Now ensure columns in the new/existing tables
     const columns = [
         { table: 'users', name: 'noti', type: 'INTEGER DEFAULT 0' },
