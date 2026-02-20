@@ -296,14 +296,14 @@ app.get('/api/postings', (req, res) => {
 
         if (!v_id) {
             // Guest sees only public ads (NULL or Empty String)
-            whereClauses.push(`(a.target_id IS NULL OR a.target_id = '')`);
+            whereClauses.push(`a.target_id IS NULL`);
         } else if (v_role === 'tenant') {
             // Tenant sees public + their building
-            whereClauses.push(`(a.target_id IS NULL OR a.target_id = '' OR a.target_id = (SELECT r.building_id FROM rooms r JOIN room_tenant rt ON r.id = rt.room_id WHERE rt.tenant_id = ? LIMIT 1))`);
+            whereClauses.push(`(a.target_id IS NULL OR a.target_id = (SELECT r.building_id FROM rooms r JOIN room_tenant rt ON r.id = rt.room_id WHERE rt.tenant_id = ? LIMIT 1))`);
             params.push(v_id);
         } else if (v_role === 'landlord') {
             // Landlord sees public + their managed buildings
-            whereClauses.push(`(a.target_id IS NULL OR a.target_id = '' OR a.target_id IN(SELECT building_id FROM landlord_buildings WHERE landlord_id = ?))`);
+            whereClauses.push(`(a.target_id IS NULL OR a.target_id IN(SELECT building_id FROM landlord_buildings WHERE landlord_id = ?))`);
             params.push(v_id);
         }
     }

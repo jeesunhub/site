@@ -52,7 +52,7 @@ if (category) {
 }
 
 // Mimic visibility logic for tenant
-whereClauses.push("(a.target_id IS NULL OR a.target_id = '' OR a.target_id = (SELECT r.building_id FROM rooms r JOIN room_tenant rt ON r.id = rt.room_id WHERE rt.tenant_id = ? LIMIT 1))");
+whereClauses.push("(a.target_id IS NULL OR a.target_id = (SELECT r.building_id FROM rooms r JOIN room_tenant rt ON r.id = rt.room_id WHERE rt.tenant_id = ? LIMIT 1))");
 params.push(v_id);
 
 if (whereClauses.length > 0) {
