@@ -519,7 +519,7 @@
                         const date = r.latest_event_date || '-';
                         return `
                             <div class="room-item" onclick="location.href='buildings_room.html?id=${r.id}'" style="cursor:pointer;">
-                                <div class="room-left"><span class="room-badge">${r.room_number}호</span></div>
+                                <div class="room-left"><span class="room-badge">${r.room_number === '0' ? '전체' : r.room_number + '호'}</span></div>
                                 <div class="room-center">
                                     <div class="room-top" title="${memo}">${memo}</div>
                                     <div class="room-bottom">${date}</div>

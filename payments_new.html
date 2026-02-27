@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Payment Allocation - Sugar</title>
+    <title>New Payment - Sugar</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     <style>
@@ -32,8 +32,8 @@
         .tenant-info {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
+            align-items: flex-start;
+            margin-bottom: 1.5rem;
         }
 
         .tenant-name {
@@ -46,8 +46,46 @@
             font-size: 0.9rem;
         }
 
+        .input-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-top: 1rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .input-group label {
+            font-size: 0.8rem;
+            opacity: 0.6;
+        }
+
+        .input-group input {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 0.8rem;
+            border-radius: 0.6rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .input-group input:focus {
+            border-color: var(--primary);
+            outline: none;
+        }
+
         .deposit-summary {
             font-size: 1.2rem;
+            margin-top: 1.5rem;
             padding-top: 1rem;
             border-top: 1px solid rgba(255, 255, 255, 0.05);
             display: flex;
@@ -201,11 +239,19 @@
                     <div class="tenant-name" id="tenant-name">세입자명</div>
                     <div class="room-info" id="room-info">건물명 000호</div>
                 </div>
-                <div style="text-align: right;">
-                    <div style="font-size:0.8rem; opacity:0.6; margin-bottom:0.2rem;">총 입금액</div>
-                    <div style="font-size:1.2rem; font-weight:600; color:#4ade80;" id="total-deposit">0원</div>
+            </div>
+
+            <div class="input-section">
+                <div class="input-group">
+                    <label>입금 금액 (원)</label>
+                    <input type="text" id="total-amount-input" placeholder="0" oninput="handleAmountInput(this)">
+                </div>
+                <div class="input-group">
+                    <label>입금 날짜</label>
+                    <input type="date" id="payment-date-input">
                 </div>
             </div>
+
             <div class="deposit-summary" id="deposit-balance">
                 <!-- Balance summary -->
             </div>
@@ -228,7 +274,16 @@
     <script src="/js/common.js"></script>
     <script>
         const user = JSON.parse(localStorage.getItem('user'));
-        const pendingData = JSON.parse(sessionStorage.getItem('pending_payment'));
+        const urlParams = new URLSearchParams(window.location.search);
+
+        let targetTenant = {
+            tenant_id: parseInt(urlParams.get('tenant_id')),
+            contract_id: parseInt(urlParams.get('contract_id')),
+            nickname: urlParams.get('nickname'),
+            building: urlParams.get('building'),
+            room_number: urlParams.get('room_number')
+        };
+
         let contractDetail = null;
         let ledgerData = [];
         let allocations = [];
@@ -236,19 +291,32 @@
 
         document.addEventListener('DOMContentLoaded', async () => {
             if (!user) { window.location.href = '/index.html'; return; }
-            if (!pendingData) { window.location.href = 'payments.html'; return; }
+            if (!targetTenant.tenant_id) { window.location.href = 'payments.html'; return; }
 
             renderNavbar();
-            totalReceived = pendingData.amount;
 
-            document.getElementById('tenant-name').textContent = pendingData.nickname;
-            document.getElementById('room-info').textContent = `${pendingData.building} ${pendingData.room_number}호`;
-            document.getElementById('total-deposit').textContent = totalReceived.toLocaleString() + '원';
+            // Set default date to today
+            document.getElementById('payment-date-input').value = new Date().toISOString().split('T')[0];
+
+            document.getElementById('tenant-name').textContent = targetTenant.nickname;
+            document.getElementById('room-info').textContent = `${targetTenant.building} ${targetTenant.room_number}호`;
 
             await loadData();
+            // Initially 0 allocation
             calculateAllocation();
             renderAllocations();
         });
+
+        function handleAmountInput(el) {
+            const raw = el.value.replace(/,/g, '');
+            const num = parseInt(raw, 10) || 0;
+            totalReceived = num;
+            el.value = num.toLocaleString();
+
+            // Re-calculate and render
+            calculateAllocation();
+            renderAllocations();
+        }
 
         async function loadData() {
             try {
@@ -256,11 +324,11 @@
                 const contractRes = await fetch(`/api/landlord/${user.id}/contracts/active`);
                 if (contractRes.ok) {
                     const active = await contractRes.json();
-                    contractDetail = active.find(c => c.id === pendingData.contract_id);
+                    contractDetail = active.find(c => c.id === targetTenant.contract_id);
                 }
 
                 // 2. Fetch ledger (unpaid invoices)
-                const ledgerRes = await fetch(`/api/payments/ledger?role=landlord&user_id=${user.id}&tenant_id=${pendingData.tenant_id}`);
+                const ledgerRes = await fetch(`/api/payments/ledger?role=landlord&user_id=${user.id}&tenant_id=${targetTenant.tenant_id}`);
                 if (ledgerRes.ok) {
                     ledgerData = await ledgerRes.json();
                 }
@@ -278,7 +346,6 @@
             const depositInvoices = ledgerData.filter(i => i.invoice_type === 'deposit' || (i.invoice_type & 1));
             const paidFromLedger = depositInvoices.reduce((sum, i) => sum + (i.paid_amount || 0), 0);
 
-            // Also subtract what's currently being allocated in the UI
             const currentAllocatedDeposit = allocations
                 .filter(a => a.type === 'deposit' || (a.type & 1))
                 .reduce((sum, a) => sum + a.amount, 0);
@@ -304,14 +371,13 @@
         function calculateDueDate(type, billMonth) {
             if (!contractDetail || !contractDetail.contract_start_date) return null;
 
-            const startDate = contractDetail.contract_start_date; // YYYY-MM-DD
+            const startDate = contractDetail.contract_start_date;
             const startDay = startDate.slice(8, 10);
 
             if (type === 'deposit' || (type & 1)) {
                 return startDate;
             }
 
-            // For Rent/Maintenance Fee
             const isPostpaid = contractDetail.payment_type === 'postpaid';
             let [y, m] = billMonth.split('-').map(Number);
 
@@ -320,8 +386,6 @@
                 if (m > 12) { m = 1; y++; }
             }
 
-            // Result date: YYYY-MM-DD where DD comes from start date
-            // Note: If start day is 31 and next month has 30, we should handle it, but simple slice/join for now.
             const targetMonth = `${y}-${String(m).padStart(2, '0')}`;
             return `${targetMonth}-${startDay}`;
         }
@@ -330,13 +394,17 @@
             let remaining = totalReceived;
             allocations = [];
 
-            // 1. Prioritize Security Deposit (보증금)
+            if (remaining <= 0) {
+                updateRemainingDisplay();
+                return;
+            }
+
+            // 1. Prioritize Security Deposit
             if (contractDetail) {
                 const depositInvoices = ledgerData.filter(i => i.invoice_type === 'deposit' || (i.invoice_type & 1));
                 const paidDepositTotal = depositInvoices.reduce((sum, i) => sum + (i.paid_amount || 0), 0);
                 const totalDepositOwed = contractDetail.deposit || 0;
 
-                // Check if there is an active (unpaid) deposit invoice in the ledger
                 const existingUnpaidDeposit = ledgerData.find(i => (i.invoice_type === 'deposit' || (i.invoice_type & 1)) && (i.due_amount - i.paid_amount) > 0);
 
                 if (paidDepositTotal < totalDepositOwed && !existingUnpaidDeposit) {
@@ -392,7 +460,7 @@
             if (remaining > 0) {
                 let nextMonth = getNextBillMonth();
                 allocations.push({
-                    invoice_id: null, // New
+                    invoice_id: null,
                     type: 'monthly_rent',
                     bill_month: nextMonth,
                     due_date: calculateDueDate('monthly_rent', nextMonth),
@@ -403,7 +471,6 @@
                 remaining = 0;
             }
 
-            // Final Sort: Deposit first, then by bill month
             allocations.sort((a, b) => {
                 const aIsDeposit = a.type === 'deposit' || (a.type & 1);
                 const bIsDeposit = b.type === 'deposit' || (b.type & 1);
@@ -500,6 +567,11 @@
         }
 
         async function saveAllocation() {
+            const paymentDate = document.getElementById('payment-date-input').value;
+            if (!paymentDate) return alert('입금 날짜를 선택해주세요.');
+
+            if (totalReceived <= 0) return alert('입금 금액을 입력해주세요.');
+
             const currentTotal = allocations.reduce((sum, a) => sum + a.amount, 0);
             if (currentTotal !== totalReceived) {
                 if (!confirm(`총 입금액(${totalReceived.toLocaleString()}원)과 배정 합계(${currentTotal.toLocaleString()}원)가 일치하지 않습니다. 그래도 저장하시겠습니까?`)) {
@@ -508,10 +580,10 @@
             }
 
             const payload = {
-                contract_id: pendingData.contract_id,
+                contract_id: targetTenant.contract_id,
                 amount: totalReceived,
-                paid_at: pendingData.date,
-                memo: pendingData.originalText,
+                paid_at: paymentDate,
+                memo: `Manual Entry: ${targetTenant.nickname}`,
                 allocations: allocations.map(a => ({
                     invoice_id: a.invoice_id,
                     type: a.type,
@@ -529,8 +601,7 @@
 
                 if (res.ok) {
                     alert('성공적으로 저장되었습니다.');
-                    sessionStorage.removeItem('pending_payment');
-                    window.location.href = 'payments.html';
+                    window.location.href = `payments_monthly.html?tenant_id=${targetTenant.tenant_id}`;
                 } else {
                     const errTxt = await res.text();
                     alert('저장 실패: ' + errTxt);

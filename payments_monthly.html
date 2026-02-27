@@ -167,11 +167,8 @@
             justify-content: flex-start;
             font-size: 0.65rem;
             color: rgba(255, 255, 255, 0.5);
-            gap: 0px;
+            gap: 1px;
             padding-top: 2px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
 
         .mgmt-right {
@@ -487,18 +484,56 @@
                     else leftBoxTitle = '기타';
                 }
 
-                let subLine = '';
-                if (paid > 0) {
-                    const pDate = row.last_paid_date ? new Date(row.last_paid_date).toLocaleString('ko-KR', {
-                        month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
-                    }) : '-';
-                    subLine = `납부: ${formatUnit(paid)}만원 (${pDate})`;
-                } else {
-                    subLine = '납부 내역 없음';
+                const unpaid = due - paid;
+                let paymentLines = '';
+                if (row.payment_details) {
+                    const details = row.payment_details.split(';')
+                        .map(d => {
+                            const [amt, date] = d.split('|');
+                            return { amount: parseInt(amt, 10), date: date };
+                        })
+                        .filter(d => d.amount > 0)
+                        .sort((a, b) => b.date.localeCompare(a.date));
+
+                    paymentLines = details.map(d => {
+                        let pDate = '-';
+                        if (d.date) {
+                            const dateObj = new Date(d.date);
+                            if (!isNaN(dateObj.getTime())) {
+                                pDate = dateObj.toLocaleString('ko-KR', {
+                                    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+                                });
+                            }
+                        }
+                        return `<div>납부: ${formatUnit(d.amount)}만원 (${pDate})</div>`;
+                    }).join('');
                 }
 
+                if (!paymentLines && paid > 0) {
+                    // Fallback if payment_details is missing for some reason
+                    let pDate = '-';
+                    if (row.last_paid_date) {
+                        const dateObj = new Date(row.last_paid_date);
+                        if (!isNaN(dateObj.getTime())) {
+                            pDate = dateObj.toLocaleString('ko-KR', {
+                                month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+                            });
+                        }
+                    }
+                    paymentLines = `<div>납부: ${formatUnit(paid)}만원 (${pDate})</div>`;
+                }
+
+                if (!paymentLines) {
+                    paymentLines = '<div>납부 내역 없음</div>';
+                }
+
+                const subLine = `
+                    ${paymentLines}
+                    <div style="${unpaid > 0 ? 'color: #f87171;' : ''}">미납: ${formatUnit(unpaid)}만원</div>
+                `;
+
                 item.innerHTML = `
-                    <div class="mgmt-summary" style="cursor: default; padding: 0.8rem 1rem;">
+                    <div class="mgmt-summary" onclick="goToNewPayment(${row.tenant_id}, ${row.contract_id}, '${row.tenant_name}', '${row.building_name}', '${row.room_number}')" style="padding: 0.8rem 1rem;">
                          <div class="mgmt-left">
                              <div class="r-num">${leftBoxTitle}</div>
                         </div>
@@ -525,6 +560,17 @@
                 `;
                 list.appendChild(item);
             });
+        }
+
+        function goToNewPayment(tenantId, contractId, nickname, building, room) {
+            if (user.role === 'tenant') return;
+            const params = new URLSearchParams();
+            params.append('tenant_id', tenantId);
+            params.append('contract_id', contractId);
+            params.append('nickname', nickname);
+            params.append('building', building);
+            params.append('room_number', room);
+            window.location.href = `payments_new.html?${params.toString()}`;
         }
 
         async function deleteRecord(invoiceId) {

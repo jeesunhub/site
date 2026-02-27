@@ -345,11 +345,13 @@
 
                 select.innerHTML = '<option value="">호수를 선택하세요</option>';
                 rooms.forEach(r => {
-                    const opt = document.createElement('option');
-                    opt.value = r.id;
-                    opt.textContent = r.room_number + '호';
-                    if (selectedRoomId && r.id == selectedRoomId) opt.selected = true;
-                    select.appendChild(opt);
+                    if (r.room_number !== '0') {
+                        const opt = document.createElement('option');
+                        opt.value = r.id;
+                        opt.textContent = r.room_number + '호';
+                        if (selectedRoomId && r.id == selectedRoomId) opt.selected = true;
+                        select.appendChild(opt);
+                    }
                 });
             } catch (err) {
                 console.error(err);

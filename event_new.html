@@ -264,7 +264,7 @@
                 rooms.forEach(r => {
                     const opt = document.createElement('option');
                     opt.value = r.id;
-                    opt.textContent = `${r.room_number}호`;
+                    opt.textContent = r.room_number === '0' ? '건물전체' : `${r.room_number}호`;
                     roomSelect.appendChild(opt);
                 });
             } catch (err) {

@@ -404,16 +404,6 @@
                         body: JSON.stringify({ name, address1: addresses[0] || '', address2: addresses[1] || '', memo: '' })
                     });
 
-                    // Update Addresses
-                    await fetch(`/api/buildings/${targetId}/addresses`, { method: 'DELETE' });
-                    for (const addr of addresses) {
-                        await fetch(`/api/buildings/${targetId}/addresses`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ address: addr })
-                        });
-                    }
-
                     // Process Rooms
                     for (const rd of roomDataList) {
                         if (rd.id) {
@@ -445,13 +435,6 @@
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ building_id: targetId, room_number: rd.room_number, building: rd.building, floor: rd.floor, unit: rd.unit, memo: '' })
-                        });
-                    }
-                    for (const addr of addresses) {
-                        await fetch(`/api/buildings/${targetId}/addresses`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ address: addr })
                         });
                     }
                 }

@@ -554,10 +554,12 @@
                 const rooms = await res.json();
                 roomSelect.innerHTML = '<option value="">호수를 선택해주세요</option>';
                 rooms.forEach(r => {
-                    const opt = document.createElement('option');
-                    opt.value = r.id; // Store room_id
-                    opt.textContent = r.room_number + '호';
-                    roomSelect.appendChild(opt);
+                    if (r.room_number !== '0') {
+                        const opt = document.createElement('option');
+                        opt.value = r.id; // Store room_id
+                        opt.textContent = r.room_number + '호';
+                        roomSelect.appendChild(opt);
+                    }
                 });
                 roomSelect.disabled = false;
             } catch (err) {

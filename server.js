@@ -63,7 +63,7 @@ app.get('/api/admin/buildings', (req, res) => {
         }
         rows.forEach(row => {
             if (row.addresses) {
-                const parts = row.addresses.split('|||');
+                const parts = [...new Set(row.addresses.split('|||').map(s => s.trim()).filter(s => s !== ''))];
                 row.address1 = parts[0] || '';
                 row.address2 = parts[1] || '';
             } else {
@@ -971,8 +971,9 @@ function syncUserBuildingInfo(userId) {
         let description = user.description;
 
         if (user.role === 'tenant' && user.building_name) {
-            title = `${user.building_name} ${user.room_number || ''} `.trim();
-            description = `아이디: ${user.login_id} \n이름: ${user.nickname} \n생년월일: ${user.birth_date || '-'} \n전화번호: ${formatPhone(user.phone_number) || '-'} \n건물명: ${user.building_name} \n호수: ${user.room_number || '-'} `;
+            const displayRoom = user.room_number === '0' ? '전체' : (user.room_number ? user.room_number + '호' : '');
+            title = `${user.building_name} ${displayRoom}`.trim();
+            description = `아이디: ${user.login_id} \n이름: ${user.nickname} \n생년월일: ${user.birth_date || '-'} \n전화번호: ${formatPhone(user.phone_number) || '-'} \n건물명: ${user.building_name} \n호수: ${displayRoom || '-'} `;
 
             db.run("UPDATE users SET title = ?, description = ? WHERE id = ?", [title, description, userId]);
         }
@@ -1015,120 +1016,134 @@ function formatPhone(val) {
 }
 
 // 1a. Signup API
-app.post('/api/signup', (req, res) => {
-    let { login_id, password, nickname, birth_date, phone_number, role, building_id, room_number } = req.body;
-    const cleanPhone = phone_number ? phone_number.replace(/[^0-9]/g, '') : '';
+app.post('/api/signup', async (req, res) => {
+    try {
+        let { login_id, password, nickname, birth_date, phone_number, role, building_id, room_number } = req.body;
+        const cleanPhone = phone_number ? phone_number.replace(/[^0-9]/g, '') : '';
 
-    // Check duplicate login_id
-    db.get('SELECT id FROM users WHERE login_id = ?', [login_id], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (row) return res.status(400).json({ error: 'ID_EXISTS' });
+        if (!login_id || !password || !nickname) {
+            return res.status(400).json({ error: '필수 정보가 누락되었습니다.' });
+        }
 
-        // Check duplicate user (phone + DOB)
-        db.get('SELECT id, status FROM users WHERE phone_number = ? AND birth_date = ?', [cleanPhone, birth_date], (err, row) => {
-            if (err) return res.status(500).json({ error: err.message });
-            if (row && row.status === '승인') return res.status(400).json({ error: 'USER_EXISTS' });
+        // Check duplicate login_id
+        db.get('SELECT id FROM users WHERE login_id = ?', [login_id], (err, row) => {
+            if (err) {
+                console.error('[Signup] login_id check error:', err);
+                return res.status(500).json({ error: err.message });
+            }
+            if (row) return res.status(400).json({ error: 'ID_EXISTS' });
 
-            // Pick a color that hasn't been used yet
-            getUnusedColor((randomColor) => {
-                const signupAction = (row && row.id)
-                    ? [`UPDATE users SET login_id = ?, password = ?, nickname = ?, role = ?, status = '신청', color = ? WHERE id = ?`, [login_id, password, nickname, role, randomColor, row.id]]
-                    : [`INSERT INTO users(login_id, password, nickname, birth_date, phone_number, role, approved, status, color) VALUES(?, ?, ?, ?, ?, ?, 0, '신청', ?)`, [login_id, password, nickname, birth_date, cleanPhone, role, randomColor]];
+            // Check duplicate user (phone + DOB)
+            db.get('SELECT id, status, login_id FROM users WHERE phone_number = ? AND birth_date = ?', [cleanPhone, birth_date], (err, row) => {
+                if (err) {
+                    console.error('[Signup] phone/DOB check error:', err);
+                    return res.status(500).json({ error: err.message });
+                }
 
-                db.run(signupAction[0], signupAction[1], async function (err) {
-                    if (err) return res.status(500).json({ error: err.message });
-                    const newUserId = (row && row.id) ? row.id : this.lastID;
+                // Pick a color that hasn't been used yet
+                getUnusedColor((randomColor) => {
+                    const isExistingUser = !!(row && row.id);
+                    const signupAction = isExistingUser
+                        ? [`UPDATE users SET login_id = ?, password = ?, nickname = ?, role = ?, status = '승인', approved = 1, color = ? WHERE id = ?`, [login_id, password, nickname, role, randomColor, row.id]]
+                        : [`INSERT INTO users(login_id, password, nickname, birth_date, phone_number, role, approved, status, color) VALUES(?, ?, ?, ?, ?, ?, 0, '신청', ?)`, [login_id, password, nickname, birth_date, cleanPhone, role, randomColor]];
 
-                    // Save relationship to room if provided
-                    if (role === 'tenant' && room_number) {
-                        db.run(`INSERT INTO room_tenant(room_id, tenant_id, start_date) VALUES(?, ?, date('now'))`,
-                            [room_number, newUserId], // room_number here actually contains room_id from frontend
-                            (err) => {
-                                if (err) console.error('Error saving room relationship:', err.message);
-                            }
-                        );
-                    }
+                    db.run(signupAction[0], signupAction[1], async function (err) {
+                        if (err) {
+                            console.error('[Signup] Insert/Update error:', err);
+                            if (err.message && err.message.includes('UNIQUE')) return res.status(400).json({ error: 'ID_EXISTS' });
+                            return res.status(500).json({ error: err.message });
+                        }
+                        const newUserId = isExistingUser ? row.id : this.lastID;
+                        const isAutoApproved = isExistingUser;
 
-                    // Create Notification for Admin
-                    let buildingName = '';
-                    const getBuildingName = () => {
-                        return new Promise((resolve) => {
-                            if (role === 'tenant' && building_id) {
-                                db.get('SELECT name FROM buildings WHERE id = ?', [building_id], (err, b) => {
-                                    if (b) buildingName = b.name;
-                                    resolve();
-                                });
-                            } else {
-                                resolve();
-                            }
-                        });
-                    };
-
-                    await getBuildingName();
-
-                    let displayRoom = '-';
-                    if (role === 'tenant' && room_number) {
-                        // Find room number from id
-                        const roomRow = await new Promise(resolve => db.get("SELECT room_number FROM rooms WHERE id = ?", [room_number], (e, r) => resolve(r)));
-                        if (roomRow) displayRoom = roomRow.room_number;
-                    }
-
-                    const title = (role === 'tenant' && buildingName) ? `${buildingName} ${displayRoom} `.trim() : (role === 'landlord' ? '임대인 가입 신청' : '세입자 가입 신청');
-                    let content = `아이디: ${login_id} \n이름: ${nickname} \n생년월일: ${birth_date} \n전화번호: ${formatPhone(cleanPhone)} `;
-
-                    if (role === 'tenant' && building_id) {
-                        content += `\n건물명: ${buildingName} \n호수: ${displayRoom} `;
-                    }
-
-                    // Update user with title and description
-                    db.run(`UPDATE users SET title = ?, description = ? WHERE id = ? `, [title, content, newUserId], (err) => {
-                        if (err) console.error('Error updating user title/description:', err.message);
-
-                        // Admin Notification
-                        db.run(`INSERT INTO message_box(author_id, target, category, related_id, related_table, title) VALUES(?, ?, ?, ?, ?, ?)`,
-                            [newUserId, 'direct', '가입신청', newUserId, 'users', title],
-                            function (err) {
-                                if (err) {
-                                    console.error('Error creating admin signup message:', err.message);
-                                    return res.status(500).json({ error: err.message });
+                        // Save relationship to room if provided (Tenants only)
+                        if (role === 'tenant' && room_number && room_number !== '') {
+                            db.run(`INSERT INTO room_tenant(room_id, tenant_id, start_date) VALUES(?, ?, date('now'))`,
+                                [room_number, newUserId],
+                                (err) => {
+                                    if (err) console.error('[Signup] Room relationship error:', err.message);
                                 }
-                                const boxId = this.lastID;
+                            );
+                        }
 
-                                // Insert initial message
-                                db.run(`INSERT INTO messages(message_box_id, sender_id, content) VALUES(?, ?, ?)`, [boxId, newUserId, content]);
+                        // Determine Title and Description for Notification
+                        let buildingName = '';
+                        if (role === 'tenant' && building_id && building_id !== '') {
+                            const bRow = await new Promise(resolve => db.get('SELECT name FROM buildings WHERE id = ?', [building_id], (e, r) => resolve(r)));
+                            if (bRow) buildingName = bRow.name;
+                        }
 
-                                // Notify Admins
-                                db.all("SELECT id FROM users WHERE role = 'admin'", (err, admins) => {
-                                    if (admins) {
-                                        admins.forEach(admin => {
-                                            db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, admin.id]);
-                                        });
+                        let displayRoom = '-';
+                        if (role === 'tenant' && room_number && room_number !== '') {
+                            const rRow = await new Promise(resolve => db.get("SELECT room_number FROM rooms WHERE id = ?", [room_number], (e, r) => resolve(r)));
+                            if (rRow) displayRoom = rRow.room_number;
+                        }
+
+                        let title = (role === 'tenant' && buildingName)
+                            ? `${buildingName} ${displayRoom === '0' ? '전체' : (displayRoom === '-' ? '' : displayRoom + '호')}`.trim()
+                            : (role === 'landlord' ? '임대인 가입 신청' : '세입자 가입 신청');
+
+                        if (isAutoApproved) title += ' (자동 승인)';
+
+                        let content = `아이디: ${login_id} \n이름: ${nickname} \n생년월일: ${birth_date || '-'} \n전화번호: ${formatPhone(cleanPhone)} `;
+                        if (role === 'tenant' && (buildingName || displayRoom !== '-')) {
+                            content += `\n건물명: ${buildingName || '-'} \n호수: ${displayRoom === '0' ? '건물전체' : (displayRoom === '-' ? '-' : displayRoom + '호')} `;
+                        }
+
+                        // Update user with title and description for management view
+                        db.run(`UPDATE users SET title = ?, description = ? WHERE id = ? `, [title, content, newUserId], (err) => {
+                            if (err) console.error('[Signup] Title/desc update error:', err.message);
+
+                            // Create Administrative Message (Message Box)
+                            const category = '가입신청';
+                            db.run(`INSERT INTO message_box(author_id, target, category, related_id, related_table, title) VALUES(?, ?, ?, ?, ?, ?)`,
+                                [newUserId, 'direct', category, newUserId, 'users', title],
+                                function (err) {
+                                    if (err) {
+                                        console.error('[Signup] message_box insert error:', err);
+                                        // Still return success if user was created, but log error
+                                        return res.status(500).json({ error: '가입 알림 생성 실패: ' + err.message });
                                     }
-                                });
+                                    const boxId = this.lastID;
 
-                                // If tenant, also notify the landlord
-                                if (role === 'tenant' && building_id) {
-                                    db.all(`SELECT landlord_id FROM landlord_buildings WHERE building_id = ? `, [building_id], (err, landlords) => {
-                                        if (landlords) {
-                                            landlords.forEach(l => {
-                                                db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, l.landlord_id]);
+                                    // Insert Initial Message in the thread
+                                    db.run(`INSERT INTO messages(message_box_id, sender_id, content) VALUES(?, ?, ?)`, [boxId, newUserId, content]);
+
+                                    // Notify Admins
+                                    db.all("SELECT id FROM users WHERE role = 'admin'", (err, admins) => {
+                                        if (admins) {
+                                            admins.forEach(admin => {
+                                                db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, admin.id]);
                                             });
                                         }
                                     });
+
+                                    // If tenant, also notify the landlord
+                                    if (role === 'tenant' && building_id && building_id !== '') {
+                                        db.all(`SELECT landlord_id FROM landlord_buildings WHERE building_id = ? `, [building_id], (err, landlords) => {
+                                            if (landlords) {
+                                                landlords.forEach(l => {
+                                                    db.run("INSERT INTO message_recipient (message_id, recipient_id) VALUES (?, ?)", [boxId, l.landlord_id]);
+                                                });
+                                            }
+                                        });
+                                    }
+
+                                    // Background task to sync building info
+                                    syncUserBuildingInfo(newUserId);
+
+                                    res.json({ message: 'Signup application submitted', userId: newUserId });
                                 }
-
-                                // Sync Profile Info
-                                syncUserBuildingInfo(newUserId);
-
-                                res.json({ message: 'Signup application submitted', userId: newUserId });
-                            }
-                        );
+                            );
+                        });
                     });
-                }
-                );
+                });
             });
         });
-    });
+    } catch (globalErr) {
+        console.error('[Signup] Global crash:', globalErr);
+        res.status(500).json({ error: '가입 처리 중 치명적 오류가 발생했습니다.' });
+    }
 });
 
 // 1b. Room Application API (Applicant)
@@ -1720,7 +1735,8 @@ l.nickname as landlord_name,
         i.type as invoice_type,
         i.status as invoice_status,
         COALESCE(SUM(pa.amount), 0) as paid_amount,
-        MAX(p.paid_at) as last_paid_date
+        MAX(p.paid_at) as last_paid_date,
+        GROUP_CONCAT(pa.amount || '|' || COALESCE(p.paid_at, ''), ';') as payment_details
         FROM contracts c
         JOIN rooms r ON c.room_id = r.id
         JOIN buildings b ON r.building_id = b.id
@@ -1819,6 +1835,7 @@ app.get('/api/landlord/:id/contracts/active', (req, res) => {
         JOIN landlord_buildings lb ON b.id = lb.building_id
         JOIN users u ON c.tenant_id = u.id
         WHERE lb.landlord_id = ?
+        GROUP BY c.id
     `;
     if (role !== 'admin') {
         query += ` AND u.status != '종료'`;
@@ -1869,6 +1886,8 @@ app.get('/api/tenants/active-list', (req, res) => {
         params.push(user_id, user_id);
     }
 
+    query += ` GROUP BY u.id, c.id `;
+
     db.all(query, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
 
@@ -1891,45 +1910,40 @@ app.post('/api/contracts/:id/keyword', (req, res) => {
         return res.status(400).json({ error: 'Keywords must be an array' });
     }
 
-    // Filter out invalid keywords
-    const validKeywords = keywords
+    // Filter and de-duplicate
+    const validKeywords = [...new Set(keywords
         .map(k => String(k).trim())
-        .filter(k => k && k.toLowerCase() !== 'null' && k !== 'undefined');
+        .filter(k => k && k.toLowerCase() !== 'null' && k !== 'undefined'))];
 
-    db.serialize(() => {
-        db.run("BEGIN TRANSACTION");
+    // Simple Delete then Insert approach
+    db.run("DELETE FROM contract_keywords WHERE contract_id = ?", [contractId], (err) => {
+        if (err) {
+            console.error(`[ERROR] Delete failed for contract ${contractId}: `, err.message);
+            return res.status(500).json({ error: err.message });
+        }
 
-        db.run("DELETE FROM contract_keywords WHERE contract_id = ?", [contractId], (err) => {
-            if (err) {
-                console.error(`[ERROR] Delete failed for contract ${contractId}: `, err.message);
-                db.run("ROLLBACK");
-                return res.status(500).json({ error: err.message });
-            }
+        if (validKeywords.length === 0) {
+            return res.json({ message: 'Keywords cleared', keywords: [] });
+        }
 
-            if (validKeywords.length === 0) {
-                db.run("COMMIT");
-                return res.json({ message: 'Keywords cleared', keywords: [] });
-            }
+        let completed = 0;
+        let hasError = false;
 
-            let completed = 0;
-            let hasError = false;
-
-            validKeywords.forEach(k => {
+        validKeywords.forEach(k => {
+            db.run("INSERT INTO contract_keywords (contract_id, keyword) VALUES (?, ?)", [contractId, k], (err) => {
                 if (hasError) return;
-                db.run("INSERT INTO contract_keywords (contract_id, keyword) VALUES (?, ?)", [contractId, k], (err) => {
-                    if (err) {
-                        hasError = true;
-                        db.run("ROLLBACK");
-                        console.error(`[ERROR] Insert failed for contract ${contractId}, keyword "${k}": `, err.message);
-                        return res.status(500).json({ error: err.message });
+                if (err) {
+                    hasError = true;
+                    console.error(`[ERROR] Insert failed for contract ${contractId}, keyword "${k}": `, err.message);
+                    // Don't return early to avoid multiple responses
+                }
+                completed++;
+                if (completed === validKeywords.length) {
+                    if (hasError) {
+                        return res.status(500).json({ error: 'Some keywords failed to save' });
                     }
-                    completed++;
-                    if (completed === validKeywords.length && !hasError) {
-                        db.run("COMMIT");
-                        console.log(`[SUCCESS] Updated ${completed} keywords for contract ${contractId}`);
-                        res.json({ message: 'Keywords updated', count: completed, keywords: validKeywords });
-                    }
-                });
+                    res.json({ message: 'Keywords updated', count: completed, keywords: validKeywords });
+                }
             });
         });
     });
@@ -2033,21 +2047,38 @@ i.amount as due,
                     };
 
                     if (!alloc.invoice_id) {
-                        // Create NEW invoice
-                        // For new invoices, we use due_total if provided (from frontend virtual allocation)
-                        const dueAmount = alloc.due_total || alloc.amount;
-                        const initialStatus = (alloc.amount >= dueAmount) ? '완납' : '부분납부';
-
-                        db.run(
-                            `INSERT INTO invoices(contract_id, type, billing_month, amount, status, due_date) VALUES(?, ?, ?, ?, ?, ?)`,
-                            [contract_id, alloc.type, alloc.bill_month, dueAmount, initialStatus, alloc.due_date],
-                            function (err) {
+                        // Check if an invoice with same type/month already exists for this contract
+                        // To avoid racing in the loop, we check before insert
+                        db.get(
+                            "SELECT id FROM invoices WHERE contract_id = ? AND type = ? AND billing_month = ?",
+                            [contract_id, alloc.type, alloc.bill_month],
+                            (err, existing) => {
                                 if (err) {
                                     hasError = true;
                                     db.run("ROLLBACK");
                                     return res.status(500).json({ error: err.message });
                                 }
-                                proceedWithAllocation(this.lastID);
+
+                                if (existing) {
+                                    proceedWithAllocation(existing.id);
+                                } else {
+                                    // Create NEW invoice
+                                    const dueAmount = alloc.due_total || alloc.amount;
+                                    const initialStatus = (alloc.amount >= dueAmount) ? '완납' : '부분납부';
+
+                                    db.run(
+                                        `INSERT INTO invoices(contract_id, type, billing_month, amount, status, due_date) VALUES(?, ?, ?, ?, ?, ?)`,
+                                        [contract_id, alloc.type, alloc.bill_month, dueAmount, initialStatus, alloc.due_date],
+                                        function (err) {
+                                            if (err) {
+                                                hasError = true;
+                                                db.run("ROLLBACK");
+                                                return res.status(500).json({ error: err.message });
+                                            }
+                                            proceedWithAllocation(this.lastID);
+                                        }
+                                    );
+                                }
                             }
                         );
                     } else {
@@ -2130,7 +2161,7 @@ app.get('/api/landlord/:id/buildings', (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         rows.forEach(row => {
             if (row.addresses) {
-                const parts = row.addresses.split('|||');
+                const parts = [...new Set(row.addresses.split('|||').map(s => s.trim()).filter(s => s !== ''))];
                 row.address1 = parts[0] || '';
                 row.address2 = parts[1] || '';
             } else {
@@ -2162,7 +2193,7 @@ app.get('/api/tenant/:id/buildings', (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         rows.forEach(row => {
             if (row.addresses) {
-                const parts = row.addresses.split('|||');
+                const parts = [...new Set(row.addresses.split('|||').map(s => s.trim()).filter(s => s !== ''))];
                 row.address1 = parts[0] || '';
                 row.address2 = parts[1] || '';
             } else {
@@ -2216,8 +2247,13 @@ app.post('/api/buildings', (req, res) => {
                                 db.run('ROLLBACK');
                                 return res.status(500).json({ error: err.message });
                             }
-                            db.run('COMMIT');
-                            res.json({ message: 'Building created', buildingId });
+
+                            // Insert default room '0' (Entire Building)
+                            db.run(`INSERT INTO rooms(building_id, room_number, memo) VALUES(?, '0', '건물 전체')`, [buildingId], (err) => {
+                                if (err) console.error('[API] Error creating default room 0:', err.message);
+                                db.run('COMMIT');
+                                res.json({ message: 'Building and default room created', buildingId });
+                            });
                         }
                     );
                 })
@@ -2674,6 +2710,15 @@ app.post('/api/contracts/full', (req, res) => {
         // Update tenant status to approved
         db.run("UPDATE users SET approved = 1, status = '승인' WHERE id = ?", [tenant_id]);
 
+        // Save keywords if provided
+        const keywords = req.body.keywords || (req.body.keyword ? [req.body.keyword] : []);
+        if (keywords.length > 0) {
+            const valid = [...new Set(keywords.map(k => String(k).trim()).filter(k => k))];
+            valid.forEach(k => {
+                db.run("INSERT INTO contract_keywords (contract_id, keyword) VALUES (?, ?)", [contractId, k]);
+            });
+        }
+
         // Mark associated advertisements as completed
         const finalizeAdQuery = `
             UPDATE advertisements 
@@ -2726,7 +2771,56 @@ tenant_id = ?, payment_type = ?, contract_start_date = ?, contract_end_date = ?,
 
         // Automatically generate missing invoices
         syncContractInvoices(contractId, () => {
-            res.json({ message: 'Contract updated' });
+            // Sync Keywords
+            const keywords = req.body.keywords || (req.body.keyword ? [req.body.keyword] : []);
+            if (keywords.length > 0) {
+                const valid = [...new Set(keywords.map(k => String(k).trim()).filter(k => k))];
+                db.run("DELETE FROM contract_keywords WHERE contract_id = ?", [contractId], () => {
+                    valid.forEach(k => {
+                        db.run("INSERT INTO contract_keywords (contract_id, keyword) VALUES (?, ?)", [contractId, k]);
+                    });
+                    res.json({ message: 'Contract updated' });
+                });
+            } else {
+                res.json({ message: 'Contract updated' });
+            }
+        });
+    });
+});
+
+// 24c. Reset Contract Data (Delete Invoices/Payments and Regenerate)
+app.post('/api/contracts/:id/reset', (req, res) => {
+    const contractId = req.params.id;
+
+    db.serialize(() => {
+        db.run("BEGIN TRANSACTION");
+
+        // 1. Delete payments (cascades to payment_allocation)
+        db.run("DELETE FROM payments WHERE contract_id = ?", [contractId], function (err) {
+            if (err) {
+                db.run("ROLLBACK");
+                return res.status(500).json({ error: err.message });
+            }
+
+            // 2. Delete invoices (cascades to payment_allocation)
+            db.run("DELETE FROM invoices WHERE contract_id = ?", [contractId], function (err) {
+                if (err) {
+                    db.run("ROLLBACK");
+                    return res.status(500).json({ error: err.message });
+                }
+
+                // 3. Commit the deletion first to ensure clean state for regeneration
+                // or just keep it in one transaction? 
+                // Let's finish regeneration then commit.
+                syncContractInvoices(contractId, (syncErr) => {
+                    if (syncErr) {
+                        db.run("ROLLBACK");
+                        return res.status(500).json({ error: syncErr.message });
+                    }
+                    db.run("COMMIT");
+                    res.json({ message: 'Contract data reset and regenerated successfully' });
+                });
+            });
         });
     });
 });

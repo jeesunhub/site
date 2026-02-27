@@ -15,8 +15,8 @@
 
         .form-container {
             max-width: 800px;
-            margin: 2rem auto;
-            padding: 0 1.5rem;
+            margin: 0 auto;
+            padding: 0;
             display: flex;
             flex-direction: column;
             gap: 1.5rem;
@@ -91,7 +91,7 @@
 
         .action-btns {
             display: flex;
-            gap: 1rem;
+            gap: 0.4rem;
             margin-top: 2rem;
             padding-bottom: 2rem;
         }
@@ -161,6 +161,18 @@
             background: rgba(239, 68, 68, 0.3);
             border-color: rgba(239, 68, 68, 0.5);
             box-shadow: 0 8px 20px rgba(239, 68, 68, 0.2);
+        }
+
+        .btn-reset {
+            background: rgba(148, 163, 184, 0.2);
+            color: #cbd5e1;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
+
+        .btn-reset:hover {
+            background: rgba(148, 163, 184, 0.3);
+            border-color: rgba(148, 163, 184, 0.5);
+            box-shadow: 0 8px 20px rgba(148, 163, 184, 0.2);
         }
 
         .btn:active {
@@ -448,6 +460,8 @@
                     style="display:none;">연장</button>
                 <button class="btn btn-terminate" id="terminate-btn" onclick="openTerminateModal()"
                     style="display:none;">퇴실</button>
+                <button class="btn btn-reset" id="reset-btn" onclick="resetContractData()"
+                    style="display:none;">리셋</button>
             </div>
         </div>
     </div>
@@ -592,6 +606,7 @@
             document.getElementById('edit-btn').style.display = 'block';
             document.getElementById('extend-btn').style.display = 'block';
             document.getElementById('terminate-btn').style.display = 'block';
+            document.getElementById('reset-btn').style.display = 'block';
         }
 
         function enableEditMode() {
@@ -785,14 +800,16 @@
             const rooms = await res.json();
             rSelect.innerHTML = '<option value="">호수 선택</option>';
             rooms.forEach(r => {
-                rSelect.innerHTML += `<option value="${r.id}">${r.room_number}호</option>`;
+                if (r.room_number !== '0') {
+                    rSelect.innerHTML += `<option value="${r.id}">${r.room_number}호</option>`;
+                }
             });
 
             let matchedRoom = null;
             if (selectedRoomIdentifier) {
                 matchedRoom = rooms.find(r => r.id == selectedRoomIdentifier || r.room_number == selectedRoomIdentifier);
-            } else if (rooms.length > 0) {
-                matchedRoom = rooms[0];
+            } else {
+                matchedRoom = rooms.find(r => r.room_number !== '0');
             }
 
             if (matchedRoom) {
@@ -869,6 +886,25 @@
             else {
                 window.history.back();
             }
+        }
+
+        function resetContractData() {
+            if (!activeContractId) return;
+            if (!confirm('정말로 이 계약의 모든 납부 내역(Invoice)과 입금 내역(Payment)을 초기화하시겠습니까?\n이 작업은 되돌릴 수 없으며, 계약 생성 시점의 기본 항목들로 재생성됩니다.')) return;
+
+            fetch(`/api/contracts/${activeContractId}/reset`, {
+                method: 'POST'
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+                    alert('데이터가 초기화되었습니다.');
+                    location.reload();
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert('초기화 중 오류가 발생했습니다: ' + err.message);
+                });
         }
 
         async function submitContract() {

@@ -574,16 +574,35 @@
                     console.error(`Failed to fetch billing for tenant ${t.id || t.user_id}:`, e);
                 }
             }
-            billingData = allBills.sort((a, b) => new Date(b.bill_month) - new Date(a.bill_month));
+            billingData = sortBillingData(allBills);
 
             renderDashboardUI();
+        }
+
+        function sortBillingData(data) {
+            return data.sort((a, b) => {
+                // 1. Check for deposit - always at the absolute bottom
+                if (a.type === 'deposit' && b.type !== 'deposit') return 1;
+                if (a.type !== 'deposit' && b.type === 'deposit') return -1;
+
+                // 2. Both are same category (both deposit or both non-deposit)
+                // Sort by bill_month DESC (latest first at the top)
+                const monthA = a.bill_month || '0000-00';
+                const monthB = b.bill_month || '0000-00';
+                if (monthA !== monthB) {
+                    return monthB.localeCompare(monthA);
+                }
+
+                // 3. Fallback to ID or matched_amount if months are identical (optional)
+                return (b.id || 0) - (a.id || 0);
+            });
         }
 
         async function loadTenantView(tenantId) {
             currentView = 'tenant';
 
             const billRes = await fetch(`/api/tenant/${tenantId}/billing`);
-            billingData = await billRes.json();
+            billingData = sortBillingData(await billRes.json());
 
             const calRes = await fetch(`/api/tenant/${tenantId}/calendar-data`);
             calendarData = await calRes.json();
@@ -1007,6 +1026,17 @@
                     list.appendChild(div);
                 });
             }
+
+            // Add "Check-out Today" button at the bottom of the list
+            const checkoutBtn = document.createElement('button');
+            checkoutBtn.className = 'btn-glass';
+            checkoutBtn.style.width = '100%';
+            checkoutBtn.style.marginTop = '1rem';
+            checkoutBtn.textContent = '오늘 퇴실 관리';
+            checkoutBtn.onclick = () => {
+                window.location.href = `/checkout_management.html?date=${dateStr}`;
+            };
+            list.appendChild(checkoutBtn);
 
             modal.style.display = 'flex';
         }

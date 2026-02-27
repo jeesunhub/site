@@ -366,8 +366,8 @@
                 }
                 const room = await res.json();
 
-                document.title = `${room.room_number}호 상세 정보 - Sugar`;
-                document.getElementById('page-title').textContent = `${room.room_number}호 상세 정보`;
+                document.title = `${room.room_number === '0' ? '건물전체' : room.room_number + '호'} 상세 정보 - Sugar`;
+                document.getElementById('page-title').textContent = `${room.room_number === '0' ? '건물전체' : room.room_number + '호'} 상세 정보`;
             } catch (err) {
                 console.error(err);
             }

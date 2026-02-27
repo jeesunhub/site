@@ -8,32 +8,40 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     <style>
-        .container {
-            padding: 0;
-            margin: 0;
-            width: 100%;
-        }
-
-        .matching-container {
-            max-width: none;
-            margin: 0;
-            width: 100%;
-            padding: 1rem;
-        }
-
-        .header-section {
-            padding: 1rem 0;
-            margin-bottom: 0;
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 1.5rem;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 70px;
+            z-index: 100;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            height: 3.5rem;
+            margin-bottom: 0.5rem;
         }
 
-        .header-section h1 {
-            font-size: 1.5rem;
+        .header h1 {
+            font-size: 1.25rem;
             margin: 0;
             background: linear-gradient(to right, #6366f1, #a855f7);
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1.5rem;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .matching-container {
+            width: 100%;
         }
 
         .parsed-card {
@@ -96,35 +104,36 @@
         .user-select-list {
             display: flex;
             flex-direction: column;
-            gap: 1px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 1rem;
-            overflow: hidden;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            gap: 0.8rem;
+            background: transparent;
+            border: none;
         }
 
         .user-select-item {
-            padding: 1.2rem;
-            background: #1e293b;
+            padding: 1rem 1.2rem;
+            background: rgba(255, 255, 255, 0.03);
             cursor: pointer;
             transition: all 0.2s;
-            border-left: 4px solid transparent;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0.8rem;
         }
 
         .user-select-item:hover {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.2);
         }
 
         .user-select-item.selected {
-            background: rgba(99, 102, 241, 0.1);
-            border-left-color: #6366f1;
+            background: rgba(99, 102, 241, 0.2);
+            border-color: #6366f1;
+            box-shadow: 0 0 0 1px #6366f1;
         }
 
         .footer-actions {
             position: sticky;
             bottom: 1rem;
-            margin-top: 2rem;
-            padding: 1rem;
+            margin-top: 32px;
+            padding: 0;
             background: rgba(15, 23, 42, 0.8);
             backdrop-filter: blur(10px);
             border-radius: 1rem;
@@ -136,7 +145,8 @@
         .btn-confirm {
             width: 100%;
             max-width: 400px;
-            padding: 1rem;
+            height: 48px;
+            padding: 0;
             font-size: 1.1rem;
             font-weight: 600;
             background: var(--primary);
@@ -150,31 +160,54 @@
 </head>
 
 <body class="has-back-button">
-    <!-- Navbar injected by JS -->
+    <header id="layout-header"></header>
 
-    <div class="matching-container">
-        <div class="header-section">
+    <main id="layout-main">
+        <div class="header" id="sticky-header">
             <h1>세입자 매칭</h1>
         </div>
 
-        <div id="parsed-card" class="parsed-card">
-            <!-- Data from JS -->
-            <div style="text-align:center; opacity:0.5;">데이터 로딩 중...</div>
-        </div>
+        <div class="container">
+            <div class="matching-container">
+                <div id="parsed-card" class="parsed-card">
+                    <!-- Data from JS -->
+                    <div style="text-align:center; opacity:0.5;">데이터 로딩 중...</div>
+                </div>
 
-        <div class="list-header">
-            <span>추천 세입자 목록</span>
-            <span id="match-count" style="font-size:0.85rem; font-weight:400; opacity:0.6;"></span>
-        </div>
+                <div class="list-header">
+                    <span>추천 세입자 목록</span>
+                    <span id="match-count" style="font-size:0.85rem; font-weight:400; opacity:0.6;"></span>
+                </div>
+                <div style="font-size:0.8rem; color: #fbbf24; opacity: 0.8; margin-bottom:1rem; padding-left: 0.5rem;">
+                    * 아래 추천된 세입자 중에서 한 명을 선택해 주세요.
+                </div>
 
-        <div id="tenant-list" class="user-select-list">
-            <!-- Scored tenants go here -->
-        </div>
+                <div id="tenant-list" class="user-select-list">
+                    <!-- Scored tenants go here -->
+                </div>
 
-        <div class="footer-actions">
-            <button class="btn-confirm" onclick="confirmMatch()">매칭 완료 및 저장</button>
+                <div class="footer-actions">
+                    <button class="btn-confirm" onclick="confirmMatch()">매칭 완료 및 저장</button>
+                </div>
+            </div>
         </div>
-    </div>
+    </main>
+
+    <footer id="layout-footer">
+        <div class="footer-container" style="flex-wrap: wrap;">
+            <div class="footer-biz-name" onclick="toggleFooterInfo()">상호명: 김지선, 김세미 부동산</div>
+            <div class="footer-links">
+                <a href="/terms.html" class="footer-btn" style="text-decoration: none;">이용약관</a>
+                <a href="/privacy.html" class="footer-btn" style="text-decoration: none;">개인정보처리방침</a>
+            </div>
+            <div id="footer-biz-details" class="footer-info-details">
+                상호명: 김지선, 김세미 부동산<br>
+                대표자명: 김지선외 1명<br>
+                사업자등록번호: 640-31-00762<br>
+                주소: 경기도 수원시 팔달구 우만동 89-5 GS지에스타워 403호
+            </div>
+        </div>
+    </footer>
 
     <script src="/js/common.js"></script>
     <script>
@@ -198,21 +231,61 @@
             if (navBack) {
                 navBack.onclick = (e) => {
                     e.preventDefault();
-                    // Go back to the previous page (payments or payments_monthly)
                     window.history.back();
                 };
             }
 
             await loadActiveContracts();
+
+            // Initial keywords from parsed text
+            extraKeywords = [];
             renderParsedInfo();
             renderMatchCandidates(parsedData.keyword ? [parsedData.keyword] : []);
         });
+
+        let extraKeywords = [];
+
+        function mergeContractKeywords(contractKeywords) {
+            if (!contractKeywords || !Array.isArray(contractKeywords)) return;
+            let changed = false;
+            contractKeywords.forEach(ck => {
+                if (!parsedData.tokens.includes(ck) && !extraKeywords.includes(ck)) {
+                    extraKeywords.push(ck);
+                    changed = true;
+                }
+            });
+
+            if (changed) renderParsedInfo();
+
+            // Now activate them
+            document.querySelectorAll('.keyword-tag').forEach(tag => {
+                if (contractKeywords.includes(tag.dataset.keyword)) {
+                    tag.classList.add('active');
+                }
+            });
+
+            const activeKeywords = Array.from(document.querySelectorAll('.keyword-tag.active'))
+                .map(el => el.dataset.keyword);
+            renderMatchCandidates(activeKeywords);
+        }
 
         async function loadActiveContracts() {
             try {
                 // We need all active contracts for scoring
                 const res = await fetch(`/api/landlord/${user.id}/contracts/active`);
-                if (res.ok) activeContracts = await res.json();
+                if (res.ok) {
+                    const raw = await res.json();
+                    // Deduplicate by contract id
+                    const unique = [];
+                    const seenIds = new Set();
+                    raw.forEach(c => {
+                        if (!seenIds.has(c.id)) {
+                            seenIds.add(c.id);
+                            unique.push(c);
+                        }
+                    });
+                    activeContracts = unique;
+                }
             } catch (e) {
                 console.error('Failed to load active contracts', e);
             }
@@ -226,16 +299,23 @@
                 hour: '2-digit', minute: '2-digit', hour12: false
             });
 
-            const tagsHtml = parsedData.tokens.map(t =>
-                `<span class="keyword-tag ${t === parsedData.keyword ? 'active' : ''}" 
+            const allTokens = [...new Set([...parsedData.tokens, ...extraKeywords])];
+            const activeKeywords = Array.from(document.querySelectorAll('.keyword-tag.active')).map(el => el.dataset.keyword);
+
+            const tagsHtml = allTokens.map(t => {
+                const isActive = activeKeywords.includes(t) || t === parsedData.keyword;
+                return `<span class="keyword-tag ${isActive ? 'active' : ''}" 
                        data-keyword="${t}" 
-                       onclick="toggleKeyword(this)">${t}</span>`
-            ).join(' ');
+                       onclick="toggleKeyword(this)">${t}</span>`;
+            }).join(' ');
 
             card.innerHTML = `
-                <div class="info-row" style="margin-bottom:1.2rem;">
+                <div class="info-row" style="margin-bottom:0.4rem;">
                     <strong>키워드</strong>
-                    <div style="display:flex; flex-wrap:wrap; gap:0.4rem;">${tagsHtml}</div>
+                    <div id="keyword-container" style="display:flex; flex-wrap:wrap; gap:0.4rem;">${tagsHtml}</div>
+                </div>
+                <div style="font-size:0.8rem; color: #fbbf24; opacity: 0.8; margin-bottom:1.2rem; padding-left: 80px;">
+                    * 키워드를 클릭하여 검색 조건을 추가하거나 해제할 수 있습니다.
                 </div>
                 <div class="info-row">
                     <strong>입금액</strong>
@@ -255,7 +335,12 @@
             renderMatchCandidates(activeKeywords);
         }
 
+        let isRendering = false;
+
         function renderMatchCandidates(keywords) {
+            if (isRendering) return;
+            isRendering = true;
+
             const listContainer = document.getElementById('tenant-list');
             listContainer.innerHTML = '';
 
@@ -276,6 +361,10 @@
             // Auto-select the top result if it's a strong match (score >= 100) and nothing is selected yet
             if (!selectedContractId && scoredCandidates.length > 0 && scoredCandidates[0].matchScore >= 100) {
                 selectedContractId = scoredCandidates[0].id;
+                // Merge keywords for auto-selection
+                isRendering = false; // Allow recursive call
+                mergeContractKeywords(scoredCandidates[0].keywords || []);
+                return; // Stop this render, it has been superseded by the recursive one
             }
 
             scoredCandidates.forEach(c => {
@@ -302,14 +391,23 @@
                     </div>
                 `;
                 div.onclick = () => {
-                    document.querySelectorAll('.user-select-item').forEach(el => el.classList.remove('selected'));
-                    div.classList.add('selected');
-                    selectedContractId = c.id;
+                    const isAlreadySelected = (selectedContractId === c.id);
+                    if (isAlreadySelected) {
+                        selectedContractId = null;
+                        const activeKeywords = Array.from(document.querySelectorAll('.keyword-tag.active'))
+                            .map(el => el.dataset.keyword);
+                        renderMatchCandidates(activeKeywords);
+                    } else {
+                        selectedContractId = c.id;
+                        mergeContractKeywords(c.keywords || []);
+                    }
                 };
+
                 listContainer.appendChild(div);
             });
 
             document.getElementById('match-count').textContent = `전체 ${scoredCandidates.length}명`;
+            isRendering = false;
         }
 
         async function confirmMatch() {
