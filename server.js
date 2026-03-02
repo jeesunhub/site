@@ -1898,7 +1898,9 @@ app.get('/api/landlord/:id/contracts/active', (req, res) => {
         JOIN landlord_buildings lb ON b.id = lb.building_id
         JOIN users u ON c.tenant_id = u.id
         WHERE lb.landlord_id = ?
-        GROUP BY c.id
+        GROUP BY c.id, r.room_number, b.name, u.nickname, u.color,
+                 c.room_id, c.tenant_id, c.payment_type, c.contract_start_date, c.contract_end_date,
+                 c.deposit, c.monthly_rent, c.maintenance_fee, c.cleaning_fee, c.extra_fee, c.created_at, c.move_out_date
     `;
     if (role !== 'admin') {
         query += ` AND u.status != '종료'`;
@@ -1949,7 +1951,9 @@ app.get('/api/tenants/active-list', (req, res) => {
         params.push(user_id, user_id);
     }
 
-    query += ` GROUP BY u.id, c.id `;
+    query += ` GROUP BY u.id, u.nickname, u.color, u.phone_number, u.birth_date, u.status, 
+                 c.id, c.contract_start_date, c.contract_end_date, c.deposit, c.monthly_rent, c.maintenance_fee,
+                 b.id, b.name, b_bt.id, b_bt.name, r.id, r.room_number, r_rt.id, r_rt.room_number, lb.landlord_id `;
 
     db.all(query, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -3335,6 +3339,30 @@ app.post('/api/admin/reset-db', (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: 'Database reset successfully' });
     });
+});
+
+app.get('/api/admin/export-db', (req, res) => {
+    const isRender = !!process.env.RENDER;
+    const dbPath = isRender ? "/data/sugar.db" : path.join(__dirname, "sugar.db");
+    if (!fs.existsSync(dbPath)) return res.status(404).json({ error: 'DB file not found' });
+    res.download(dbPath, 'sugar_backup.db');
+});
+
+app.post('/api/admin/import-db', upload.single('db_file'), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const isRender = !!process.env.RENDER;
+    const dbPath = isRender ? "/data/sugar.db" : path.join(__dirname, "sugar.db");
+
+    try {
+        // Hot swap file replacement
+        fs.copyFileSync(req.file.path, dbPath);
+        fs.unlinkSync(req.file.path);
+        console.log('[Admin] Database imported and replaced successfully.');
+        res.json({ message: 'Database imported successfully' });
+    } catch (err) {
+        console.error('[Admin] Database import failed:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 

@@ -59,7 +59,16 @@
             <div id="admin-actions"
                 style="display: none; margin-top: 2rem; border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 2rem;">
                 <h2 style="margin-bottom: 1.5rem; color: #ef4444;">관리자 도구</h2>
-                <button class="btn" style="background: #ef4444; width: auto;" onclick="resetDatabase()">DB 초기화</button>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <button class="btn" style="background: var(--primary); width: 100%;" onclick="exportDatabase()">DB
+                        내보내기</button>
+                    <button class="btn" style="background: #10b981; width: 100%;"
+                        onclick="document.getElementById('import-db-input').click()">DB 가져오기</button>
+                </div>
+                <input type="file" id="import-db-input" style="display: none;" onchange="importDatabase(this)"
+                    accept=".db">
+                <button class="btn" style="background: #ef4444; width: 100%; margin-top: 1rem;"
+                    onclick="resetDatabase()">DB 초기화</button>
             </div>
         </div>
     </div>
@@ -98,6 +107,59 @@
             } catch (err) {
                 console.error(err);
                 alert('서버 오류 발생');
+            }
+        }
+
+        async function exportDatabase() {
+            try {
+                const res = await fetch('/api/admin/export-db');
+                if (!res.ok) throw new Error('백업 실패');
+
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `sugar_backup_${new Date().toISOString().slice(0, 10)}.db`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } catch (err) {
+                console.error(err);
+                alert('DB 내보내기 중 오류가 발생했습니다.');
+            }
+        }
+
+        async function importDatabase(input) {
+            if (!input.files || input.files.length === 0) return;
+            const file = input.files[0];
+
+            if (!confirm('경고: 가져오기 시 현재 데이터베이스가 업로드한 파일로 완전히 교체됩니다.\n기존 데이터는 복구할 수 없습니다. 계속하시겠습니까?')) {
+                input.value = '';
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('db_file', file);
+
+            try {
+                const res = await fetch('/api/admin/import-db', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    alert('데이터베이스를 성공적으로 가져왔습니다.\n시스템 반영을 위해 페이지를 새로고침합니다.');
+                    location.reload();
+                } else {
+                    alert('가져오기 실패: ' + data.error);
+                }
+            } catch (err) {
+                console.error(err);
+                alert('서버 오류 발생');
+            } finally {
+                input.value = '';
             }
         }
 
