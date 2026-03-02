@@ -1657,7 +1657,7 @@ app.get('/api/tenant/:id/calendar-data', (req, res) => {
         LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
         LEFT JOIN payments p ON pa.payment_id = p.id
         WHERE c.tenant_id = ?
-        GROUP BY c.id, c.tenant_id, c.contract_start_date, c.contract_end_date, c.payment_type, b.name, r.room_number, u.color, i.id, i.billing_month, i.due_date, i.amount, i.type
+        GROUP BY c.id, c.tenant_id, c.contract_start_date, c.contract_end_date, c.payment_type, b.name, r.room_number, u.color, i.id, i.billing_month, i.due_date, i.amount, i.type, u.id
         ORDER BY i.billing_month ASC
     `;
 
@@ -1697,7 +1697,7 @@ LEFT JOIN invoices i ON c.id = i.contract_id
 LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
 LEFT JOIN payments p ON pa.payment_id = p.id
 WHERE lb.landlord_id = ?
-GROUP BY c.id, c.tenant_id, c.contract_start_date, c.contract_end_date, c.payment_type, b.name, r.room_number, u.nickname, u.color, i.id, i.billing_month, i.due_date, i.amount, i.type
+GROUP BY c.id, c.tenant_id, c.contract_start_date, c.contract_end_date, c.payment_type, b.name, r.room_number, u.nickname, u.color, i.id, i.billing_month, i.due_date, i.amount, i.type, u.id
 ORDER BY i.billing_month ASC
 `;
 
@@ -1734,7 +1734,7 @@ JOIN users u ON c.tenant_id = u.id
 LEFT JOIN invoices i ON c.id = i.contract_id
 LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
 LEFT JOIN payments p ON pa.payment_id = p.id
-GROUP BY c.id, c.tenant_id, c.contract_start_date, c.contract_end_date, c.payment_type, b.name, r.room_number, u.nickname, u.color, i.id, i.billing_month, i.due_date, i.amount, i.type
+GROUP BY c.id, c.tenant_id, c.contract_start_date, c.contract_end_date, c.payment_type, b.name, r.room_number, u.nickname, u.color, i.id, i.billing_month, i.due_date, i.amount, i.type, u.id
 ORDER BY i.billing_month ASC
 `;
 
