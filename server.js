@@ -1107,7 +1107,7 @@ app.post('/api/signup', async (req, res) => {
                 getUnusedColor((randomColor) => {
                     const isExistingUser = !!(row && row.id);
                     const signupAction = isExistingUser
-                        ? [`UPDATE users SET login_id = ?, password = ?, nickname = ?, role = ?, status = '승인', approved = 1, color = ? WHERE id = ?`, [login_id, password, nickname, role, randomColor, row.id]]
+                        ? [`UPDATE users SET login_id = ?, password = ?, nickname = ?, role = ?, color = ? WHERE id = ?`, [login_id, password, nickname, role, randomColor, row.id]]
                         : [`INSERT INTO users(login_id, password, nickname, birth_date, phone_number, role, approved, status, color) VALUES(?, ?, ?, ?, ?, ?, 0, '신청', ?)`, [login_id, password, nickname, birth_date, cleanPhone, role, randomColor]];
 
                     db.run(signupAction[0], signupAction[1], async function (err) {
@@ -1117,7 +1117,6 @@ app.post('/api/signup', async (req, res) => {
                             return res.status(500).json({ error: err.message });
                         }
                         const newUserId = isExistingUser ? row.id : this.lastID;
-                        const isAutoApproved = isExistingUser;
 
                         // Save relationship to room if provided (Tenants only)
                         if (role === 'tenant' && room_number && room_number !== '') {
@@ -1145,8 +1144,6 @@ app.post('/api/signup', async (req, res) => {
                         let title = (role === 'tenant' && buildingName)
                             ? `${buildingName} ${displayRoom === '0' ? '전체' : (displayRoom === '-' ? '' : displayRoom + '호')}`.trim()
                             : (role === 'landlord' ? '임대인 가입 신청' : '세입자 가입 신청');
-
-                        if (isAutoApproved) title += ' (자동 승인)';
 
                         let content = `아이디: ${login_id} \n이름: ${nickname} \n생년월일: ${birth_date || '-'} \n전화번호: ${formatPhone(cleanPhone)} `;
                         if (role === 'tenant' && (buildingName || displayRoom !== '-')) {
@@ -2596,7 +2593,7 @@ app.post('/api/users/quick', (req, res) => {
                 // Failsafe: Ensure login_id exists
                 const finalLoginId = login_id || (nickname + (birth_date ? birth_date.replace(/-/g, '').slice(2) : Math.floor(Math.random() * 10000)));
 
-                db.run(`INSERT INTO users(login_id, password, nickname, role, color, birth_date, phone_number, approved, status) VALUES(?, ?, ?, ?, ?, ?, ?, 1, '승인')`,
+                db.run(`INSERT INTO users(login_id, password, nickname, role, color, birth_date, phone_number, approved, status) VALUES(?, ?, ?, ?, ?, ?, ?, 0, '신청')`,
                     [finalLoginId, password || '1234', nickname, role, randomColor, birth_date, cleanPhone],
                     async function (err) {
                         if (err) return res.status(500).json({ error: err.message });
