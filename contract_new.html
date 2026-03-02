@@ -831,8 +831,8 @@
             document.getElementById('tenant-phone').value = formatPhone(c.phone_number);
             document.getElementById('contract-building').value = c.building_id;
             await loadRooms(c.room_number);
-            document.getElementById('contract-start').value = c.contract_start_date;
-            document.getElementById('contract-end').value = c.contract_end_date;
+            document.getElementById('contract-start').value = c.contract_start_date ? c.contract_start_date.split('T')[0] : '';
+            document.getElementById('contract-end').value = c.contract_end_date ? c.contract_end_date.split('T')[0] : '';
             document.getElementById('contract-payment-type').value = c.payment_type;
             document.getElementById('contract-deposit').value = formatCurrency(c.deposit);
             document.getElementById('contract-rent').value = formatCurrency(c.monthly_rent);
