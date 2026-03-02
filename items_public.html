@@ -356,11 +356,7 @@
                     <span class="value" id="detail-building"></span>
                 </div>
                 <div class="detail-row">
-                    <span class="label">가격</span>
-                    <span class="value" id="detail-price"></span>
-                </div>
-                <div class="detail-row">
-                    <span class="label">판매자</span>
+                    <span class="label">작성자</span>
                     <span class="value" id="detail-owner"></span>
                 </div>
                 <div class="detail-row">
@@ -452,8 +448,6 @@
                 const guest = !localStorage.getItem('user');
                 document.getElementById('login-notice').style.display = guest ? 'block' : 'none';
 
-                const priceStr = item.price ? (item.price / 1).toLocaleString() + '원' : '무료나눔';
-                document.getElementById('detail-price').textContent = priceStr;
 
                 let ownerStr = item.owner_login_id || '알 수 없음';
                 if (item.is_anonymous) ownerStr = '익명';

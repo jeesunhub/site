@@ -680,6 +680,18 @@ app.post('/api/postings/:id/apply', (req, res) => {
     });
 });
 
+app.delete('/api/images/:id', (req, res) => {
+    const id = req.params.id;
+    console.log(`[API] DELETE /api/images/${id}`);
+    db.run("DELETE FROM images WHERE id = ?", [id], function (err) {
+        if (err) {
+            console.error('[API] Error deleting image:', err.message);
+            return res.status(500).json({ error: err.message });
+        }
+        res.json({ message: 'Image deleted', changes: this.changes });
+    });
+});
+
 app.get('/api/postings/:id', (req, res) => {
     const id = req.params.id;
     const query = `
@@ -726,6 +738,57 @@ END as building_name,
         db.all("SELECT * FROM images WHERE related_id = ? AND related_table = 'advertisements'", [id], (err, images) => {
             ad.images = images || [];
             res.json(ad);
+        });
+    });
+});
+
+app.get('/api/items/:id/history', (req, res) => {
+    const itemId = req.params.id;
+    const query = `
+        SELECT iu.*, u.nickname, u.login_id
+        FROM item_users iu
+        JOIN users u ON iu.user_id = u.id
+        WHERE iu.item_id = ?
+        ORDER BY iu.created_at DESC
+    `;
+    db.all(query, [itemId], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+app.post('/api/postings/:id/redeploy', (req, res) => {
+    const adId = req.params.id;
+    db.serialize(() => {
+        db.run('BEGIN TRANSACTION');
+
+        // 1. Clear applicants (This resets the drawing pool)
+        db.run("DELETE FROM applicants WHERE advertisement_id = ?", [adId], (err) => {
+            if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
+
+            // 2. Clear draw-related messages
+            db.run("DELETE FROM message_box WHERE related_id = ? AND related_table = 'advertisements' AND category = '물품공유'", [adId], (err) => {
+                if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
+
+                // 3. Reset ad status to advertising
+                db.run("UPDATE advertisements SET status = 'advertising' WHERE id = ?", [adId], (err) => {
+                    if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
+
+                    // 4. Reset item status
+                    db.get("SELECT related_id FROM advertisements WHERE id = ?", [adId], (err, ad) => {
+                        if (ad && ad.related_id) {
+                            db.run("UPDATE items SET status = 'open' WHERE id = ?", [ad.related_id], (err) => {
+                                if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: err.message }); }
+                                db.run('COMMIT');
+                                res.json({ message: 'Item redeployed successfully' });
+                            });
+                        } else {
+                            db.run('COMMIT');
+                            res.json({ message: 'Advertisement status reset' });
+                        }
+                    });
+                });
+            });
         });
     });
 });
