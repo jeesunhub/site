@@ -22,21 +22,38 @@ function convertSqlToPg(sql) {
     // Replace SQLite REPLACE(..., ' ', '') with Postgres REGEXP_REPLACE(..., '\s+', '', 'g')
     newSql = newSql.replace(/REPLACE\((.*?),\s*' ',\s*''\)/gi, "REGEXP_REPLACE($1, '\\s+', '', 'g')");
 
-    // Handle shift logic from server.js: date(bill_month || '-01', '${direction} month')
-    if (newSql.includes("date(bill_month || '-01'")) {
+    // Handle shift logic from server.js: date(billing_month || '-01', '${direction} month')
+    if (newSql.includes("date(bill_month || '-01'") || newSql.includes("date(billing_month || '-01'")) {
         newSql = newSql.replace(
-            /date\(bill_month \|\| '-01', '(-?\d+) month'\)/g,
-            "(bill_month || '-01')::date + interval '$1 month'"
+            /date\((billing?_month) \|\| '-01', '(-?\d+) month'\)/g,
+            "($1 || '-01')::date + interval '$2 month'"
         );
     }
 
     // Replace GROUP_CONCAT with STRING_AGG
-    newSql = newSql.replace(/GROUP_CONCAT\(DISTINCT DATE\(p\.paid_at\)\)/gi, "STRING_AGG(DISTINCT TO_CHAR(p.paid_at, 'YYYY-MM-DD'), ',')");
+    newSql = newSql.replace(/GROUP_CONCAT\s*\(\s*DISTINCT\s*DATE\s*\(\s*([^)]+)\s*\)\s*\)/gi, "STRING_AGG(DISTINCT TO_CHAR($1, 'YYYY-MM-DD'), ',')");
     // Handle GROUP_CONCAT(col, 'delimiter') -> STRING_AGG(col, 'delimiter')
     newSql = newSql.replace(/GROUP_CONCAT\(([^,]+),\s*(['"].*?['"])\)/gi, "STRING_AGG($1, $2)");
     newSql = newSql.replace(/GROUP_CONCAT\((.*?)\)/gi, "STRING_AGG($1, ',')");
 
     return newSql;
+}
+
+function processRow(row) {
+    if (!row) return row;
+    for (const key in row) {
+        if (row[key] instanceof Date) {
+            // Convert Date object to YYYY-MM-DD string
+            const d = row[key];
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            row[key] = `${y}-${m}-${day}`;
+        } else if (typeof row[key] === 'object' && row[key] !== null) {
+            processRow(row[key]);
+        }
+    }
+    return row;
 }
 
 if (databaseUrl) {
@@ -65,7 +82,8 @@ if (databaseUrl) {
                     console.error('PG SQL Error (get):', err.message, '| SQL:', sql);
                     return cb ? cb(err) : null;
                 }
-                cb && cb(null, res.rows[0] || null);
+                const row = res.rows[0] || null;
+                cb && cb(null, processRow(row));
             });
         },
         all: (sql, params, cb) => {
@@ -76,7 +94,9 @@ if (databaseUrl) {
                     console.error('PG SQL Error (all):', err.message, '| SQL:', sql);
                     return cb ? cb(err) : null;
                 }
-                cb && cb(null, res.rows || []);
+                const rows = res.rows || [];
+                rows.forEach(processRow);
+                cb && cb(null, rows);
             });
         },
         run: function (sql, params, cb) {

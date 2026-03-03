@@ -1657,7 +1657,7 @@ app.get('/api/tenant/:id/calendar-data', (req, res) => {
         LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
         LEFT JOIN payments p ON pa.payment_id = p.id
         WHERE c.tenant_id = ?
-        GROUP BY c.id, c.tenant_id, c.contract_start_date, c.contract_end_date, c.payment_type, b.name, r.room_number, u.color, i.id, i.billing_month, i.due_date, i.amount, i.type, u.id
+        GROUP BY c.id, u.id, i.id, r.id, b.id, c.tenant_id, c.contract_start_date, c.contract_end_date, c.payment_type, b.name, r.room_number, u.color, i.billing_month, i.due_date, i.amount, i.type
         ORDER BY i.billing_month ASC
     `;
 
@@ -1697,7 +1697,7 @@ LEFT JOIN invoices i ON c.id = i.contract_id
 LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
 LEFT JOIN payments p ON pa.payment_id = p.id
 WHERE lb.landlord_id = ?
-GROUP BY c.id, c.tenant_id, c.contract_start_date, c.contract_end_date, c.payment_type, b.name, r.room_number, u.nickname, u.color, i.id, i.billing_month, i.due_date, i.amount, i.type, u.id
+GROUP BY c.id, u.id, i.id, r.id, b.id, lb.id, c.tenant_id, c.contract_start_date, c.contract_end_date, c.payment_type, b.name, r.room_number, u.nickname, u.color, i.billing_month, i.due_date, i.amount, i.type
 ORDER BY i.billing_month ASC
 `;
 
@@ -1734,7 +1734,7 @@ JOIN users u ON c.tenant_id = u.id
 LEFT JOIN invoices i ON c.id = i.contract_id
 LEFT JOIN payment_allocation pa ON i.id = pa.invoice_id
 LEFT JOIN payments p ON pa.payment_id = p.id
-GROUP BY c.id, c.tenant_id, c.contract_start_date, c.contract_end_date, c.payment_type, b.name, r.room_number, u.nickname, u.color, i.id, i.billing_month, i.due_date, i.amount, i.type, u.id
+GROUP BY c.id, u.id, i.id, r.id, b.id, c.tenant_id, c.contract_start_date, c.contract_end_date, c.payment_type, b.name, r.room_number, u.nickname, u.color, i.billing_month, i.due_date, i.amount, i.type
 ORDER BY i.billing_month ASC
 `;
 
@@ -1796,7 +1796,7 @@ l.nickname as landlord_name,
         i.status as invoice_status,
         COALESCE(SUM(pa.amount), 0) as paid_amount,
         MAX(p.paid_at) as last_paid_date,
-        GROUP_CONCAT(pa.amount || '|' || COALESCE(p.paid_at, ''), ';') as payment_details
+        GROUP_CONCAT(pa.amount || '|' || COALESCE(CAST(p.paid_at AS TEXT), ''), ';') as payment_details
         FROM contracts c
         JOIN rooms r ON c.room_id = r.id
         JOIN buildings b ON r.building_id = b.id
@@ -1837,7 +1837,7 @@ l.nickname as landlord_name,
 
     query += ` 
         GROUP BY
-        l.id, l.nickname, t.id, t.nickname, b.id, b.name, c.id, c.contract_start_date, c.payment_type, c.deposit, c.monthly_rent, c.maintenance_fee, r.room_number, i.id, i.billing_month, i.due_date, i.amount, i.type, i.status
+        l.id, l.nickname, t.id, t.nickname, b.id, b.name, c.id, c.contract_start_date, c.payment_type, c.deposit, c.monthly_rent, c.maintenance_fee, r.room_number, i.id, i.billing_month, i.due_date, i.amount, i.type, i.status, lb.landlord_id
         ORDER BY i.billing_month DESC`;
 
     db.all(query, params, (err, rows) => {
@@ -1872,7 +1872,7 @@ app.post('/api/invoices/adjust-date', (req, res) => {
                 UPDATE invoices 
                 SET billing_month = date(billing_month || '-01', '${direction} month')
                 WHERE contract_id = ? AND billing_month >= ?
-    `;
+        `;
 
             db.run(query, [inv.contract_id, inv.billing_month], function (err) {
                 if (err) return res.status(500).json({ error: err.message });
@@ -1888,17 +1888,17 @@ app.get('/api/landlord/:id/contracts/active', (req, res) => {
     const { role } = req.query;
     let query = `
         SELECT c.*, r.room_number, b.name as building, u.nickname, u.color,
-    (SELECT GROUP_CONCAT(keyword, ', ') FROM contract_keywords WHERE contract_id = c.id) as keywords_str
+        (SELECT GROUP_CONCAT(keyword, ', ') FROM contract_keywords WHERE contract_id = c.id) as keywords_str
         FROM contracts c
         JOIN rooms r ON c.room_id = r.id
         JOIN buildings b ON r.building_id = b.id
         JOIN landlord_buildings lb ON b.id = lb.building_id
         JOIN users u ON c.tenant_id = u.id
         WHERE lb.landlord_id = ?
-        GROUP BY c.id, r.room_number, b.name, u.nickname, u.color,
-                 c.room_id, c.tenant_id, c.payment_type, c.contract_start_date, c.contract_end_date,
-                 c.deposit, c.monthly_rent, c.maintenance_fee, c.cleaning_fee, c.extra_fee, c.created_at, c.move_out_date
-    `;
+    GROUP BY c.id, r.room_number, b.name, u.nickname, u.color, u.id, b.id, r.id, lb.landlord_id,
+        c.room_id, c.tenant_id, c.payment_type, c.contract_start_date, c.contract_end_date,
+        c.deposit, c.monthly_rent, c.maintenance_fee, c.cleaning_fee, c.extra_fee, c.created_at, c.move_out_date
+            `;
     if (role !== 'admin') {
         query += ` AND u.status != '종료'`;
     }
@@ -1948,9 +1948,9 @@ app.get('/api/tenants/active-list', (req, res) => {
         params.push(user_id, user_id);
     }
 
-    query += ` GROUP BY u.id, u.nickname, u.color, u.phone_number, u.birth_date, u.status, 
-                 c.id, c.contract_start_date, c.contract_end_date, c.deposit, c.monthly_rent, c.maintenance_fee,
-                 b.id, b.name, b_bt.id, b_bt.name, r.id, r.room_number, r_rt.id, r_rt.room_number, lb.landlord_id `;
+    query += ` GROUP BY u.id, u.nickname, u.color, u.phone_number, u.birth_date, u.status,
+    c.id, c.contract_start_date, c.contract_end_date, c.deposit, c.monthly_rent, c.maintenance_fee,
+    b.id, b.name, b_bt.id, b_bt.name, r.id, r.room_number, r_rt.id, r_rt.room_number, lb.landlord_id`;
 
     db.all(query, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -2219,7 +2219,7 @@ app.get('/api/landlord/:id/buildings', (req, res) => {
         JOIN landlord_buildings lb ON b.id = lb.building_id
         LEFT JOIN building_addresses ba ON b.id = ba.building_id
         WHERE lb.landlord_id = ?
-        GROUP BY b.id, b.name, b.memo, b.created_at
+    GROUP BY b.id, b.name, b.memo, b.created_at
         `;
     db.all(query, [landlordId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -2686,7 +2686,7 @@ app.get('/api/tenants/search', (req, res) => {
     // Filter by landlord_id if provided (for context)
     let query = `
         SELECT DISTINCT u.id, u.nickname, b.name as building, r.room_number,
-               (SELECT GROUP_CONCAT(keyword, ', ') FROM contract_keywords WHERE contract_id = c.id) as keywords_str
+    (SELECT GROUP_CONCAT(keyword, ', ') FROM contract_keywords WHERE contract_id = c.id) as keywords_str
         FROM contracts c
         JOIN rooms r ON c.room_id = r.id
         JOIN buildings b ON r.building_id = b.id
@@ -2705,8 +2705,8 @@ app.get('/api/tenants/search', (req, res) => {
     }
 
     if (keyword) {
-        query += ` AND (u.nickname LIKE ? OR ck.keyword LIKE ?)`;
-        const likeKey = `%${keyword}%`;
+        query += ` AND(u.nickname LIKE ? OR ck.keyword LIKE ?)`;
+        const likeKey = `% ${keyword}% `;
         params.push(likeKey, likeKey);
     }
 
@@ -2786,10 +2786,10 @@ app.post('/api/contracts/full', (req, res) => {
         // Mark associated advertisements as completed
         const finalizeAdQuery = `
             UPDATE advertisements 
-            SET status = 'completed' 
-            WHERE (related_table = 'contract' AND related_id = ?)
-               OR (related_table = 'room' AND related_id = ?)
-        `;
+            SET status = 'completed'
+WHERE(related_table = 'contract' AND related_id = ?)
+OR(related_table = 'room' AND related_id = ?)
+    `;
         db.run(finalizeAdQuery, [contractId, room_id]);
 
         // Automatically generate missing invoices
@@ -2827,10 +2827,10 @@ tenant_id = ?, payment_type = ?, contract_start_date = ?, contract_end_date = ?,
         // Mark associated advertisements as completed
         const finalizeAdQuery = `
             UPDATE advertisements 
-            SET status = 'completed' 
-            WHERE (related_table = 'contract' AND related_id = ?)
-               OR (related_table = 'room' AND related_id = ?)
-        `;
+            SET status = 'completed'
+WHERE(related_table = 'contract' AND related_id = ?)
+OR(related_table = 'room' AND related_id = ?)
+    `;
         db.run(finalizeAdQuery, [contractId, room_id]);
 
         // Automatically generate missing invoices
@@ -2941,7 +2941,7 @@ app.get('/api/rooms/:id/events', (req, res) => {
 SELECT * FROM room_events 
         WHERE room_id = ?
     ORDER BY event_date DESC, id DESC
-    `;
+        `;
     db.all(query, [roomId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
@@ -2951,7 +2951,7 @@ SELECT * FROM room_events
 app.post('/api/rooms/:id/events', upload.single('photo'), (req, res) => {
     const roomId = req.params.id;
     const { event_date, memo } = req.body;
-    const photo = req.file ? `/uploads/${req.file.filename}` : null;
+    const photo = req.file ? `/ uploads / ${req.file.filename} ` : null;
     db.run(`INSERT INTO room_events(room_id, event_date, memo, photo) VALUES(?, ?, ?, ?)`,
         [roomId, event_date, memo, photo],
         function (err) {
@@ -2970,7 +2970,7 @@ app.put('/api/room-events/:id', upload.single('photo'), (req, res) => {
 
     if (req.file) {
         query += `, photo = ? `;
-        params.push(`/uploads/${req.file.filename}`);
+        params.push(`/ uploads / ${req.file.filename} `);
     }
 
     query += ` WHERE id = ? `;
@@ -2999,8 +2999,8 @@ app.get('/api/rooms/:id/tenants', (req, res) => {
         FROM room_tenant rt
         JOIN users u ON rt.tenant_id = u.id
         WHERE rt.room_id = ?
-        ORDER BY rt.start_date DESC
-    `;
+    ORDER BY rt.start_date DESC
+        `;
     db.all(query, [roomId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows || []);
@@ -3014,7 +3014,7 @@ app.get('/api/rooms/:id', (req, res) => {
         SELECT r.*, b.name as building_name 
         FROM rooms r 
         LEFT JOIN buildings b ON r.building_id = b.id 
-        WHERE r.id = ? 
+        WHERE r.id = ?
     `;
     db.get(query, [roomId], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -3031,15 +3031,15 @@ app.get('/api/notices', (req, res) => {
     let params = [];
 
     const baseFields = `
-        mb.*,
-        COALESCE(mb.title, a.title, i.title, u_rel.title, '알림') as title,
-        msg.content as content,
-        COALESCE(a.status, i.status, u_rel.status, '-') as related_status,
-        u.nickname, u.status as user_status,
-        (SELECT COUNT(*) FROM message_recipient WHERE message_id = mb.id AND recipient_id != mb.author_id) as total_cnt,
+mb.*,
+    COALESCE(mb.title, a.title, i.title, u_rel.title, '알림') as title,
+    msg.content as content,
+    COALESCE(a.status, i.status, u_rel.status, '-') as related_status,
+    u.nickname, u.status as user_status,
+    (SELECT COUNT(*) FROM message_recipient WHERE message_id = mb.id AND recipient_id != mb.author_id) as total_cnt,
         (SELECT COUNT(*) FROM message_recipient WHERE message_id = mb.id AND read_at IS NOT NULL AND recipient_id != mb.author_id) as read_cnt,
-        (SELECT read_at FROM message_recipient WHERE message_id = mb.id AND recipient_id = ?) as my_read_at
-    `;
+            (SELECT read_at FROM message_recipient WHERE message_id = mb.id AND recipient_id = ?) as my_read_at
+                `;
 
     const joinClause = `
         LEFT JOIN messages msg ON mb.message_id = msg.id
@@ -3056,19 +3056,19 @@ app.get('/api/notices', (req, res) => {
             FROM message_box mb
             ${joinClause}
             ORDER BY mb.created_at DESC
-        `;
+    `;
         params = [user_id];
     } else {
         query = `
             SELECT DISTINCT ${baseFields}
             FROM message_box mb
             ${joinClause}
-            WHERE (
-                mb.author_id = ?
-                OR mr.recipient_id = ?
+WHERE(
+    mb.author_id = ?
+        OR mr.recipient_id = ?
             )
             ORDER BY mb.created_at DESC
-        `;
+    `;
         params = [user_id, user_id, user_id];
     }
 
@@ -3215,12 +3215,12 @@ app.delete('/api/notices/:id', (req, res) => {
 
                                 // Safe to delete the temporary user
                                 db.run("DELETE FROM room_tenant WHERE tenant_id = ?", [author_id], (err) => {
-                                    if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: `Room relationship deletion failed: ${err.message}` }); }
+                                    if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: `Room relationship deletion failed: ${err.message} ` }); }
 
                                     db.run("DELETE FROM users WHERE id = ?", [author_id], (err) => {
                                         if (err) {
                                             db.run('ROLLBACK');
-                                            return res.status(500).json({ error: `User deletion failed: ${err.message}` });
+                                            return res.status(500).json({ error: `User deletion failed: ${err.message} ` });
                                         }
                                         db.run('COMMIT');
                                         res.json({ message: 'Message and temporary user deleted' });
@@ -3408,8 +3408,8 @@ function syncContractInvoices(contractId, callback) {
                 const yyyy = d.getFullYear();
                 const mm = String(d.getMonth() + 1).padStart(2, '0');
                 const dd = String(d.getDate()).padStart(2, '0');
-                const billingMonth = `${yyyy}-${mm}`;
-                const dueDateStr = `${yyyy}-${mm}-${dd}`;
+                const billingMonth = `${yyyy} -${mm} `;
+                const dueDateStr = `${yyyy} -${mm} -${dd} `;
                 const totalAmount = (monthly_rent || 0) + (maintenance_fee || 0);
 
                 if (totalAmount > 0) {
