@@ -43,12 +43,21 @@ function processRow(row) {
     if (!row) return row;
     for (const key in row) {
         if (row[key] instanceof Date) {
-            // Convert Date object to YYYY-MM-DD string
             const d = row[key];
             const y = d.getFullYear();
             const m = String(d.getMonth() + 1).padStart(2, '0');
             const day = String(d.getDate()).padStart(2, '0');
-            row[key] = `${y}-${m}-${day}`;
+
+            if (d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0) {
+                // Return YYYY-MM-DD for date-only values
+                row[key] = `${y}-${m}-${day}`;
+            } else {
+                // Return YYYY-MM-DD HH:mm:ss for timestamps
+                const hh = String(d.getHours()).padStart(2, '0');
+                const mm = String(d.getMinutes()).padStart(2, '0');
+                const ss = String(d.getSeconds()).padStart(2, '0');
+                row[key] = `${y}-${m}-${day} ${hh}:${mm}:${ss}`;
+            }
         } else if (typeof row[key] === 'object' && row[key] !== null) {
             processRow(row[key]);
         }

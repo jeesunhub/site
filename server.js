@@ -1895,13 +1895,16 @@ app.get('/api/landlord/:id/contracts/active', (req, res) => {
         JOIN landlord_buildings lb ON b.id = lb.building_id
         JOIN users u ON c.tenant_id = u.id
         WHERE lb.landlord_id = ?
-    GROUP BY c.id, r.room_number, b.name, u.nickname, u.color, u.id, b.id, r.id, lb.landlord_id,
-        c.room_id, c.tenant_id, c.payment_type, c.contract_start_date, c.contract_end_date,
-        c.deposit, c.monthly_rent, c.maintenance_fee, c.cleaning_fee, c.extra_fee, c.created_at, c.move_out_date
-            `;
+    `;
     if (role !== 'admin') {
         query += ` AND u.status != '종료'`;
     }
+
+    query += `
+        GROUP BY c.id, r.room_number, b.name, u.nickname, u.color, u.id, b.id, r.id, lb.landlord_id,
+                 c.room_id, c.tenant_id, c.payment_type, c.contract_start_date, c.contract_end_date,
+                 c.deposit, c.monthly_rent, c.maintenance_fee, c.cleaning_fee, c.extra_fee, c.created_at, c.move_out_date
+    `;
     db.all(query, [landlordId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
 
