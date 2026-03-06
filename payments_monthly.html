@@ -443,8 +443,21 @@
 
             const nextMonth = getNextMonthYYYYMM();
 
-            // Sort DESCENDING (Newest first)
-            userRows.sort((a, b) => b.bill_month.localeCompare(a.bill_month));
+            // Sort DESCENDING (Newest first), but always put Deposit at the bottom
+            const isDeposit = (r) => r.invoice_type === 'deposit' || (typeof r.invoice_type === 'number' && (r.invoice_type & 1));
+
+            userRows.sort((a, b) => {
+                const aDep = isDeposit(a);
+                const bDep = isDeposit(b);
+                if (aDep && !bDep) return 1;
+                if (!aDep && bDep) return -1;
+
+                // If both are deposit or neither is, sort by bill_month DESC
+                if (a.bill_month !== b.bill_month) {
+                    return b.bill_month.localeCompare(a.bill_month);
+                }
+                return 0;
+            });
 
             userRows = userRows.filter(r => r.bill_month <= nextMonth);
 
