@@ -471,8 +471,15 @@
                 const due = row.due_amount;
                 const paid = row.paid_amount;
 
-                // Prioritize DB status, fallback to calculation if empty
-                let statusText = row.invoice_status || (paid >= due ? '완납' : '부분납부');
+                const unpaid = due - paid;
+
+                let statusText = row.invoice_status || '정산대기';
+                if (unpaid <= 0) {
+                    statusText = '완납';
+                } else if (paid > 0) {
+                    statusText = '부분납부';
+                }
+
                 let statusColor = (statusText === '완납') ? '#4ade80' : '#fbbf24';
 
                 const monthNum = parseInt(row.bill_month.slice(5), 10);
@@ -497,7 +504,6 @@
                     else leftBoxTitle = '기타';
                 }
 
-                const unpaid = due - paid;
                 let paymentLines = '';
                 if (row.payment_details) {
                     const details = row.payment_details.split(';')
