@@ -1432,6 +1432,21 @@ app.get('/api/admin/tenants', (req, res) => {
     });
 });
 
+// Helper to filter out unpaid future invoices
+function filterFutureInvoices(rows) {
+    if (!rows) return [];
+    const currentDate = new Date();
+    // Use local time for month string: YYYY-MM
+    const currentMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+    return rows.filter(r => {
+        if (!r.bill_month) return true;
+        if (r.invoice_type === 'deposit') return true;
+        if (r.bill_month <= currentMonthStr) return true;
+        const paid = typeof r.paid_amount !== 'undefined' ? r.paid_amount : (r.matched_amount || 0);
+        return parseFloat(paid) > 0;
+    });
+}
+
 // 4. Get Tenant's Bills and Payments
 app.get('/api/tenant/:id/billing', (req, res) => {
     const tenantId = req.params.id;
@@ -1474,6 +1489,8 @@ i.id as bill_id,
 
             db.all(query, [tenantId], (err, rows) => {
                 if (err) return res.status(500).json({ error: err.message });
+
+                rows = filterFutureInvoices(rows);
 
                 // Group by invoice (bill_id)
                 const billsMap = {};
@@ -1663,7 +1680,7 @@ app.get('/api/tenant/:id/calendar-data', (req, res) => {
 
     db.all(query, [tenantId], (err, data) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(data || []);
+        res.json(filterFutureInvoices(data || []));
     });
 });
 
@@ -1703,7 +1720,7 @@ ORDER BY i.billing_month ASC
 
     db.all(query, [landlordId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows || []);
+        res.json(filterFutureInvoices(rows || []));
     });
 });
 
@@ -1740,7 +1757,7 @@ ORDER BY i.billing_month ASC
 
     db.all(query, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows || []);
+        res.json(filterFutureInvoices(rows || []));
     });
 });
 
@@ -1843,7 +1860,7 @@ l.nickname as landlord_name,
     db.all(query, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        const processed = rows.map(r => ({
+        let processed = filterFutureInvoices(rows || []).map(r => ({
             ...r,
             keywords: r.keywords ? r.keywords.split(', ').filter(k => k) : []
         }));
@@ -3384,8 +3401,8 @@ function syncContractInvoices(contractId, callback) {
         const start = new Date(contract_start_date);
         const end = (move_out_date || contract_end_date) ? new Date(move_out_date || contract_end_date) : new Date(today.getFullYear() + 2, today.getMonth(), today.getDate());
 
-        // We sync up to today (inclusive of the current month's due date)
-        const limit = today > end ? end : today;
+        // We want to generate all invoices up to the contract end date
+        const limit = end;
 
         db.serialize(() => {
             // 1. Ensure Deposit Invoice
@@ -3411,8 +3428,8 @@ function syncContractInvoices(contractId, callback) {
                 const yyyy = d.getFullYear();
                 const mm = String(d.getMonth() + 1).padStart(2, '0');
                 const dd = String(d.getDate()).padStart(2, '0');
-                const billingMonth = `${yyyy} -${mm} `;
-                const dueDateStr = `${yyyy} -${mm} -${dd} `;
+                const billingMonth = `${yyyy}-${mm}`;
+                const dueDateStr = `${yyyy}-${mm}-${dd}`;
                 const totalAmount = (monthly_rent || 0) + (maintenance_fee || 0);
 
                 if (totalAmount > 0) {
