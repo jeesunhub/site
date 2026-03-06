@@ -471,8 +471,13 @@
                 const due = row.due_amount;
                 const paid = row.paid_amount;
 
-                // Prioritize DB status, fallback to calculation if empty
-                let statusText = row.invoice_status || (paid >= due ? '완납' : '부분납부');
+                // Force status to '완납' if fully paid, otherwise use DB status or fallback
+                let statusText = row.invoice_status;
+                if (paid >= due) statusText = '완납';
+                else if (!statusText || statusText === '정산대기') {
+                    statusText = paid > 0 ? '부분납부' : '정산대기';
+                }
+
                 let statusColor = (statusText === '완납') ? '#4ade80' : '#fbbf24';
 
                 const monthNum = parseInt(row.bill_month.slice(5), 10);
