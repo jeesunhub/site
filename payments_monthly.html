@@ -413,7 +413,9 @@
 
         function formatYYMMDD(dateStr) {
             if (!dateStr || dateStr === '-') return '-';
-            const date = new Date(dateStr);
+            let s = dateStr;
+            if (s && !s.includes('Z') && !s.includes('+')) s += 'Z';
+            const date = new Date(s);
             if (isNaN(date.getTime())) return '-';
             const yy = String(date.getFullYear()).slice(2);
             const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -517,7 +519,14 @@
                     paymentLines = details.map(d => {
                         let pDate = '-';
                         if (d.date) {
-                            const dateObj = new Date(d.date);
+                            let dateStr = d.date;
+                            if (dateStr && !dateStr.includes('T')) {
+                                dateStr = dateStr.replace(' ', 'T');
+                            }
+                            if (dateStr && !dateStr.includes('Z') && !dateStr.includes('+')) {
+                                dateStr += 'Z';
+                            }
+                            const dateObj = new Date(dateStr);
                             if (!isNaN(dateObj.getTime())) {
                                 pDate = dateObj.toLocaleString('ko-KR', {
                                     month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
@@ -532,7 +541,14 @@
                     // Fallback if payment_details is missing for some reason
                     let pDate = '-';
                     if (row.last_paid_date) {
-                        const dateObj = new Date(row.last_paid_date);
+                        let dateStr = row.last_paid_date;
+                        if (dateStr && !dateStr.includes('T')) {
+                            dateStr = dateStr.replace(' ', 'T');
+                        }
+                        if (dateStr && !dateStr.includes('Z') && !dateStr.includes('+')) {
+                            dateStr += 'Z';
+                        }
+                        const dateObj = new Date(dateStr);
                         if (!isNaN(dateObj.getTime())) {
                             pDate = dateObj.toLocaleString('ko-KR', {
                                 month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
