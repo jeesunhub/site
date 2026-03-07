@@ -421,6 +421,7 @@
                 if (item.is_anonymous) owner = '익명';
 
                 const building = item.building_name || '건물미정';
+                const dateStr = item.created_at ? item.created_at.split(' ')[0] : '';
 
                 // Status Badge logic
                 let statusClass = 'status-default';
@@ -441,7 +442,7 @@
                                 ${item.title}
                                 <span style="font-size:0.8rem; color:#94a3b8; font-weight:400;">${priceValue}</span>
                             </div>
-                            <div class="notice-meta">${building} | ${owner}</div>
+                            <div class="notice-meta">${building} | ${dateStr} ${owner}</div>
                         </div>
                         <div class="notice-right">
                              <span class="action-btn-display ${statusClass}">${statusLabel}</span>
