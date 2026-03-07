@@ -344,12 +344,18 @@ app.post('/api/postings', upload.array('photos', 5), (req, res) => {
                 const adId = this.lastID;
 
                 // Handle photos
-                if (req.files && req.files.length > 0) {
-                    req.files.forEach((file, index) => {
-                        db.run(`INSERT INTO images(related_id, image_url, is_main, related_table) VALUES(?, ?, ?, ?)`,
-                            [adId, `/uploads/${file.filename}`, index === 0 ? 1 : 0, 'advertisements']);
-                    });
-                }
+                const photos = req.files || [];
+                const insertPhotos = (idx, callback) => {
+                    if (idx >= photos.length) return callback();
+                    const file = photos[idx];
+                    db.run(`INSERT INTO images(related_id, image_url, is_main, related_table) VALUES(?, ?, ?, ?)`,
+                        [adId, `/uploads/${file.filename}`, idx === 0 ? 1 : 0, 'advertisements'],
+                        (err) => {
+                            if (err) console.error('Image insert error:', err.message);
+                            insertPhotos(idx + 1, callback);
+                        }
+                    );
+                };
 
                 // --- Create Message Notification ---
                 const finalizeMessage = (msgCategory, msgTarget = 'to_all') => {
@@ -366,16 +372,18 @@ app.post('/api/postings', upload.array('photos', 5), (req, res) => {
                     });
                 };
 
-                if (type === 'item') {
-                    finalizeMessage('물품공유', 'to_all');
-                } else if (type === 'room') {
-                    finalizeMessage('방있어요', 'to_all');
-                } else if (type === 'info') {
-                    finalizeMessage('시스템', 'to_all');
-                } else {
-                    db.run('COMMIT');
-                    res.json({ message: 'Ad created', id: adId });
-                }
+                insertPhotos(0, () => {
+                    if (type === 'item') {
+                        finalizeMessage('물품공유', 'to_all');
+                    } else if (type === 'room') {
+                        finalizeMessage('방있어요', 'to_all');
+                    } else if (type === 'info') {
+                        finalizeMessage('시스템', 'to_all');
+                    } else {
+                        db.run('COMMIT');
+                        res.json({ message: 'Ad created', id: adId });
+                    }
+                });
             });
         };
 

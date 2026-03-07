@@ -189,6 +189,33 @@
             white-space: nowrap;
         }
 
+        .notice-thumbnail {
+            width: 4.5rem;
+            height: 3.2rem;
+            border-radius: 0.5rem;
+            object-fit: cover;
+            flex-shrink: 0;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .building-item-badge {
+            width: 4.5rem;
+            height: 3.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(168, 85, 247, 0.1);
+            color: #d8b4fe;
+            border-radius: 0.5rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-align: center;
+            line-height: 1.2;
+            flex-shrink: 0;
+            padding: 0.2rem;
+            word-break: keep-all;
+        }
+
         /* Modal Styles */
         .modal-overlay {
             position: fixed;
@@ -407,15 +434,19 @@
 
                 const myBadge = isMine ? `<span style="background:var(--primary); color:white; font-size:0.65rem; padding:1px 4px; border-radius:3px; margin-right:4px; font-weight:600;">내 글</span>` : '';
 
+                const leftGroup = item.main_image
+                    ? `<img src="${item.main_image}" class="notice-thumbnail">`
+                    : `<div class="building-item-badge">${building}</div>`;
+
                 li.innerHTML = `
                     <div class="notice-summary">
-                        <div class="building-badge">${building}</div>
+                        ${leftGroup}
                         <div class="notice-text-group">
                             <div class="notice-title" style="display:flex; align-items:center; gap:0.5rem;">
                                 ${myBadge}${item.title} 
                                 <span style="font-size:0.8rem; color:#94a3b8; font-weight:400;">${priceValue}</span>
                             </div>
-                            <div class="notice-meta">${dateStr} ${owner}</div>
+                            <div class="notice-meta">${building} | ${dateStr} ${owner}</div>
                         </div>
                         <div class="notice-right">
                              ${actionButtons}

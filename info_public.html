@@ -130,6 +130,17 @@
             flex-shrink: 0;
             padding: 0.2rem;
             word-break: keep-all;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .info-thumbnail {
+            width: 5rem;
+            height: 3.5rem;
+            border-radius: 0.5rem;
+            object-fit: cover;
+            flex-shrink: 0;
+            background: rgba(255, 255, 255, 0.05);
         }
 
         .back-link {
@@ -392,12 +403,16 @@
 
                 const canDelete = user && ((category === '친절한 부동산') ? (user.role === 'admin') : (isMine || user.role === 'admin'));
 
+                const leftGroup = item.main_image
+                    ? `<img src="${item.main_image}" class="info-thumbnail">`
+                    : `<div class="building-badge">${building}</div>`;
+
                 li.innerHTML = `
                     <div class="notice-summary" onclick="location.href='info_detail.html?id=${item.id}'">
-                        <div class="building-badge">${building}</div>
+                        ${leftGroup}
                         <div class="notice-text-group">
-                            <div class="notice-title">${item.title}</div>
-                            <div class="notice-meta">${dateStr} ${owner}</div>
+                            <div class="notice-title" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${item.title}</div>
+                            <div class="notice-meta">${building} | ${dateStr} ${owner}</div>
                         </div>
                         <div class="notice-right">
                              ${canDelete ? `<button class="action-btn" style="background:#ef4444" onclick="event.stopPropagation(); deleteAd(${item.id})">삭제</button>` : ''}

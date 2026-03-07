@@ -111,6 +111,17 @@
             flex-shrink: 0;
             padding: 0.2rem;
             word-break: keep-all;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .item-thumbnail {
+            width: 5rem;
+            height: 3.5rem;
+            border-radius: 0.5rem;
+            object-fit: cover;
+            flex-shrink: 0;
+            background: rgba(255, 255, 255, 0.05);
         }
 
         .notice-text-group {
@@ -419,15 +430,19 @@
                 else if (item.status === 'completed') { statusClass = 'status-completed'; statusLabel = '완료'; }
                 else if (item.status === 'drawing') { statusClass = 'status-drawing'; statusLabel = '추첨중'; }
 
+                const leftGroup = item.main_image
+                    ? `<img src="${item.main_image}" class="item-thumbnail">`
+                    : `<div class="building-badge">${building}</div>`;
+
                 li.innerHTML = `
                     <div class="notice-summary" onclick="openDetailModal(${item.id})">
-                        <div class="building-badge">${building}</div>
+                        ${leftGroup}
                         <div class="notice-text-group">
                             <div class="notice-title" style="display:flex; align-items:center; gap:0.5rem;">
                                 ${item.title}
                                 <span style="font-size:0.8rem; color:#94a3b8; font-weight:400;">${priceValue}</span>
                             </div>
-                            <div class="notice-meta">${dateStr} ${owner}</div>
+                            <div class="notice-meta">${building} | ${dateStr} ${owner}</div>
                         </div>
                         <div class="notice-right">
                              <span class="action-btn-display ${statusClass}">${statusLabel}</span>
