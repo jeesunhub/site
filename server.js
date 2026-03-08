@@ -250,7 +250,10 @@ app.get('/api/postings', (req, res) => {
             c.cleaning_fee as cleaning_fee,
             COALESCE(r.available_date, CAST(c.contract_start_date AS TEXT)) as available_date,
             COALESCE(r.building_id, rc.building_id) as building_id,
-            (SELECT image_url FROM images WHERE related_id = a.id AND related_table = 'advertisements' LIMIT 1) as main_image
+            (SELECT image_url FROM images 
+             WHERE (related_id = a.id AND related_table = 'advertisements')
+                OR (related_id = a.related_id AND related_table = a.related_table)
+             ORDER BY is_main DESC, id ASC LIMIT 1) as main_image
         FROM advertisements a
         LEFT JOIN users u ON a.created_by = u.id
         LEFT JOIN rooms r ON a.related_id = r.id AND a.related_table = 'room'
@@ -489,14 +492,24 @@ app.put('/api/postings/:id', upload.array('photos', 5), (req, res) => {
                         return res.status(500).json({ error: err.message });
                     }
 
-                    if (req.files && req.files.length > 0) {
-                        req.files.forEach((file) => {
-                            db.run(`INSERT INTO images(related_id, image_url, is_main, related_table) VALUES(?, ?, ?, ?)`,
-                                [adId, `/uploads/${file.filename}`, 0, 'advertisements']);
-                        });
-                    }
-                    db.run('COMMIT');
-                    res.json({ message: 'Ad updated' });
+                    // Handle photos
+                    const photos = req.files || [];
+                    const insertPhotos = (idx, callback) => {
+                        if (idx >= photos.length) return callback();
+                        const file = photos[idx];
+                        db.run(`INSERT INTO images(related_id, image_url, is_main, related_table) VALUES(?, ?, ?, ?)`,
+                            [adId, `/uploads/${file.filename}`, 0, 'advertisements'],
+                            (err) => {
+                                if (err) console.error('Image insert error (PUT):', err.message);
+                                insertPhotos(idx + 1, callback);
+                            }
+                        );
+                    };
+
+                    insertPhotos(0, () => {
+                        db.run('COMMIT');
+                        res.json({ message: 'Ad updated' });
+                    });
                 });
             };
 
@@ -743,7 +756,10 @@ END as building_name,
         if (ad.related_table === 'item') ad.building_id = ad.item_building_id;
         else if (ad.related_table === 'room' || ad.related_table === 'contract') ad.building_id = ad.room_building_id;
 
-        db.all("SELECT * FROM images WHERE related_id = ? AND related_table = 'advertisements'", [id], (err, images) => {
+        db.all(`SELECT * FROM images 
+                WHERE (related_id = ? AND related_table = 'advertisements')
+                   OR (related_id = ? AND related_table = ?)
+                ORDER BY is_main DESC, id ASC`, [id, ad.related_id, ad.related_table], (err, images) => {
             ad.images = images || [];
             res.json(ad);
         });
